@@ -1,11 +1,13 @@
 package at.jdbcodata.query;
 
 import at.jdbcodata.config.JdbcOdataProperties;
+import at.jdbcodata.datasource.ConcurrencyLimiter;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbErrorClassifier;
 import at.jdbcodata.datasource.IdentityPoolManager;
 import at.jdbcodata.identity.ExecutionIdentity;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -27,10 +29,12 @@ public class QueryExecutor {
     private static final Logger log = LoggerFactory.getLogger(QueryExecutor.class);
 
     private final IdentityPoolManager pools;
+    private final ConcurrencyLimiter limiter;
     private final JdbcOdataProperties props;
 
-    public QueryExecutor(IdentityPoolManager pools, JdbcOdataProperties props) {
+    public QueryExecutor(IdentityPoolManager pools, ConcurrencyLimiter limiter, JdbcOdataProperties props) {
         this.pools = pools;
+        this.limiter = limiter;
         this.props = props;
     }
 
@@ -73,7 +77,8 @@ public class QueryExecutor {
         NamedParameterSql parsed = NamedParameterSql.parse(query.sqlText());
         List<ParameterBinder.BoundValue> bound = ParameterBinder.order(parsed, query, params);
         long start = System.nanoTime();
-        try (Connection c = pools.connect(ds, identity.dbUsername(), identity.dbPassword())) {
+        try (ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
+             Connection c = pools.connect(ds, identity.dbUsername(), identity.dbPassword())) {
             try {
                 c.setReadOnly(true);
             } catch (SQLException ignored) {

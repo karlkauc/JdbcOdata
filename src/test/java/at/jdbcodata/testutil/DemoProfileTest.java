@@ -21,7 +21,8 @@ import org.springframework.boot.test.context.SpringBootTest;
         "jdbcodata.admin.password=secret",
         "jdbcodata.stats.async=false",
         "jdbcodata.master-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
-        "jdbcodata.cache.cleanup-interval-ms=3600000"
+        "jdbcodata.cache.cleanup-interval-ms=3600000",
+        "jdbcodata.security.rate-limit-per-minute=100000"
 })
 public abstract class DemoProfileTest {
 

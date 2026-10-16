@@ -1,0 +1,18 @@
+<!-- Windows service via WinSW (https://github.com/winsw/winsw):
+     1. Download WinSW-x64.exe, rename it to jdbcodata-service.exe and put it next to this file (renamed to
+        jdbcodata-service.xml) in the JdbcOdata directory.
+     2. jdbcodata-service.exe install  /  jdbcodata-service.exe start
+-->
+<service>
+  <id>jdbcodata</id>
+  <name>JdbcOdata</name>
+  <description>OData feeds for company databases (Excel / PowerBI)</description>
+  <executable>java</executable>
+  <arguments>-Xms256m -Xmx1g -Dloader.path=lib -Dspring.config.additional-location=optional:file:./config/ -jar jdbcodata.jar</arguments>
+  <workingdirectory>%BASE%</workingdirectory>
+  <env name="JDBCODATA_ADMIN_PASSWORD" value="change-me"/>
+  <env name="JDBCODATA_MASTER_KEY" value=""/>
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size"><sizeThreshold>10240</sizeThreshold><keepFiles>5</keepFiles></log>
+  <onfailure action="restart" delay="10 sec"/>
+</service>

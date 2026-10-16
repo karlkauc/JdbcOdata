@@ -28,7 +28,7 @@ class QueryExecutorTest {
     private static final String URL = "jdbc:h2:mem:exectest;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
     private static final IdentityPoolManager pools = new IdentityPoolManager();
     private static final JdbcOdataProperties props = at.jdbcodata.testutil.TestData.props(100, 20, "");
-    private static final QueryExecutor executor = new QueryExecutor(pools, props);
+    private static final QueryExecutor executor = new QueryExecutor(pools, new at.jdbcodata.datasource.ConcurrencyLimiter(), props);
     private static final ExecutionIdentity identity = new ExecutionIdentity("u", "u", "p", ExecutionMode.CALLER);
     private static final Datasource ds = datasource("exec", URL);
 

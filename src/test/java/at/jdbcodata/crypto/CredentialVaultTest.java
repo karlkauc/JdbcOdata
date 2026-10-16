@@ -19,7 +19,7 @@ class CredentialVaultTest {
 
     private at.jdbcodata.config.JdbcOdataProperties props(String key, Path dataDir) {
         var p = TestData.props(10, 10, "");
-        return new at.jdbcodata.config.JdbcOdataProperties(p.admin(), p.odata(), p.seed(), p.cache(), p.stats(), key, dataDir.toString());
+        return new at.jdbcodata.config.JdbcOdataProperties(p.admin(), p.odata(), p.seed(), p.cache(), p.stats(), p.security(), key, dataDir.toString());
     }
 
     @Test

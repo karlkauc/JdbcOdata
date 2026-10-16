@@ -36,8 +36,9 @@ public final class TestData {
 
     public static JdbcOdataProperties props(int maxRows, int defaultTimeoutSec, String seedFile) {
         return new JdbcOdataProperties(new JdbcOdataProperties.Admin("a", "b"),
-                new JdbcOdataProperties.OData(maxRows, defaultTimeoutSec), new JdbcOdataProperties.Seed(seedFile),
-                new JdbcOdataProperties.Cache(16, 4, 3_600_000), new JdbcOdataProperties.Stats(90, false), "", "./data");
+                new JdbcOdataProperties.OData(maxRows, defaultTimeoutSec, 2000), new JdbcOdataProperties.Seed(seedFile),
+                new JdbcOdataProperties.Cache(16, 4, 3_600_000), new JdbcOdataProperties.Stats(90, false),
+                new JdbcOdataProperties.Security(true, 20), "", "./data");
     }
 
     public static Datasource datasource(String name, String jdbcUrl) {

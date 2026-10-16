@@ -5,6 +5,7 @@ import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.query.QueryExecutor;
 import at.jdbcodata.query.QueryService;
+import at.jdbcodata.security.LoginRateLimiter;
 import at.jdbcodata.stats.ExecutionLogService;
 import org.springframework.stereotype.Component;
 
@@ -16,5 +17,6 @@ public record ProcessorSupport(
         ExecutionIdentityResolver identityResolver,
         QueryExecutor executor,
         ResultCache cache,
-        ExecutionLogService executionLog) {
+        ExecutionLogService executionLog,
+        LoginRateLimiter rateLimiter) {
 }

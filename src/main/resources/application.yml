@@ -25,7 +25,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       show-details: when-authorized
@@ -37,6 +37,7 @@ jdbcodata:
   odata:
     max-rows: 500000       # hard upper bound per result
     default-timeout-sec: 60
+    concurrency-wait-ms: 2000   # wait for a free execution slot of a datasource before answering 503
   seed:
     file: ""               # YAML file with datasources and queries, e.g. config/seed.yml
   master-key: ""           # Base64, 32 bytes (AES-256). Empty: a key file is created in <data-dir>/master.key
@@ -48,6 +49,9 @@ jdbcodata:
   stats:
     retention-days: 90     # execution log retention
     async: true            # write execution log records off the request thread
+  security:
+    allow-plain-http: false   # true only behind a TLS reverse proxy or for local demos (Basic Auth needs TLS)
+    rate-limit-per-minute: 20 # failed logins per IP / username before 429
 
 logging:
   level:

@@ -7,6 +7,7 @@ import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
+import at.jdbcodata.datasource.TooManyExecutionsException;
 import at.jdbcodata.identity.ExecutionIdentity;
 import at.jdbcodata.identity.QueryNotVisibleException;
 import at.jdbcodata.query.ParameterBinder;
@@ -200,7 +201,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE, e);
         } catch (DbAuthenticationException e) {
             draft.fail(ExecutionStatus.AUTH_FAILED, e.getMessage());
+            support.rateLimiter().recordFailure(request.clientIp(), request.identity().caller());
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.UNAUTHORIZED.getStatusCode(), LOCALE, e);
+        } catch (TooManyExecutionsException e) {
+            draft.fail(ExecutionStatus.BUSY, e.getMessage());
+            throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);
         } catch (ResultTooLargeException e) {
             draft.fail(ExecutionStatus.TOO_LARGE, e.getMessage());
             throw new ODataApplicationException(e.getMessage(), 413, LOCALE, e);

@@ -52,6 +52,7 @@ public class ODataServlet extends HttpServlet {
             try {
                 context = identityResolver.authenticate(credentials.get());
             } catch (ServiceAuthenticationException e) {
+                support.rateLimiter().recordFailure(clientIp(req), credentials.get().username());
                 unauthorized(resp, e.getMessage());
                 return;
             }

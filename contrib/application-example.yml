@@ -1,0 +1,37 @@
+# Copy to config/application.yml next to jdbcodata.jar. All values can also be set as environment variables
+# (JDBCODATA_ADMIN_PASSWORD, SERVER_PORT, ...). See docs/CONFIG.md for the full reference.
+server:
+  port: 8443
+  ssl:
+    key-store: certs/jdbcodata.p12
+    key-store-password: change-me
+    key-store-type: PKCS12
+
+jdbcodata:
+  admin:
+    user: admin
+    password: change-me          # only used to create the first admin account
+  master-key: ""                 # openssl rand -base64 32 ; empty = key file in data/master.key
+  meta:
+    url: jdbc:h2:file:./data/jdbcodata;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    # PostgreSQL instead of H2:
+    # url: jdbc:postgresql://dbhost:5432/jdbcodata
+    # username: jdbcodata
+    # password: secret
+  odata:
+    max-rows: 500000
+    default-timeout-sec: 60
+  cache:
+    max-size-mb: 1024
+    memory-mb: 256
+  stats:
+    retention-days: 90
+  security:
+    allow-plain-http: false      # true only behind a TLS-terminating reverse proxy
+    rate-limit-per-minute: 20
+  seed:
+    file: ""                     # e.g. config/seed.yml
+
+logging:
+  file:
+    name: logs/jdbcodata.log

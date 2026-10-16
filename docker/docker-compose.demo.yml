@@ -1,0 +1,20 @@
+# Minimal demo: one container, embedded H2, sample data, plain HTTP on port 8080 (local use only).
+name: jdbcodata-demo
+
+services:
+  jdbcodata:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: jdbcodata:${JDBCODATA_VERSION:-1.0.0}
+    container_name: jdbcodata-demo
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: demo
+      JDBCODATA_ADMIN_PASSWORD: ${JDBCODATA_ADMIN_PASSWORD:-demo-admin}
+    volumes:
+      - jdbcodata-demo-data:/app/data
+
+volumes:
+  jdbcodata-demo-data:

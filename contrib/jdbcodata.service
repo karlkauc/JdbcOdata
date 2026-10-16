@@ -1,0 +1,23 @@
+# systemd unit for JdbcOdata. Install: copy to /etc/systemd/system/, adjust paths and user,
+# then: systemctl daemon-reload && systemctl enable --now jdbcodata
+[Unit]
+Description=JdbcOdata - OData feeds for company databases
+After=network.target
+
+[Service]
+Type=simple
+User=jdbcodata
+Group=jdbcodata
+WorkingDirectory=/opt/jdbcodata
+EnvironmentFile=-/etc/jdbcodata/jdbcodata.env
+ExecStart=/opt/jdbcodata/bin/jdbcodata.sh
+Restart=on-failure
+RestartSec=5
+# hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/jdbcodata/data /opt/jdbcodata/logs
+
+[Install]
+WantedBy=multi-user.target

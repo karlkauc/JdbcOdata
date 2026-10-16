@@ -22,13 +22,16 @@ public class ExecutionLogService {
 
     private final ExecutionLogRepository repository;
     private final TransactionTemplate tx;
+    private final ExecutionMetrics metrics;
     private final JdbcOdataProperties.Stats config;
     private final ExecutorService writer;
     private final AtomicLong dropped = new AtomicLong();
 
-    public ExecutionLogService(ExecutionLogRepository repository, TransactionTemplate tx, JdbcOdataProperties props) {
+    public ExecutionLogService(ExecutionLogRepository repository, TransactionTemplate tx, ExecutionMetrics metrics,
+                               JdbcOdataProperties props) {
         this.repository = repository;
         this.tx = tx;
+        this.metrics = metrics;
         this.config = props.stats();
         this.writer = config.async() ? Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "execution-log-writer");
@@ -38,6 +41,7 @@ public class ExecutionLogService {
     }
 
     public void record(ExecutionRecord record) {
+        metrics.record(record);
         if (writer == null) {
             write(record);
             return;

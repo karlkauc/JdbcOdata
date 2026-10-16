@@ -15,14 +15,19 @@ Stellt SQL-Abfragen gegen firmeninterne Datenbanken (Oracle, PostgreSQL, MySQL/M
 | [anforderung.txt](anforderung.txt) | Ursprüngliche Anforderung |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architektur: Module, Request-Fluss, OData-Modell, Identität, Cache, Statistik, Deployment, Entscheidungen |
 | [docs/PRD.md](docs/PRD.md) | Project Requirement Document: Scope, Use Cases, funktionale und nicht-funktionale Anforderungen, Datenmodell, API, Sicherheit, Tests, Meilensteine |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Betrieb: native Installation, Docker Compose, TLS, Backup, Monitoring, Fehlersuche |
+| [docs/CONFIG.md](docs/CONFIG.md) | Konfigurationsreferenz |
+| [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Datenquellen, Queries, Identität, Cache, Statistik einrichten |
+| [docs/EXCEL_POWERBI.md](docs/EXCEL_POWERBI.md) | Anleitung für Excel und PowerBI |
+| [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) | Abnahme-Checkliste |
 
 ## Status
 
-Meilensteine M1 bis M3 sind umgesetzt (siehe PRD §11): OData-Feed mit Basic-Auth-Pass-Through, `$filter`/`$orderby`
+Release 1.0: alle vier Meilensteine des PRD sind umgesetzt. OData-Feed mit Basic-Auth-Pass-Through, `$filter`/`$orderby`
 in-memory, Datenquellen- und Query-Verwaltung über REST-API und Admin-UI, Service-User mit verschlüsselt hinterlegten
 DB-Credentials, technische Accounts mit FIXED-Modus und Freigaben, Ergebnis-Cache pro User, Ausführungsstatistik,
-Audit-Log und Admin-Konten mit Rollen. Als Nächstes folgt M4 (Docker-Compose mit PostgreSQL und TLS, Rate-Limiting,
-Start-Skripte, Betriebsdokumentation).
+Audit-Log, Admin-Konten mit Rollen, TLS-Guard, Rate-Limiting, Concurrency-Limits, Prometheus-Metriken,
+Docker-Compose mit PostgreSQL und Caddy, Distributions-ZIP mit Start-Skripten.
 
 ## Bauen und starten
 
@@ -32,6 +37,10 @@ Voraussetzung: Java 21. Maven kommt über den Wrapper mit.
 ./mvnw verify                      # Build, Tests, Coverage-Report (target/site/jacoco/index.html)
 JDBCODATA_ADMIN_PASSWORD=geheim java -jar target/jdbcodata.jar --spring.profiles.active=demo
 ```
+
+`./mvnw package` erzeugt zusätzlich `target/jdbcodata-1.0.0-dist.zip` mit Start-Skripten (`bin/jdbcodata.sh`,
+`bin\jdbcodata.cmd`), Beispielkonfiguration und Doku. Ohne das Demo-Profil verlangt der Service TLS
+(`server.ssl.*`) oder die Flag `jdbcodata.security.allow-plain-http=true`, siehe docs/OPERATIONS.md.
 
 Windows: `mvnw.cmd verify` und `set JDBCODATA_ADMIN_PASSWORD=geheim` vor dem `java -jar`.
 
@@ -67,8 +76,9 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 
 ```bash
 cd docker
-cp .env.example .env            # Admin-Passwort setzen
-docker compose up -d --build
+cp .env.example .env            # Host, Admin-Passwort, Master-Key, PostgreSQL-Passwort setzen
+docker compose up -d --build    # Caddy (TLS, Port 443) + JdbcOdata + PostgreSQL
+docker compose -f docker-compose.demo.yml up -d   # nur Demo: ein Container, H2, Port 8080
 ```
 
 ### Tests
@@ -98,7 +108,9 @@ JdbcOdata/
 │   ├── templates/        # Thymeleaf-Seiten (layout, login, admin/…)
 │   └── static/           # CSS und JS der Admin-UI (htmx und CodeMirror kommen als WebJars)
 ├── src/test/java/        # Unit- und Integrationstests (JUnit 5, Spring Boot Test, JaCoCo)
-├── contrib/              # systemd-Unit, WinSW, Beispiel-Konfiguration (M4)
-├── docker/               # Dockerfile, docker-compose.yml, .env.example
+├── bin/                  # Start-Skripte für das Distributions-ZIP
+├── contrib/              # systemd-Unit, WinSW, Beispiel-Konfiguration, Seed-Beispiel
+├── docker/               # Dockerfile, docker-compose.yml (Caddy + PostgreSQL), docker-compose.demo.yml
+├── e2e/                  # Playwright-Browser-Check und Screenshots
 └── pom.xml
 ```

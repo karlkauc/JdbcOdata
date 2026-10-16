@@ -1,6 +1,6 @@
 # JdbcOdata – Architektur
 
-Stand: 2026-10-16 · Status: abgestimmt, Umsetzung läuft (M1 bis M3 fertig)
+Stand: 2026-10-16 · Status: Release 1.0 (M1 bis M4 umgesetzt)
 
 JdbcOdata stellt SQL-Abfragen gegen firmeninterne Datenbanken als OData-V4-Feeds für Excel und PowerBI bereit. Abfragen werden zur Laufzeit von Admins verwaltet, laufen unter der DB-Identität des anfragenden Users, werden pro User gecacht und vollständig protokolliert.
 
@@ -316,7 +316,7 @@ jdbcodata/
 └── certs/                  # Keystore für eingebautes TLS
 ```
 
-Optional: systemd-Unit-Datei und Windows-Dienst (WinSW) als Vorlagen im Repository; `jpackage` für Installer ist möglich, aber nicht Phase 1.
+`./mvnw package` erzeugt `target/jdbcodata-<version>-dist.zip` mit diesem Layout (maven-assembly-plugin). Das JAR nutzt das ZIP-Layout von Spring Boot, damit `-Dloader.path=lib` zusätzliche Treiber lädt. Vorlagen für systemd und WinSW liegen in `contrib/`; `jpackage` für Installer ist möglich, aber nicht umgesetzt.
 
 **Docker.** Multi-Stage-Dockerfile (Maven-Build → `eclipse-temurin:21-jre-alpine`, Non-Root-User). `docker-compose.yml` mit drei Services:
 
@@ -348,7 +348,7 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 | `jdbcodata.security.rate-limit` | 20/min | Fehlversuche pro IP bei Basic Auth |
 | `jdbcodata.timezone` | System | Für TIMESTAMP ohne Zone |
 
-**TLS** ist Pflicht, weil Basic Auth Klartext-Credentials trägt. Entweder eingebaut (Keystore in `certs/`) oder Reverse-Proxy (Caddy/Traefik/IIS/nginx). Ohne TLS startet der Service nur mit expliziter Flag `jdbcodata.security.allow-plain-http=true` und Warnung im Log.
+**TLS** ist Pflicht, weil Basic Auth Klartext-Credentials trägt. Entweder eingebaut (Keystore in `certs/`, `server.ssl.*`) oder Reverse-Proxy (Caddy im Compose-Stack, alternativ Traefik/IIS/nginx mit `server.forward-headers-strategy=framework`). Ohne TLS startet der Service nur mit expliziter Flag `jdbcodata.security.allow-plain-http=true` und Warnung im Log (`PlainHttpGuard`). Fehlgeschlagene Logins werden pro IP und Benutzername gezählt (`LoginRateLimiter`, `RateLimitFilter`), parallele Ausführungen pro Datenquelle begrenzt (`ConcurrencyLimiter`).
 
 **JDBC-Treiber.** `ojdbc11`, `postgresql`, `mariadb-java-client` werden gebündelt (alle über Maven Central verfügbar; Oracle-Treiber unter Oracle Free Use Terms). Weitere Treiber (DB2, SQL Server, …) legt der Betrieb in `lib/`, der `DriverLoader` registriert sie beim Start.
 

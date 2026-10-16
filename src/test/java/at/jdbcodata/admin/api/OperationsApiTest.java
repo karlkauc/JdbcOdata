@@ -115,6 +115,15 @@ class OperationsApiTest extends DemoProfileTest {
         assertThat(get("/api/v1/audit?limit=5", ADMIN, ADMIN_PASSWORD).body()).contains("ADMIN_USER");
     }
 
+    @Test
+    void prometheusMetricsAreExposedToAdmins() throws Exception {
+        get("/odata/Sales?$top=1", "demo", "demo");
+        HttpResponse<String> metrics = get("/actuator/prometheus", ADMIN, ADMIN_PASSWORD);
+        assertThat(metrics.statusCode()).isEqualTo(200);
+        assertThat(metrics.body()).contains("jdbcodata_executions_total").contains("jdbcodata_execution_duration_seconds");
+        assertThat(get("/actuator/prometheus", null, null).statusCode()).isIn(401, 302);
+    }
+
     private String findByName(String path, String name) throws Exception {
         for (JsonNode n : json.readTree(get(path, ADMIN, ADMIN_PASSWORD).body())) {
             if (name.equals(n.get("name").asString())) return n.get("id").asString();

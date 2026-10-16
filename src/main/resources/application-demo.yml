@@ -1,6 +1,8 @@
 # Demo profile: creates a local H2 database with sample data (user demo / password demo)
 # and seeds one datasource and one query so the feed is immediately visible in Excel.
 jdbcodata:
+  security:
+    allow-plain-http: true   # local demo without TLS
   demo:
     jdbc-url: jdbc:h2:file:./data/demo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
   seed:

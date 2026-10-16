@@ -10,13 +10,15 @@ public record JdbcOdataProperties(
         @DefaultValue Seed seed,
         @DefaultValue Cache cache,
         @DefaultValue Stats stats,
+        @DefaultValue Security security,
         @DefaultValue("") String masterKey,
         @DefaultValue("./data") String dataDir) {
 
     public record Admin(@DefaultValue("admin") String user, @DefaultValue("") String password) {
     }
 
-    public record OData(@DefaultValue("500000") int maxRows, @DefaultValue("60") int defaultTimeoutSec) {
+    public record OData(@DefaultValue("500000") int maxRows, @DefaultValue("60") int defaultTimeoutSec,
+                        @DefaultValue("2000") long concurrencyWaitMs) {
     }
 
     public record Seed(@DefaultValue("") String file) {
@@ -29,5 +31,14 @@ public record JdbcOdataProperties(
 
     /** Execution log retention and whether records are written asynchronously. */
     public record Stats(@DefaultValue("90") int retentionDays, @DefaultValue("true") boolean async) {
+    }
+
+    /**
+     * {@code allowPlainHttp}: Basic Auth carries clear-text passwords, so without TLS the service refuses to start
+     * unless this flag is set (e.g. behind a TLS-terminating reverse proxy or for local demos).
+     * {@code rateLimitPerMinute}: failed logins per client IP and per username before requests are rejected with 429.
+     */
+    public record Security(@DefaultValue("false") boolean allowPlainHttp,
+                           @DefaultValue("20") int rateLimitPerMinute) {
     }
 }

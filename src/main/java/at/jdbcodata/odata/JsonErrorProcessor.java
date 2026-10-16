@@ -55,6 +55,9 @@ public class JsonErrorProcessor implements ErrorProcessor {
         if (error.getStatusCode() == HttpStatusCode.UNAUTHORIZED.getStatusCode()) {
             response.setHeader(HttpHeader.WWW_AUTHENTICATE, BASIC_CHALLENGE);
         }
+        if (error.getStatusCode() == HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode()) {
+            response.setHeader("Retry-After", "5");
+        }
         ContentType format = responseFormat == null ? ContentType.JSON : responseFormat;
         try {
             response.setContent(odata.createSerializer(format).error(error).getContent());

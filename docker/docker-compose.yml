@@ -1,23 +1,71 @@
-# M1: single service with embedded H2 metadata DB and demo data.
-# M4 adds PostgreSQL and a TLS reverse proxy.
+# Production-style stack: Caddy terminates TLS, JdbcOdata uses PostgreSQL as metadata DB.
+# Copy .env.example to .env and set the secrets before "docker compose up -d".
+name: jdbcodata
+
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: jdbcodata-caddy
+    restart: unless-stopped
+    ports:
+      - "${JDBCODATA_HTTP_PORT:-80}:80"
+      - "${JDBCODATA_HTTPS_PORT:-443}:443"
+    environment:
+      JDBCODATA_HOST: ${JDBCODATA_HOST:-localhost}
+      JDBCODATA_TLS: ${JDBCODATA_TLS:-internal}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - jdbcodata
+
   jdbcodata:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: jdbcodata:0.1.0
+    image: jdbcodata:${JDBCODATA_VERSION:-1.0.0}
     container_name: jdbcodata
-    ports:
-      - "8080:8080"
+    restart: unless-stopped
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       JDBCODATA_ADMIN_USER: ${JDBCODATA_ADMIN_USER:-admin}
       JDBCODATA_ADMIN_PASSWORD: ${JDBCODATA_ADMIN_PASSWORD:?set JDBCODATA_ADMIN_PASSWORD in .env}
+      JDBCODATA_MASTER_KEY: ${JDBCODATA_MASTER_KEY:?set JDBCODATA_MASTER_KEY in .env (base64, 32 bytes)}
+      JDBCODATA_META_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-jdbcodata}
+      JDBCODATA_META_USERNAME: ${POSTGRES_USER:-jdbcodata}
+      JDBCODATA_META_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP: "true"   # TLS ends at Caddy
+      SERVER_FORWARD_HEADERS_STRATEGY: framework    # honour X-Forwarded-* from Caddy
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75}
     volumes:
       - jdbcodata-data:/app/data
-      - ./config:/app/config:ro
-      - ./lib:/app/lib:ro
+      - ./config:/app/config:ro    # optional application.yml, seed.yml (jdbcodata.seed.file: /app/config/seed.yml)
+      - ./lib:/app/lib:ro          # additional JDBC drivers
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8080"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: jdbcodata-postgres
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jdbcodata}
+      POSTGRES_USER: ${POSTGRES_USER:-jdbcodata}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jdbcodata} -d ${POSTGRES_DB:-jdbcodata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   jdbcodata-data:
+  postgres-data:
+  caddy-data:
+  caddy-config:
