@@ -1,0 +1,25 @@
+# Build
+target/
+*.jar
+!lib/*.jar
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Laufzeitdaten
+data/
+logs/
+*.log
+certs/
+.env
+
+# WebDAV / OS
+.DAV/
+.DS_Store
+Thumbs.db

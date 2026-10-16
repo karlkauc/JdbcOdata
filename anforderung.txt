@@ -1,0 +1,25 @@
+Erstelle einen Plan: 
+--------------------
+
+Ich möchte Daten in verschiedenen firmeninternen Datenbanken als OData Feed für Excel bereitstellen. 
+Ich möchte die SQL Abfragen dazu dynamisch konfigurieren können:
+* Neue Abfrage erstellen
+* Abfrage Bearbeiten
+* Abfrage löschen
+
+Ich möchte dabei die User Berechtigungen berücksichtigen. 
+Jede Abfrage kann unter den Berechtigungen eines anderen Users laufen.
+
+Excel und PowerBI müssen daher mitgeben, welcher User diese Abfrage ausführen möchte. 
+Die DB Abfrage muss dann unter diesem User gemacht werden. 
+Die Anemldung an die DB verwendet kein SSO (sondern Username und Passwort).
+
+Ich möchte die Ergebnisse pro User auch zwischenspeichern können, um Last von den Produktions DBs zu reduzieren.
+
+Ich möchte Statistiken mitführen können, welche User welche Abfragen getätigt haben, wie lange die gelaufen sind, wie viele Ergebnisse zurückgekommen sind, ob es Fehler gegeben hat etc. 
+
+Die Software soll nativ auf (mindestend) Linux und Windows laufen (lokaler Rechner). 
+Zusätzlich möchte ich eine Docker Umgebung dafür haben, um das in meiner Firma leicht einsetzten zu können. 
+
+Ich möchte mit dir zusammen eine Architektug definieren welche das abdeckt. 
+Anschließend möchte ich ein Projekt Requirement Document erstellen, um die Umsetzung zu erleichtern. 
