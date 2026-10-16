@@ -124,6 +124,9 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 | FR-30 | OData-Endpunkte erfordern HTTP Basic Auth; ohne Credentials antwortet der Service `401` mit `WWW-Authenticate: Basic realm="JdbcOdata"`. | MUST |
 | FR-31 | Pass-Through: existiert kein Service-User mit dem Namen, werden Username/Passwort unverändert als DB-Login der Query-Datenquelle verwendet und nicht persistiert. | MUST |
 | FR-32 | Service-User: Admins können Service-User mit eigenem Passwort anlegen und pro Datenquelle DB-Credentials hinterlegen; beim Aufruf wird das Service-Passwort geprüft und die hinterlegten DB-Credentials verwendet; fehlen sie, greift Pass-Through. | MUST |
+| FR-32a | PowerBI Service über On-Premises Data Gateway wird ausschließlich mit Service-Usern betrieben, die hinterlegte DB-Credentials verwenden; persönliche DB-Passwörter dürfen nicht im Gateway gespeichert werden. Die Admin-Doku und die Feed-Anleitung in der UI (FR-67) weisen darauf hin. | MUST |
+| FR-32b | Service-User-Namen beginnen mit dem Präfix `svc_`; die UI schlägt das Präfix vor und warnt bei Abweichung, damit Service-User nicht mit DB-Usernamen kollidieren. | MUST |
+| FR-32c | Ein Service-User kann mit dem Flag „Pass-Through erzwingen“ markiert werden; dann werden für ihn immer die Basic-Auth-Credentials als DB-Login verwendet und hinterlegte Credentials ignoriert. | SHOULD |
 | FR-33 | Ausführungsmodus `CALLER` (Standard) oder `FIXED` pro Query; bei `FIXED` läuft die Query unter einem hinterlegten technischen DB-Account. | MUST |
 | FR-34 | Für `FIXED`-Queries pflegt der Admin eine Freigabeliste (Service-User, Gruppen oder „alle authentifizierten“); nicht freigegebene Aufrufer sehen die Query nicht (`404`). | MUST |
 | FR-35 | Service-Dokument und `$metadata` sind personalisiert: sie enthalten nur Queries, die der Aufrufer sehen darf. | MUST |
@@ -187,7 +190,7 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 | NFR-11 | Performance | Ergebnisse werden gestreamt; Speicherbedarf pro Request ist unabhängig von der Zeilenzahl bis zum Cache-Limit. | MUST |
 | NFR-12 | Performance | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503` mit `Retry-After`. | MUST |
 | NFR-13 | Performance | Ergebnisgrenze Default 500 000 Zeilen / 256 MB pro Abruf, konfigurierbar. | MUST |
-| NFR-20 | Kompatibilität | Excel 365 (Windows) „Aus OData-Feed“; PowerBI Desktop und PowerBI Service über On-Premises Data Gateway mit Basic Auth. | MUST |
+| NFR-20 | Kompatibilität | Excel 365 (Windows) „Aus OData-Feed“; PowerBI Desktop und PowerBI Service über On-Premises Data Gateway mit Basic Auth (im Gateway nur Service-User, siehe FR-32a). | MUST |
 | NFR-21 | Kompatibilität | Oracle 19c+, PostgreSQL 13+, MySQL 8+ / MariaDB 10.6+. | MUST |
 | NFR-30 | Portabilität | Läuft auf Linux (x86_64, glibc) und Windows 10/11 bzw. Server 2019+ mit Java 21; ein identisches JAR. | MUST |
 | NFR-31 | Portabilität | Docker-Image (linux/amd64, linux/arm64) und `docker-compose.yml` mit PostgreSQL und TLS-Proxy. | MUST |
@@ -225,7 +228,7 @@ Alle Tabellen in der Metadaten-DB; IDs sind UUIDs; Zeitstempel in UTC.
 `id, query_id (FK), principal_type (USER|GROUP|ALL_AUTHENTICATED), principal_id, granted_by, granted_at`
 
 **service_user**
-`id, username (unique), password_hash, display_name, enabled, created_at, last_login_at`
+`id, username (unique, Präfix svc_), password_hash, display_name, force_passthrough, enabled, created_at, last_login_at`
 
 **service_group** / **service_group_member**
 `id, name` / `group_id, user_id`
@@ -346,6 +349,8 @@ Payload-Skizze Query (POST/PUT):
 3. Zusätzliche JDBC-Treiber über Volume `./lib:/app/lib`.
 4. Update: neues Image-Tag in `.env`, `docker compose pull && docker compose up -d`; Flyway migriert automatisch.
 
+**PowerBI Service / Gateway.** Datasets, die im PowerBI Service über das On-Premises Data Gateway aktualisiert werden, verwenden im Gateway einen Service-User (`svc_…`) mit hinterlegten DB-Credentials. Persönliche DB-Konten werden nicht im Gateway hinterlegt. Für Reports, die Row-Level-Security der DB brauchen, bleibt PowerBI Desktop mit persönlichem Login der Weg.
+
 **Backup.** Metadaten-DB (H2-Datei bei gestopptem Service oder `pg_dump`) plus `config/` und `certs/`. Der Cache muss nicht gesichert werden.
 
 **Monitoring.** `/actuator/health` für Liveness/Readiness, optional Prometheus-Metriken, Logs nach stdout (Docker) bzw. `data/logs/` (nativ).
@@ -378,13 +383,13 @@ Payload-Skizze Query (POST/PUT):
 
 | # | Punkt | Auswirkung | Vorschlag |
 |---|---|---|---|
-| O-01 | Sehr große Ergebnismengen (> 500 000 Zeilen) | Speicher und Cache-Größe | Harte Grenze in Phase 1; Push-Down und Server-Paging (`@odata.nextLink`) in Phase 2 |
-| O-02 | PowerBI Service über Gateway: Basic Auth wird unterstützt, aber Credentials liegen im Gateway | Sicherheitsbewertung durch IT nötig | Für Gateway-Nutzung Service-User mit hinterlegten Credentials empfehlen |
+| O-01 | Sehr große Ergebnismengen (> 500 000 Zeilen) | Speicher und Cache-Größe | **Entschieden 2026-10-16:** harte Grenze 500 000 Zeilen / 256 MB in Phase 1 reicht; Push-Down und Server-Paging (`@odata.nextLink`) in Phase 2 |
+| O-02 | PowerBI Service über Gateway: Basic Auth wird unterstützt, aber Credentials liegen im Gateway | Persönliche DB-Passwörter würden im Gateway gespeichert | **Entschieden 2026-10-16:** Für Gateway-Nutzung sind Service-User mit hinterlegten Credentials vorgeschrieben (FR-32a, §9) |
 | O-03 | Oracle-Treiber-Lizenz beim Bundling | Rechtlich prüfen | ojdbc11 steht unter Oracle Free Use Terms auf Maven Central; alternativ `lib/` |
 | O-04 | Zeitzonen bei `TIMESTAMP` ohne Zone | Falsche Uhrzeiten in Excel | Zeitzone pro Datenquelle konfigurierbar (FR-20), Default dokumentieren |
 | O-05 | Excel-Query-Folding sendet teils `$filter` mit Funktionen, die Olingo in-memory nicht abbildet | `501` statt Daten | Unterstützte Funktionen dokumentieren; Excel fällt bei Fehlern auf lokale Filterung zurück, zu verifizieren in M2 |
 | O-06 | Pass-Through-Pools halten Passwort-Hashes kurzzeitig im Speicher | Akzeptabel? | Mit Security abstimmen; Pool-Lebensdauer konfigurierbar |
-| O-07 | Service-User-Name kollidiert mit DB-Username | Auflösung greift fälschlich den Service-User | Dokumentieren; optional Präfix-Konvention oder Flag „Pass-Through für diesen Namen erzwingen“ |
+| O-07 | Service-User-Name kollidiert mit DB-Username | Auflösung greift fälschlich den Service-User | **Entschieden 2026-10-16:** Namenskonvention mit Präfix `svc_` für Service-User (FR-32b); zusätzlich Flag „Pass-Through erzwingen“ (FR-32c) |
 | O-08 | Mehrere Instanzen: Caffeine-Cache ist lokal, Invalidierung muss alle Instanzen erreichen | Veraltete Daten für max. TTL der Caffeine-Schicht | Caffeine-TTL kurz (60 s) halten oder Invalidierung über DB-Versionszähler |
 | O-09 | Mehrinstanz-Betrieb mit H2 | Nicht möglich | Für Mehrinstanz PostgreSQL vorschreiben |
 

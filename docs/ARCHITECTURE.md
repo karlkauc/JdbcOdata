@@ -186,7 +186,9 @@ flowchart TD
 | `CALLER` (Standard) | Läuft unter der Identität des Aufrufers (Pass-Through oder hinterlegte Credentials) | Daten, bei denen die DB selbst die Berechtigungen regelt (Row-Level-Security, Views, Grants) |
 | `FIXED` | Läuft unter einem auf der Query hinterlegten technischen DB-Account; der Aufrufer wird nur gegen den Service bzw. die Datenquelle authentifiziert | Aggregierte Reports für User ohne eigenes DB-Konto; „Abfrage läuft unter den Berechtigungen eines anderen Users“ |
 
-**Service-User.** Optionales Konto im Service mit eigenem Passwort (bcrypt). Pro Datenquelle können DB-Credentials hinterlegt werden. Vorteile: ein Login in Excel für mehrere Datenquellen, DB-Passwort-Rotation ohne Excel-Änderung, Zugriff auf `FIXED`-Queries ohne DB-Konto. Ohne Service-User gilt reines Pass-Through, der Service speichert nichts.
+**Service-User.** Optionales Konto im Service mit eigenem Passwort (bcrypt), Namenskonvention Präfix `svc_`, damit es keine Kollision mit DB-Usernamen gibt. Pro Datenquelle können DB-Credentials hinterlegt werden. Vorteile: ein Login in Excel für mehrere Datenquellen, DB-Passwort-Rotation ohne Excel-Änderung, Zugriff auf `FIXED`-Queries ohne DB-Konto. Ein Flag „Pass-Through erzwingen“ schaltet hinterlegte Credentials für einen Service-User ab. Ohne Service-User gilt reines Pass-Through, der Service speichert nichts.
+
+**PowerBI Service über Gateway.** Das On-Premises Data Gateway speichert die Basic-Auth-Credentials selbst. Deshalb werden dort ausschließlich Service-User mit hinterlegten Credentials eingetragen, nie persönliche DB-Konten.
 
 **Sichtbarkeit.** Das Service-Dokument und `$metadata` zeigen nur Queries, die der Aufrufer sehen darf. Bei `CALLER`-Queries ist das jede Query der Datenquelle, gegen die sich der Aufrufer authentifizieren kann (die DB entscheidet beim Ausführen). Bei `FIXED`-Queries pflegt der Admin eine Freigabeliste (Service-User oder Gruppen). Nicht freigegebene Queries antworten mit `404`, nicht `403`, um keine Existenz zu verraten.
 
