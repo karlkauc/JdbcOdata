@@ -1,0 +1,46 @@
+spring:
+  application:
+    name: jdbcodata
+  main:
+    banner-mode: off
+  datasource:
+    # Metadata DB. Default: embedded H2 file in ./data. Override with JDBCODATA_META_* or spring.datasource.*
+    url: ${jdbcodata.meta.url:jdbc:h2:file:./data/jdbcodata;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${jdbcodata.meta.username:sa}
+    password: ${jdbcodata.meta.password:}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+
+jdbcodata:
+  admin:
+    user: admin
+    password: ""          # empty: a random password is generated and logged at startup
+  odata:
+    max-rows: 500000       # hard upper bound per result
+    default-timeout-sec: 60
+  seed:
+    file: ""               # YAML file with datasources and queries, e.g. config/seed.yml
+
+logging:
+  level:
+    at.jdbcodata: INFO
+    com.zaxxer.hikari: WARN

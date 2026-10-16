@@ -1,6 +1,6 @@
 # JdbcOdata – Architektur
 
-Stand: 2026-10-16 · Status: Entwurf zur Abstimmung
+Stand: 2026-10-16 · Status: abgestimmt, Umsetzung läuft (M1 fertig)
 
 JdbcOdata stellt SQL-Abfragen gegen firmeninterne Datenbanken als OData-V4-Feeds für Excel und PowerBI bereit. Abfragen werden zur Laufzeit von Admins verwaltet, laufen unter der DB-Identität des anfragenden Users, werden pro User gecacht und vollständig protokolliert.
 
@@ -57,8 +57,8 @@ flowchart LR
 | Baustein | Wahl | Begründung |
 |---|---|---|
 | Sprache / Runtime | Java 21 (LTS) | Läuft nativ auf Linux und Windows, ein Artefakt für alle Plattformen |
-| Framework | Spring Boot 3.x | Security, Web, Actuator, Konfiguration, breite Treiber-Unterstützung |
-| OData | Apache Olingo 4 (Server-Core + JSON) | Reifste OData-V4-Server-Implementierung in Java; parst URL und Query-Optionen, serialisiert JSON und `$metadata` |
+| Framework | Spring Boot 4.x (Spring Framework 7, Spring Security 7, Hibernate 7) | Spring Boot 3.5 ist seit Mitte 2026 aus dem OSS-Support; 4.x ist die gepflegte Linie |
+| OData | Apache Olingo 5.0 (Server-Core + JSON, Jakarta Servlet) | Reifste OData-V4-Server-Implementierung in Java; parst URL und Query-Optionen, serialisiert JSON und `$metadata` |
 | DB-Zugriff | JDBC + HikariCP | Oracle, PostgreSQL, MySQL/MariaDB über offizielle Treiber; weitere DBs ohne Codeänderung |
 | SQL-Validierung | JSqlParser | Nur `SELECT`/`WITH` zulassen, Parameter erkennen |
 | Metadaten-DB | H2 (Datei) standardmäßig, PostgreSQL optional | Keine Zusatzinstallation lokal, Mehrinstanz-Betrieb in Docker |
@@ -378,7 +378,7 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 
 | # | Entscheidung | Alternativen | Grund |
 |---|---|---|---|
-| 1 | Java 21 + Spring Boot + Olingo | .NET 8 + ASP.NET OData; Python/FastAPI | JDBC deckt alle Firmen-DBs ab, Olingo ist die reifste OData-V4-Server-Lib, ein Artefakt für Linux/Windows/Docker |
+| 1 | Java 21 + Spring Boot 4 + Olingo 5 | .NET 8 + ASP.NET OData; Python/FastAPI | JDBC deckt alle Firmen-DBs ab, Olingo ist die reifste OData-V4-Server-Lib, ein Artefakt für Linux/Windows/Docker |
 | 2 | Basic Auth Pass-Through als Standard, Service-User optional | Nur Service-User mit hinterlegten Credentials | Kein Passwort-Speicher nötig für den Standardfall; Excel/PowerBI unterstützen Basic Auth nativ |
 | 3 | Query-Modus `CALLER`/`FIXED` | Nur Caller-Identität | Deckt „Abfrage unter anderem User“ explizit und auditierbar ab |
 | 4 | OData-Optionen in-memory | SQL-Push-Down | Ergebnis ist ohnehin pro User gecacht; Push-Down erst, wenn Messungen es verlangen |

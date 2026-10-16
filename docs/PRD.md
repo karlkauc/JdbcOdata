@@ -1,6 +1,6 @@
 # JdbcOdata – Project Requirement Document (PRD)
 
-Stand: 2026-10-16 · Version 0.1 · Status: Entwurf zur Abstimmung
+Stand: 2026-10-16 · Version 0.2 · Status: abgestimmt, Umsetzung läuft
 Architektur: siehe [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 1. Ziel und Hintergrund
@@ -373,7 +373,7 @@ Payload-Skizze Query (POST/PUT):
 
 | Meilenstein | Inhalt | Ergebnis |
 |---|---|---|
-| **M1 – Skeleton** | Maven-Projekt, Spring Boot, Flyway + H2, Datenquellen-CRUD (API), eine Query aus YAML-Seed, Olingo-Endpunkt mit Service-Dokument, `$metadata`, Daten, Basic-Auth-Pass-Through, Dockerfile | Feed in Excel sichtbar |
+| **M1 – Skeleton** ✅ 2026-10-16 | Maven-Projekt, Spring Boot 4, Flyway + H2, Datenquellen-CRUD (API), Queries aus YAML-Seed mit Schema-Snapshot, Olingo-Endpunkt mit Service-Dokument, `$metadata`, Daten (`$top`, `$skip`, `$select`, `$count`, Parameter), Basic-Auth-Pass-Through mit Pools pro Identität, Demo-Profil, Dockerfile, 66 Tests mit 94 % Zeilenabdeckung | Feed in Excel sichtbar |
 | **M2 – Query-Verwaltung** | Query-CRUD mit Validierung, Parameter, Schema-Snapshot, Testlauf, Admin-UI (Login, Datenquellen, Queries), Versionshistorie, OData-Optionen in-memory | Admin pflegt Queries ohne Neustart |
 | **M3 – Identität, Cache, Statistik** | Service-User, hinterlegte Credentials, `FIXED`-Modus mit Freigaben, Verschlüsselung, persistenter Cache + Caffeine, Invalidierung, Execution-Log, Statistik-UI, Audit-Log | Alle MUST-Anforderungen erfüllt |
 | **M4 – Betrieb und Härtung** | docker-compose mit PostgreSQL und Caddy, TLS, Rate-Limiting, Concurrency-Limits, Retention-Jobs, Metriken, Start-Skripte Linux/Windows, Dokumentation (Admin, Betrieb, Excel/PowerBI-Anleitung), Abnahme-Checkliste | Release 1.0 |

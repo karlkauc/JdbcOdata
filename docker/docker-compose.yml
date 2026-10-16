@@ -1,0 +1,23 @@
+# M1: single service with embedded H2 metadata DB and demo data.
+# M4 adds PostgreSQL and a TLS reverse proxy.
+services:
+  jdbcodata:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: jdbcodata:0.1.0
+    container_name: jdbcodata
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-demo}
+      JDBCODATA_ADMIN_USER: ${JDBCODATA_ADMIN_USER:-admin}
+      JDBCODATA_ADMIN_PASSWORD: ${JDBCODATA_ADMIN_PASSWORD:?set JDBCODATA_ADMIN_PASSWORD in .env}
+    volumes:
+      - jdbcodata-data:/app/data
+      - ./config:/app/config:ro
+      - ./lib:/app/lib:ro
+    restart: unless-stopped
+
+volumes:
+  jdbcodata-data:

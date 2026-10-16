@@ -1,0 +1,26 @@
+datasources:
+  - name: demo
+    description: Local H2 demo database (user demo / password demo)
+    jdbcUrl: ${jdbcodata.demo.jdbc-url}
+    driverClass: org.h2.Driver
+    defaultTimeoutSec: 30
+    maxRows: 100000
+
+queries:
+  - name: Sales
+    description: Sales per customer and month for one year
+    datasource: demo
+    sql: |
+      SELECT id, customer, region, sale_year, sale_month, amount, sold_at, delivered
+      FROM sales
+      WHERE sale_year = :p_year
+      ORDER BY id
+    parameters:
+      - name: p_year
+        type: INT
+        required: false
+        default: "2025"
+        description: Sales year
+    snapshotCredentials:
+      username: demo
+      password: demo
