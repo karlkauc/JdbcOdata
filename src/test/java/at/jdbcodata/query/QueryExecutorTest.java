@@ -27,8 +27,7 @@ class QueryExecutorTest {
 
     private static final String URL = "jdbc:h2:mem:exectest;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
     private static final IdentityPoolManager pools = new IdentityPoolManager();
-    private static final JdbcOdataProperties props = new JdbcOdataProperties(
-            new JdbcOdataProperties.Admin("a", "b"), new JdbcOdataProperties.OData(100, 20), new JdbcOdataProperties.Seed(""));
+    private static final JdbcOdataProperties props = at.jdbcodata.testutil.TestData.props(100, 20, "");
     private static final QueryExecutor executor = new QueryExecutor(pools, props);
     private static final ExecutionIdentity identity = new ExecutionIdentity("u", "u", "p", ExecutionMode.CALLER);
     private static final Datasource ds = datasource("exec", URL);
@@ -91,7 +90,7 @@ class QueryExecutorTest {
         assertThat(executor.effectiveTimeoutSec(plain, wide)).isEqualTo(20);      // datasource 0 → global default
 
         QueryDefinition limited = new QueryDefinition(UUID.randomUUID(), "L", null, wide.id(), "w", "SELECT 1",
-                ExecutionMode.CALLER, false, 0, 5, 10, KeyMode.ROWID, 1, true, List.of(), List.of(), Instant.now(), Instant.now());
+                ExecutionMode.CALLER, null, null, false, 0, 5, 10, KeyMode.ROWID, 1, true, List.of(), List.of(), Instant.now(), Instant.now());
         assertThat(executor.effectiveMaxRows(limited, ds)).isEqualTo(10);
         assertThat(executor.effectiveTimeoutSec(limited, ds)).isEqualTo(5);
     }

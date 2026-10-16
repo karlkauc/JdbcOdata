@@ -1,6 +1,6 @@
 # JdbcOdata – Architektur
 
-Stand: 2026-10-16 · Status: abgestimmt, Umsetzung läuft (M1, M2 fertig)
+Stand: 2026-10-16 · Status: abgestimmt, Umsetzung läuft (M1 bis M3 fertig)
 
 JdbcOdata stellt SQL-Abfragen gegen firmeninterne Datenbanken als OData-V4-Feeds für Excel und PowerBI bereit. Abfragen werden zur Laufzeit von Admins verwaltet, laufen unter der DB-Identität des anfragenden Users, werden pro User gecacht und vollständig protokolliert.
 
@@ -192,7 +192,7 @@ flowchart TD
 
 **Sichtbarkeit.** Das Service-Dokument und `$metadata` zeigen nur Queries, die der Aufrufer sehen darf. Bei `CALLER`-Queries ist das jede Query der Datenquelle, gegen die sich der Aufrufer authentifizieren kann (die DB entscheidet beim Ausführen). Bei `FIXED`-Queries pflegt der Admin eine Freigabeliste (Service-User oder Gruppen). Nicht freigegebene Queries antworten mit `404`, nicht `403`, um keine Existenz zu verraten.
 
-**Credentials at rest.** Hinterlegte DB-Passwörter und `FIXED`-Accounts werden mit AES-256-GCM verschlüsselt (Zufalls-IV pro Eintrag, Key-ID im Datensatz für Rotation). Der Master-Key kommt aus der Env-Var `JDBCODATA_MASTER_KEY` oder einem PKCS12-Keystore, nie aus der Metadaten-DB. Pass-Through-Passwörter werden nie persistiert und nie geloggt; im Prozess leben sie nur im Request-Scope und im Pool-Schlüssel als Hash.
+**Credentials at rest.** Hinterlegte DB-Passwörter und `FIXED`-Accounts werden mit AES-256-GCM verschlüsselt (`CredentialVault`: Zufalls-IV pro Eintrag, Key-ID im Datensatz für Rotation). Der Master-Key kommt aus `JDBCODATA_MASTER_KEY` (Base64, 32 Byte); ist nichts konfiguriert, erzeugt `MasterKeyProvider` beim ersten Start eine Key-Datei `data/master.key` (Rechte 600) und warnt im Log. Der Key liegt nie in der Metadaten-DB. Pass-Through-Passwörter werden nie persistiert und nie geloggt; im Prozess leben sie nur im Request-Scope und im Pool-Schlüssel als Hash.
 
 **Connections.**
 
@@ -215,7 +215,7 @@ flowchart TD
 | Transparenz | Response-Header `X-Cache: HIT|MISS|BYPASS` und `X-Cache-Age: <Sekunden>` |
 | Aufräumen | Hintergrundjob löscht abgelaufene Einträge; Gesamtgröße des Caches ist konfigurierbar (LRU) |
 
-Cache-Hit bedeutet null DB-Last: OData-Optionen werden vollständig auf dem gecachten Ergebnis ausgewertet.
+Cache-Hit bedeutet null DB-Last: OData-Optionen werden vollständig auf dem gecachten Ergebnis ausgewertet. Umsetzung: `ResultCache` (Caffeine mit Gewicht nach Zeilen × Spalten und Ablauf je Eintrag, darunter Tabelle `cache_entry` mit GZIP-komprimiertem Binärformat aus `ResultTableCodec`), Per-Key-Lock gegen parallele Ausführungen, Aufräumjob alle 5 Minuten (abgelaufene Einträge, LRU bei Überschreitung von `jdbcodata.cache.max-size-mb`).
 
 ## 7. Statistiken und Protokollierung
 
@@ -241,7 +241,7 @@ Jede Ausführung schreibt einen Datensatz nach `execution_log` (asynchron, damit
 
 Admin-UI „Statistiken“: Top-Queries nach Aufrufen, langsamste Queries (p50/p95), Fehlerquote pro Query und Datenquelle, Nutzung pro User, Cache-Trefferquote, Zeitverlauf (Tag/Woche), Rohdaten-Tabelle mit Filter und CSV-Export. Retention konfigurierbar (Default 90 Tage), Aggregat-Tabelle pro Tag für Langzeitauswertung. Zusätzlich Micrometer-Metriken unter `/actuator/prometheus` (optional aktivierbar).
 
-Audit: Änderungen an Queries, Datenquellen, Usern und Credentials landen in `audit_log` (wer, wann, was, Diff der Definition ohne Secrets).
+Audit: Änderungen an Queries, Datenquellen, Service-Usern, Gruppen, technischen Accounts, Admin-Konten, Freigaben und Cache-Invalidierungen landen in `audit_log` (wer, wann, Aktion, Objekt, Details als JSON ohne Secrets). Das Execution-Log wird von einem eigenen Writer-Thread geschrieben (`jdbcodata.stats.async`), die Retention läuft täglich.
 
 ## 8. Admin-UI und REST-API
 

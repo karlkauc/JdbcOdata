@@ -45,6 +45,9 @@ public class QueryDefinitionEntity {
     @Column(name = "execution_mode", nullable = false, length = 20)
     private ExecutionMode executionMode = ExecutionMode.CALLER;
 
+    @Column(name = "fixed_credential_id")
+    private UUID fixedCredentialId;
+
     @Column(name = "cache_enabled", nullable = false)
     private boolean cacheEnabled = false;
 
@@ -82,8 +85,12 @@ public class QueryDefinitionEntity {
     private List<QueryColumnEntity> columns = new ArrayList<>();
 
     public QueryDefinition toRecord() {
+        return toRecord(null);
+    }
+
+    public QueryDefinition toRecord(String fixedCredentialName) {
         return new QueryDefinition(id, name, description, datasource.getId(), datasource.getName(), sqlText,
-                executionMode, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled,
+                executionMode, fixedCredentialId, fixedCredentialName, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled,
                 parameters.stream().map(QueryParameterEntity::toRecord).toList(),
                 columns.stream().map(QueryColumnEntity::toRecord).toList(),
                 createdAt, updatedAt);
@@ -114,6 +121,8 @@ public class QueryDefinitionEntity {
     public String getSqlText() { return sqlText; }
     public void setSqlText(String sqlText) { this.sqlText = sqlText; }
     public ExecutionMode getExecutionMode() { return executionMode; }
+    public UUID getFixedCredentialId() { return fixedCredentialId; }
+    public void setFixedCredentialId(UUID fixedCredentialId) { this.fixedCredentialId = fixedCredentialId; }
     public void setExecutionMode(ExecutionMode executionMode) { this.executionMode = executionMode; }
     public boolean isCacheEnabled() { return cacheEnabled; }
     public void setCacheEnabled(boolean cacheEnabled) { this.cacheEnabled = cacheEnabled; }

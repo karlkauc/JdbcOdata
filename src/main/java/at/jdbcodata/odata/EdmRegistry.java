@@ -2,8 +2,10 @@ package at.jdbcodata.odata;
 
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryDefinitionsChangedEvent;
-import at.jdbcodata.query.QueryService;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import org.apache.olingo.server.api.OData;
 import org.apache.olingo.server.api.ServiceMetadata;
 import org.slf4j.Logger;
@@ -11,36 +13,25 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/** Caches the Olingo {@link ServiceMetadata} built from all enabled queries with a schema snapshot. */
+/**
+ * Caches Olingo {@link ServiceMetadata} per set of visible queries. The service document is personalised
+ * (FR-35), so different callers may get different models; identical sets share one instance.
+ */
 @Component
 public class EdmRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(EdmRegistry.class);
 
-    private final QueryService queryService;
     private final OData odata = OData.newInstance();
-    private volatile ServiceMetadata cached;
+    private final Map<String, ServiceMetadata> cache = new ConcurrentHashMap<>();
 
-    public EdmRegistry(QueryService queryService) {
-        this.queryService = queryService;
-    }
-
-    public ServiceMetadata serviceMetadata() {
-        ServiceMetadata md = cached;
-        if (md == null) {
-            synchronized (this) {
-                md = cached;
-                if (md == null) {
-                    List<QueryDefinition> queries = queryService.findAllEnabled().stream()
-                            .filter(QueryDefinition::hasSnapshot)
-                            .toList();
-                    md = odata.createServiceMetadata(new DynamicEdmProvider(queries), List.of());
-                    cached = md;
-                    log.debug("Built OData metadata with {} entity sets", queries.size());
-                }
-            }
-        }
-        return md;
+    public ServiceMetadata serviceMetadata(List<QueryDefinition> visibleQueries) {
+        String key = visibleQueries.stream().map(q -> q.name() + "@" + q.version() + "/" + q.updatedAt())
+                .collect(Collectors.joining("|"));
+        return cache.computeIfAbsent(key, k -> {
+            log.debug("Building OData metadata with {} entity sets", visibleQueries.size());
+            return odata.createServiceMetadata(new DynamicEdmProvider(visibleQueries), List.of());
+        });
     }
 
     @EventListener
@@ -49,6 +40,10 @@ public class EdmRegistry {
     }
 
     public void invalidate() {
-        cached = null;
+        cache.clear();
+    }
+
+    public int size() {
+        return cache.size();
     }
 }

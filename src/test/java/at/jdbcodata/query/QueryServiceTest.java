@@ -30,7 +30,7 @@ class QueryServiceTest extends DemoProfileTest {
 
     private QuerySpec spec(String name, String sql, List<QueryParameter> params) {
         Datasource demo = datasourceService.findByName("demo").orElseThrow();
-        return new QuerySpec(name, "desc", demo.id(), sql, null, null, null, null, null, null, null, params);
+        return new QuerySpec(name, "desc", demo.id(), sql, null, null, null, null, null, null, null, null, params);
     }
 
     private static String uniqueName(String prefix) {
@@ -57,13 +57,13 @@ class QueryServiceTest extends DemoProfileTest {
                 .isInstanceOf(InvalidRequestException.class).hasMessageContaining("Only SELECT");
         assertThatThrownBy(() -> service.create(spec("Ok", "SELECT FROM WHERE", List.of())))
                 .isInstanceOf(InvalidRequestException.class).hasMessageContaining("parsed");
-        assertThatThrownBy(() -> service.create(new QuerySpec("Ok", null, null, "SELECT 1", null, null, null, null, null, null, null, null)))
+        assertThatThrownBy(() -> service.create(new QuerySpec("Ok", null, null, "SELECT 1", null, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(InvalidRequestException.class).hasMessageContaining("datasourceId");
-        assertThatThrownBy(() -> service.create(new QuerySpec("Ok", null, UUID.randomUUID(), "SELECT 1", null, null, null, null, null, null, null, null)))
+        assertThatThrownBy(() -> service.create(new QuerySpec("Ok", null, UUID.randomUUID(), "SELECT 1", null, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(NotFoundException.class);
         assertThatThrownBy(() -> service.create(spec("Sales", "SELECT 1", List.of())))
                 .isInstanceOf(ConflictException.class);
-        assertThatThrownBy(() -> service.transientDefinition(new QuerySpec("Ok", null, UUID.randomUUID(), "SELECT 1", null, null, null, null, null, null, null, null)))
+        assertThatThrownBy(() -> service.transientDefinition(new QuerySpec("Ok", null, UUID.randomUUID(), "SELECT 1", null, null, null, null, null, null, null, null, null)))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -87,7 +87,7 @@ class QueryServiceTest extends DemoProfileTest {
                 new QueryColumn(0, "one", "one", Types.INTEGER, "INTEGER", "Edm.Int32", null, null, true, false, true),
                 new QueryColumn(1, "two", "two", Types.INTEGER, "INTEGER", "Edm.Int32", null, null, true, false, true)));
         assertThat(withSnapshot.hasSnapshot()).isTrue();
-        assertThat(edmRegistry.serviceMetadata().getEdm().getEntityContainer().getEntitySet(name)).isNotNull();
+        assertThat(edmRegistry.serviceMetadata(service.findAllEnabled().stream().filter(QueryDefinition::hasSnapshot).toList()).getEdm().getEntityContainer().getEntitySet(name)).isNotNull();
 
         QueryDefinition settings = service.updateColumnSettings(created.id(), List.of(
                 new ColumnSetting("one", true, false), new ColumnSetting("two", false, false), new ColumnSetting("nope", true, true)));
@@ -104,7 +104,7 @@ class QueryServiceTest extends DemoProfileTest {
         assertThat(newSql.version()).isEqualTo(2);
         assertThat(newSql.hasSnapshot()).isFalse();
         assertThat(service.versions(created.id())).extracting(QueryVersion::version).containsExactly(2, 1);
-        assertThat(edmRegistry.serviceMetadata().getEdm().getEntityContainer().getEntitySet(name)).isNull();
+        assertThat(edmRegistry.serviceMetadata(service.findAllEnabled().stream().filter(QueryDefinition::hasSnapshot).toList()).getEdm().getEntityContainer().getEntitySet(name)).isNull();
 
         QueryDefinition withParam = service.update(created.id(), spec(name, "SELECT 2 AS two",
                 List.of(param("p", ParameterType.INT, false, "1"))));
@@ -119,7 +119,7 @@ class QueryServiceTest extends DemoProfileTest {
         assertThat(upserted.version()).isEqualTo(4);
 
         QueryDefinition disabled = service.update(created.id(), new QuerySpec(name, null, created.datasourceId(),
-                "SELECT 3 AS three", ExecutionMode.CALLER, true, 60, 5, 50, KeyMode.COLUMNS, false, List.of()));
+                "SELECT 3 AS three", ExecutionMode.CALLER, null, true, 60, 5, 50, KeyMode.COLUMNS, false, List.of()));
         assertThat(disabled.version()).as("settings only, no new version").isEqualTo(4);
         assertThat(disabled.enabled()).isFalse();
         assertThat(disabled.cacheEnabled()).isTrue();

@@ -18,6 +18,13 @@
   <nav>
     <a th:href="@{/admin/datasources}">Datenquellen</a>
     <a th:href="@{/admin/queries}">Queries</a>
+    <a th:href="@{/admin/users}">Service-User</a>
+    <a th:href="@{/admin/accounts}">Techn. Accounts</a>
+    <a th:href="@{/admin/cache}">Cache</a>
+    <a th:href="@{/admin/stats}">Statistik</a>
+    <a th:href="@{/admin/audit}">Audit</a>
+    <a th:href="@{/admin/admins}">Admins</a>
+    <a th:href="@{/admin/settings}">Einstellungen</a>
   </nav>
   <div class="user" th:if="${currentUser != null}">
     <span th:text="${currentUser}">admin</span>

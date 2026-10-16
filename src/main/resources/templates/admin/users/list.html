@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Service-User', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1>Service-User</h1>
+    <div class="head-actions"><a class="button" th:href="@{/admin/groups}">Gruppen</a><a class="button primary" th:href="@{/admin/users/new}">Neuer Service-User</a></div>
+  </div>
+  <p class="muted">Service-User melden sich in Excel mit eigenem Passwort an; pro Datenquelle können DB-Zugangsdaten hinterlegt werden. Empfohlenes Präfix: <code th:text="${prefix}">svc_</code>.</p>
+  <table class="list">
+    <thead><tr><th>Benutzer</th><th>Anzeige</th><th>Gruppen</th><th>Pass-Through</th><th>Letzter Login</th><th>Status</th></tr></thead>
+    <tbody>
+    <tr th:each="u : ${users}">
+      <td><a th:href="@{/admin/users/{id}(id=${u.id})}" th:text="${u.username}">svc_x</a></td>
+      <td th:text="${u.displayName}"></td>
+      <td th:text="${#strings.listJoin(u.groups.![name], ', ')}"></td>
+      <td th:text="${u.forcePassthrough} ? 'erzwungen' : ''"></td>
+      <td th:text="${u.lastLoginAt != null} ? ${#temporals.format(u.lastLoginAt, 'dd.MM.yyyy HH:mm')} : '–'"></td>
+      <td><span th:class="${u.enabled} ? 'badge ok' : 'badge off'" th:text="${u.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
+    </tr>
+    <tr th:if="${users.isEmpty()}"><td colspan="6" class="muted">Noch keine Service-User. Ohne Service-User gilt reines Pass-Through.</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

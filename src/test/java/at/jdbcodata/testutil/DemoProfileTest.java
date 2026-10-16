@@ -18,7 +18,10 @@ import org.springframework.boot.test.context.SpringBootTest;
         "spring.datasource.url=jdbc:h2:mem:meta-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "jdbcodata.demo.jdbc-url=jdbc:h2:mem:demo-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "jdbcodata.admin.user=admin",
-        "jdbcodata.admin.password=secret"
+        "jdbcodata.admin.password=secret",
+        "jdbcodata.stats.async=false",
+        "jdbcodata.master-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "jdbcodata.cache.cleanup-interval-ms=3600000"
 })
 public abstract class DemoProfileTest {
 

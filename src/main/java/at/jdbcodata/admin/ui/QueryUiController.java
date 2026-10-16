@@ -7,6 +7,9 @@ import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
 import at.jdbcodata.identity.ExecutionIdentity;
+import at.jdbcodata.identity.FixedCredentialService;
+import at.jdbcodata.identity.ServiceUserService;
+import at.jdbcodata.query.PrincipalType;
 import at.jdbcodata.query.ColumnSetting;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.ParameterType;
@@ -43,13 +46,18 @@ public class QueryUiController {
     private final DatasourceService datasourceService;
     private final QueryTestService testService;
     private final SchemaSnapshotService snapshotService;
+    private final FixedCredentialService fixedCredentials;
+    private final ServiceUserService serviceUsers;
 
     public QueryUiController(QueryService queryService, DatasourceService datasourceService,
-                             QueryTestService testService, SchemaSnapshotService snapshotService) {
+                             QueryTestService testService, SchemaSnapshotService snapshotService,
+                             FixedCredentialService fixedCredentials, ServiceUserService serviceUsers) {
         this.queryService = queryService;
         this.datasourceService = datasourceService;
         this.testService = testService;
         this.snapshotService = snapshotService;
+        this.fixedCredentials = fixedCredentials;
+        this.serviceUsers = serviceUsers;
     }
 
     @GetMapping
@@ -156,6 +164,27 @@ public class QueryUiController {
         return "redirect:/admin/queries/" + id;
     }
 
+    /** Grants of a FIXED query: checkbox {@code all}, {@code user_<id>} and {@code group_<id>}. */
+    @PostMapping("/{id}/grants")
+    public String grants(@PathVariable UUID id, @RequestParam Map<String, String> all, RedirectAttributes redirect) {
+        queryService.require(id);
+        List<QueryService.GrantSpec> specs = new ArrayList<>();
+        if (all.containsKey("all")) {
+            specs.add(new QueryService.GrantSpec(PrincipalType.ALL_AUTHENTICATED, null));
+        }
+        all.keySet().forEach(k -> {
+            if (k.startsWith("user_")) specs.add(new QueryService.GrantSpec(PrincipalType.USER, UUID.fromString(k.substring(5))));
+            if (k.startsWith("group_")) specs.add(new QueryService.GrantSpec(PrincipalType.GROUP, UUID.fromString(k.substring(6))));
+        });
+        try {
+            queryService.setGrants(id, specs);
+            redirect.addFlashAttribute("message", "Freigaben gespeichert (" + specs.size() + ").");
+        } catch (InvalidRequestException | NotFoundException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+        }
+        return "redirect:/admin/queries/" + id;
+    }
+
     @PostMapping("/{id}/versions/{version}/restore")
     public String restore(@PathVariable UUID id, @PathVariable int version, RedirectAttributes redirect) {
         try {
@@ -176,6 +205,13 @@ public class QueryUiController {
         model.addAttribute("executionModes", ExecutionMode.values());
         model.addAttribute("versions", query == null ? List.of() : queryService.versions(query.id()));
         model.addAttribute("feedUrl", ServletUriComponentsBuilder.fromCurrentContextPath().path("/odata/").toUriString());
+        model.addAttribute("fixedCredentials", fixedCredentials.findAll());
+        model.addAttribute("serviceUsers", serviceUsers.findAll());
+        model.addAttribute("serviceGroups", serviceUsers.findAllGroups());
+        model.addAttribute("grants", query == null ? List.of() : queryService.grants(query.id()));
+        model.addAttribute("grantedIds", query == null ? java.util.Set.of()
+                : queryService.grants(query.id()).stream().map(g -> g.principalId()).filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.toSet()));
+        model.addAttribute("grantedAll", query != null && queryService.grants(query.id()).stream().anyMatch(g -> g.principalType() == PrincipalType.ALL_AUTHENTICATED));
         return "admin/queries/form";
     }
 

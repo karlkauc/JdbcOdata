@@ -1,12 +1,19 @@
 package at.jdbcodata.query;
 
+import at.jdbcodata.audit.AuditService;
 import at.jdbcodata.common.ConflictException;
 import at.jdbcodata.common.CurrentUser;
 import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
 import at.jdbcodata.datasource.DatasourceEntity;
 import at.jdbcodata.datasource.DatasourceRepository;
+import at.jdbcodata.identity.FixedCredentialEntity;
+import at.jdbcodata.identity.FixedCredentialRepository;
+import at.jdbcodata.identity.ServiceGroupRepository;
+import at.jdbcodata.identity.ServiceUser;
+import at.jdbcodata.identity.ServiceUserRepository;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -23,37 +30,55 @@ public class QueryService {
 
     static final Pattern NAME_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,99}");
 
+    /** Input for {@link #setGrants}. */
+    public record GrantSpec(PrincipalType principalType, UUID principalId) {
+    }
+
     private final QueryDefinitionRepository repository;
     private final QueryVersionRepository versionRepository;
+    private final QueryGrantRepository grantRepository;
     private final DatasourceRepository datasourceRepository;
+    private final FixedCredentialRepository fixedCredentials;
+    private final ServiceUserRepository serviceUsers;
+    private final ServiceGroupRepository serviceGroups;
+    private final AuditService audit;
     private final ApplicationEventPublisher events;
 
     public QueryService(QueryDefinitionRepository repository, QueryVersionRepository versionRepository,
-                        DatasourceRepository datasourceRepository, ApplicationEventPublisher events) {
+                        QueryGrantRepository grantRepository, DatasourceRepository datasourceRepository,
+                        FixedCredentialRepository fixedCredentials, ServiceUserRepository serviceUsers,
+                        ServiceGroupRepository serviceGroups, AuditService audit, ApplicationEventPublisher events) {
         this.repository = repository;
         this.versionRepository = versionRepository;
+        this.grantRepository = grantRepository;
         this.datasourceRepository = datasourceRepository;
+        this.fixedCredentials = fixedCredentials;
+        this.serviceUsers = serviceUsers;
+        this.serviceGroups = serviceGroups;
+        this.audit = audit;
         this.events = events;
     }
 
+    // --- reads -------------------------------------------------------------------------------------------------
+
     @Transactional(readOnly = true)
     public List<QueryDefinition> findAll() {
-        return repository.findAllByOrderByName().stream().map(QueryDefinitionEntity::toRecord).toList();
+        return repository.findAllByOrderByName().stream().map(this::toRecord).toList();
     }
 
     @Transactional(readOnly = true)
     public List<QueryDefinition> findAllEnabled() {
-        return repository.findAllByEnabledTrueOrderByName().stream().map(QueryDefinitionEntity::toRecord).toList();
+        return repository.findAllByEnabledTrueOrderByName().stream().map(this::toRecord).toList();
     }
 
     @Transactional(readOnly = true)
     public Optional<QueryDefinition> findById(UUID id) {
-        return repository.findById(id).map(QueryDefinitionEntity::toRecord);
+        return repository.findById(id).map(this::toRecord);
     }
 
     @Transactional(readOnly = true)
     public Optional<QueryDefinition> findEnabledByName(String name) {
-        return repository.findByName(name).filter(QueryDefinitionEntity::isEnabled).map(QueryDefinitionEntity::toRecord);
+        return repository.findByName(name).filter(QueryDefinitionEntity::isEnabled).map(this::toRecord);
     }
 
     @Transactional(readOnly = true)
@@ -67,6 +92,60 @@ public class QueryService {
         return versionRepository.findAllByQueryIdOrderByVersionDesc(id).stream().map(QueryVersionEntity::toRecord).toList();
     }
 
+    // --- grants ------------------------------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public List<QueryGrant> grants(UUID queryId) {
+        return grantRepository.findAllByQueryId(queryId).stream().map(this::toRecord).toList();
+    }
+
+    /** Replaces all grants of a FIXED-mode query. */
+    @Transactional
+    public List<QueryGrant> setGrants(UUID queryId, List<GrantSpec> specs) {
+        QueryDefinitionEntity q = requireEntity(queryId);
+        for (GrantSpec s : specs) {
+            if (s.principalType() == null) throw new InvalidRequestException("principalType is required");
+            if (s.principalType() == PrincipalType.USER && (s.principalId() == null || !serviceUsers.existsById(s.principalId()))) {
+                throw new NotFoundException("Service user " + s.principalId() + " not found");
+            }
+            if (s.principalType() == PrincipalType.GROUP && (s.principalId() == null || !serviceGroups.existsById(s.principalId()))) {
+                throw new NotFoundException("Group " + s.principalId() + " not found");
+            }
+        }
+        grantRepository.deleteAllByQueryId(queryId);
+        grantRepository.flush();
+        String who = CurrentUser.name();
+        for (GrantSpec s : specs) {
+            UUID principal = s.principalType() == PrincipalType.ALL_AUTHENTICATED ? null : s.principalId();
+            grantRepository.save(QueryGrantEntity.of(queryId, s.principalType(), principal, who));
+        }
+        audit.record("SET_GRANTS", "QUERY", queryId, q.getName(), Map.of("grants", specs.size()));
+        events.publishEvent(new QueryDefinitionsChangedEvent());
+        return grants(queryId);
+    }
+
+    /** CALLER queries are visible to everyone; FIXED queries need a matching grant. */
+    @Transactional(readOnly = true)
+    public boolean isVisible(QueryDefinition query, ServiceUser serviceUser) {
+        if (query.executionMode() != ExecutionMode.FIXED) return true;
+        for (QueryGrantEntity g : grantRepository.findAllByQueryId(query.id())) {
+            switch (g.getPrincipalType()) {
+                case ALL_AUTHENTICATED -> {
+                    return true;
+                }
+                case USER -> {
+                    if (serviceUser != null && serviceUser.id().equals(g.getPrincipalId())) return true;
+                }
+                case GROUP -> {
+                    if (serviceUser != null && serviceUser.inGroup(g.getPrincipalId())) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // --- writes ------------------------------------------------------------------------------------------------
+
     @Transactional
     public QueryDefinition create(QuerySpec spec) {
         validate(spec);
@@ -79,7 +158,9 @@ public class QueryService {
         e.setVersion(1);
         e = repository.saveAndFlush(e);
         versionRepository.save(QueryVersionEntity.of(e, CurrentUser.name(), "created"));
-        QueryDefinition created = e.toRecord();
+        QueryDefinition created = toRecord(e);
+        audit.record("CREATE", "QUERY", created.id(), created.name(), Map.of("datasource", created.datasourceName(),
+                "mode", created.executionMode().name()));
         events.publishEvent(new QueryDefinitionsChangedEvent());
         return created;
     }
@@ -124,7 +205,9 @@ public class QueryService {
         if (newVersion) {
             versionRepository.save(QueryVersionEntity.of(e, CurrentUser.name(), comment == null ? "updated" : comment));
         }
-        QueryDefinition updated = e.toRecord();
+        QueryDefinition updated = toRecord(e);
+        audit.record("UPDATE", "QUERY", updated.id(), updated.name(), Map.of("version", updated.version(),
+                "newVersion", newVersion, "mode", updated.executionMode().name(), "enabled", updated.enabled()));
         events.publishEvent(new QueryDefinitionsChangedEvent());
         return updated;
     }
@@ -143,8 +226,8 @@ public class QueryService {
         QueryVersion v = versionRepository.findByQueryIdAndVersion(id, version).map(QueryVersionEntity::toRecord)
                 .orElseThrow(() -> new NotFoundException("Version " + version + " of query " + id + " not found"));
         QuerySpec spec = new QuerySpec(current.name(), current.description(), v.datasourceId(), v.sqlText(),
-                current.executionMode(), current.cacheEnabled(), current.cacheTtlSec(), current.timeoutSec(),
-                current.maxRows(), current.keyMode(), current.enabled(), v.parameters());
+                current.executionMode(), current.fixedCredentialId(), current.cacheEnabled(), current.cacheTtlSec(),
+                current.timeoutSec(), current.maxRows(), current.keyMode(), current.enabled(), v.parameters());
         return update(id, spec, "restored from version " + version);
     }
 
@@ -155,7 +238,8 @@ public class QueryService {
         repository.flush();
         e.replaceColumns(columns);
         e.setUpdatedAt(Instant.now());
-        QueryDefinition updated = repository.save(e).toRecord();
+        QueryDefinition updated = toRecord(repository.save(e));
+        audit.record("SNAPSHOT", "QUERY", updated.id(), updated.name(), Map.of("columns", columns.size()));
         events.publishEvent(new QueryDefinitionsChangedEvent());
         return updated;
     }
@@ -174,7 +258,8 @@ public class QueryService {
             }
         }
         e.setUpdatedAt(Instant.now());
-        QueryDefinition updated = repository.save(e).toRecord();
+        QueryDefinition updated = toRecord(repository.save(e));
+        audit.record("COLUMN_SETTINGS", "QUERY", updated.id(), updated.name(), null);
         events.publishEvent(new QueryDefinitionsChangedEvent());
         return updated;
     }
@@ -183,6 +268,7 @@ public class QueryService {
     public void delete(UUID id) {
         QueryDefinitionEntity e = requireEntity(id);
         repository.delete(e);
+        audit.record("DELETE", "QUERY", id, e.getName(), null);
         events.publishEvent(new QueryDefinitionsChangedEvent());
     }
 
@@ -193,7 +279,8 @@ public class QueryService {
         DatasourceEntity ds = datasourceRepository.findById(spec.datasourceId())
                 .orElseThrow(() -> new NotFoundException("Datasource " + spec.datasourceId() + " not found"));
         return new QueryDefinition(null, spec.name(), spec.description(), ds.getId(), ds.getName(), spec.sqlText(),
-                spec.executionMode() == null ? ExecutionMode.CALLER : spec.executionMode(),
+                spec.executionMode() == null ? ExecutionMode.CALLER : spec.executionMode(), spec.fixedCredentialId(),
+                fixedName(spec.fixedCredentialId()),
                 Boolean.TRUE.equals(spec.cacheEnabled()), spec.cacheTtlSec() == null ? 3600 : spec.cacheTtlSec(),
                 spec.timeoutSec(), spec.maxRows(), spec.keyMode() == null ? KeyMode.ROWID : spec.keyMode(), 0,
                 spec.enabled() == null || spec.enabled(), spec.parameters() == null ? List.of() : spec.parameters(),
@@ -209,6 +296,16 @@ public class QueryService {
         }
         if (spec.datasourceId() == null) {
             throw new InvalidRequestException("datasourceId is required");
+        }
+        if (spec.executionMode() == ExecutionMode.FIXED) {
+            if (spec.fixedCredentialId() == null) {
+                throw new InvalidRequestException("Execution mode FIXED requires a technical account (fixedCredentialId)");
+            }
+            FixedCredentialEntity fc = fixedCredentials.findById(spec.fixedCredentialId())
+                    .orElseThrow(() -> new NotFoundException("Technical account " + spec.fixedCredentialId() + " not found"));
+            if (!fc.getDatasourceId().equals(spec.datasourceId())) {
+                throw new InvalidRequestException("Technical account '" + fc.getName() + "' belongs to another datasource");
+            }
         }
         List<QueryParameter> params = spec.parameters() == null ? List.of() : spec.parameters();
         for (QueryParameter p : params) {
@@ -235,8 +332,29 @@ public class QueryService {
         SqlValidator.validateReadOnly(spec.sqlText());
     }
 
+    // --- helpers -----------------------------------------------------------------------------------------------
+
     private QueryDefinitionEntity requireEntity(UUID id) {
         return repository.findById(id).orElseThrow(() -> new NotFoundException("Query " + id + " not found"));
+    }
+
+    private QueryDefinition toRecord(QueryDefinitionEntity e) {
+        return e.toRecord(fixedName(e.getFixedCredentialId()));
+    }
+
+    private String fixedName(UUID fixedCredentialId) {
+        return fixedCredentialId == null ? null
+                : fixedCredentials.findById(fixedCredentialId).map(FixedCredentialEntity::getName).orElse(null);
+    }
+
+    private QueryGrant toRecord(QueryGrantEntity g) {
+        String principalName = switch (g.getPrincipalType()) {
+            case ALL_AUTHENTICATED -> "alle authentifizierten";
+            case USER -> serviceUsers.findById(g.getPrincipalId()).map(u -> u.getUsername()).orElse("(gelöscht)");
+            case GROUP -> serviceGroups.findById(g.getPrincipalId()).map(gr -> gr.getName()).orElse("(gelöscht)");
+        };
+        return new QueryGrant(g.getId(), g.getQueryId(), g.getPrincipalType(), g.getPrincipalId(), principalName,
+                g.getGrantedBy(), g.getGrantedAt());
     }
 
     private void apply(QueryDefinitionEntity e, QuerySpec s) {
@@ -247,6 +365,7 @@ public class QueryService {
         e.setDatasource(ds);
         e.setSqlText(s.sqlText());
         if (s.executionMode() != null) e.setExecutionMode(s.executionMode());
+        e.setFixedCredentialId(e.getExecutionMode() == ExecutionMode.FIXED ? s.fixedCredentialId() : null);
         if (s.cacheEnabled() != null) e.setCacheEnabled(s.cacheEnabled());
         if (s.cacheTtlSec() != null) e.setCacheTtlSec(s.cacheTtlSec());
         e.setTimeoutSec(s.timeoutSec());
@@ -259,5 +378,14 @@ public class QueryService {
 
     private static String normalize(String sql) {
         return sql == null ? "" : sql.strip().replaceAll("\\s+", " ");
+    }
+
+    /** Names of all service users and groups, for grant editors. */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> principalNames() {
+        Map<UUID, String> names = new HashMap<>();
+        serviceUsers.findAll().forEach(u -> names.put(u.getId(), u.getUsername()));
+        serviceGroups.findAll().forEach(g -> names.put(g.getId(), g.getName()));
+        return names;
     }
 }

@@ -10,6 +10,7 @@ public record QuerySpec(
         UUID datasourceId,
         String sqlText,
         ExecutionMode executionMode,
+        UUID fixedCredentialId,
         Boolean cacheEnabled,
         Integer cacheTtlSec,
         Integer timeoutSec,

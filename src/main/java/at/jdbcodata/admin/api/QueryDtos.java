@@ -5,6 +5,8 @@ import at.jdbcodata.query.ColumnSetting;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.ParameterType;
+import at.jdbcodata.query.PrincipalType;
+import at.jdbcodata.query.QueryService;
 import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
@@ -49,6 +51,7 @@ final class QueryDtos {
             @NotBlank String sql,
             List<@Valid ParameterRequest> parameters,
             ExecutionMode executionMode,
+            UUID fixedCredentialId,
             Boolean cacheEnabled,
             @Min(0) Integer cacheTtlSec,
             @Min(1) @Max(3600) Integer timeoutSec,
@@ -59,7 +62,7 @@ final class QueryDtos {
         QuerySpec toSpec() {
             List<QueryParameter> params = parameters == null ? List.of()
                     : parameters.stream().map(ParameterRequest::toRecord).toList();
-            return new QuerySpec(name, description, datasourceId, sql, executionMode, cacheEnabled, cacheTtlSec,
+            return new QuerySpec(name, description, datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled, cacheTtlSec,
                     timeoutSec, maxRows, keyMode, enabled, params);
         }
     }
@@ -72,6 +75,8 @@ final class QueryDtos {
             String datasourceName,
             String sql,
             ExecutionMode executionMode,
+            UUID fixedCredentialId,
+            String fixedCredentialName,
             boolean cacheEnabled,
             int cacheTtlSec,
             Integer timeoutSec,
@@ -88,7 +93,7 @@ final class QueryDtos {
 
         static QueryResponse from(QueryDefinition q) {
             return new QueryResponse(q.id(), q.name(), q.description(), q.datasourceId(), q.datasourceName(),
-                    q.sqlText(), q.executionMode(), q.cacheEnabled(), q.cacheTtlSec(), q.timeoutSec(), q.maxRows(),
+                    q.sqlText(), q.executionMode(), q.fixedCredentialId(), q.fixedCredentialName(), q.cacheEnabled(), q.cacheTtlSec(), q.timeoutSec(), q.maxRows(),
                     q.keyMode(), q.version(), q.enabled(), q.hasSnapshot(), q.parameters(), q.columns(),
                     ODataConfig.BASE_PATH + "/" + q.name(), q.createdAt(), q.updatedAt());
         }
@@ -128,6 +133,15 @@ final class QueryDtos {
     }
 
     record ColumnSettingsRequest(@NotNull List<@Valid ColumnSettingRequest> columns) {
+    }
+
+    record GrantRequest(@NotNull PrincipalType principalType, UUID principalId) {
+        QueryService.GrantSpec toSpec() {
+            return new QueryService.GrantSpec(principalType, principalId);
+        }
+    }
+
+    record GrantsRequest(@NotNull List<@Valid GrantRequest> grants) {
     }
 
     private static String blankToNull(String s) {

@@ -1,5 +1,6 @@
 package at.jdbcodata.testutil;
 
+import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
@@ -30,7 +31,13 @@ public final class TestData {
     public static QueryDefinition query(String name, String sql, List<QueryParameter> params, List<QueryColumn> columns,
                                         KeyMode keyMode) {
         return new QueryDefinition(UUID.randomUUID(), name, null, UUID.randomUUID(), "ds", sql, ExecutionMode.CALLER,
-                false, 3600, null, null, keyMode, 1, true, params, columns, Instant.now(), Instant.now());
+                null, null, false, 3600, null, null, keyMode, 1, true, params, columns, Instant.now(), Instant.now());
+    }
+
+    public static JdbcOdataProperties props(int maxRows, int defaultTimeoutSec, String seedFile) {
+        return new JdbcOdataProperties(new JdbcOdataProperties.Admin("a", "b"),
+                new JdbcOdataProperties.OData(maxRows, defaultTimeoutSec), new JdbcOdataProperties.Seed(seedFile),
+                new JdbcOdataProperties.Cache(16, 4, 3_600_000), new JdbcOdataProperties.Stats(90, false), "", "./data");
     }
 
     public static Datasource datasource(String name, String jdbcUrl) {

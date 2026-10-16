@@ -71,6 +71,7 @@ public class QueryForm {
     @Valid
     private List<ParameterForm> parameters = new ArrayList<>();
     private ExecutionMode executionMode = ExecutionMode.CALLER;
+    private UUID fixedCredentialId;
     private boolean cacheEnabled;
     @Min(0)
     private Integer cacheTtlSec = 3600;
@@ -89,6 +90,7 @@ public class QueryForm {
         f.sql = q.sqlText();
         f.parameters = new ArrayList<>(q.parameters().stream().map(ParameterForm::from).toList());
         f.executionMode = q.executionMode();
+        f.fixedCredentialId = q.fixedCredentialId();
         f.cacheEnabled = q.cacheEnabled();
         f.cacheTtlSec = q.cacheTtlSec();
         f.timeoutSec = q.timeoutSec();
@@ -102,7 +104,7 @@ public class QueryForm {
         List<QueryParameter> params = parameters == null ? List.of()
                 : parameters.stream().filter(p -> p != null && p.name != null && !p.name.isBlank())
                         .map(ParameterForm::toRecord).toList();
-        return new QuerySpec(name, blankToNull(description), datasourceId, sql, executionMode, cacheEnabled,
+        return new QuerySpec(name, blankToNull(description), datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled,
                 cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params);
     }
 
@@ -121,6 +123,8 @@ public class QueryForm {
     public List<ParameterForm> getParameters() { return parameters; }
     public void setParameters(List<ParameterForm> parameters) { this.parameters = parameters; }
     public ExecutionMode getExecutionMode() { return executionMode; }
+    public UUID getFixedCredentialId() { return fixedCredentialId; }
+    public void setFixedCredentialId(UUID fixedCredentialId) { this.fixedCredentialId = fixedCredentialId; }
     public void setExecutionMode(ExecutionMode executionMode) { this.executionMode = executionMode; }
     public boolean isCacheEnabled() { return cacheEnabled; }
     public void setCacheEnabled(boolean cacheEnabled) { this.cacheEnabled = cacheEnabled; }

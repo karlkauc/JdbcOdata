@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Statistik', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1>Statistik</h1>
+    <form method="get" th:action="@{/admin/stats}" class="inline-form">
+      <select name="period" onchange="this.form.submit()">
+        <option value="24h" th:selected="${period == '24h'}">24 Stunden</option>
+        <option value="7d" th:selected="${period == '7d'}">7 Tage</option>
+        <option value="30d" th:selected="${period == '30d'}">30 Tage</option>
+        <option value="90d" th:selected="${period == '90d'}">90 Tage</option>
+      </select>
+      <a class="button" th:href="@{/api/v1/stats/export.csv(from=${from})}">CSV-Export</a>
+    </form>
+  </div>
+  <div class="tiles">
+    <div class="tile"><span class="num" th:text="${summary.executions}">0</span>Ausführungen</div>
+    <div class="tile"><span class="num" th:text="${#numbers.formatPercent(summary.cacheHitRatio(), 1, 0)}">0</span>Cache-Trefferquote</div>
+    <div class="tile" th:classappend="${summary.errors > 0} ? 'warn'"><span class="num" th:text="${#numbers.formatPercent(summary.errorRatio(), 1, 1)}">0</span><span th:text="'Fehlerquote (' + ${summary.errors} + ')'">Fehlerquote</span></div>
+    <div class="tile"><span class="num" th:text="${summary.p50TotalMs} + ' / ' + ${summary.p95TotalMs}">0</span>p50 / p95 ms</div>
+    <div class="tile"><span class="num" th:text="${summary.distinctCallers}">0</span>Aufrufer</div>
+    <div class="tile"><span class="num" th:text="${#numbers.formatInteger(summary.rows, 1, 'POINT')}">0</span>Zeilen geliefert</div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h2>Top-Queries</h2>
+      <table class="list">
+        <thead><tr><th>Query</th><th>Aufrufe</th><th>Fehler</th><th>Cache</th><th>Ø ms</th><th>Max ms</th></tr></thead>
+        <tbody><tr th:each="q : ${topQueries}">
+          <td th:text="${q.queryName}"></td><td th:text="${q.executions}"></td><td th:text="${q.errors}"></td><td th:text="${q.cacheHits}"></td>
+          <td th:text="${#numbers.formatDecimal(q.avgTotalMs, 1, 0)}"></td><td th:text="${q.maxTotalMs}"></td></tr>
+        <tr th:if="${topQueries.isEmpty()}"><td colspan="6" class="muted">keine Daten</td></tr></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Langsamste Queries</h2>
+      <table class="list">
+        <thead><tr><th>Query</th><th>Ø ms</th><th>Max ms</th><th>Aufrufe</th></tr></thead>
+        <tbody><tr th:each="q : ${slowest}">
+          <td th:text="${q.queryName}"></td><td th:text="${#numbers.formatDecimal(q.avgTotalMs, 1, 0)}"></td><td th:text="${q.maxTotalMs}"></td><td th:text="${q.executions}"></td></tr>
+        <tr th:if="${slowest.isEmpty()}"><td colspan="4" class="muted">keine Daten</td></tr></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Nutzung pro Aufrufer</h2>
+      <table class="list">
+        <thead><tr><th>Aufrufer</th><th>Aufrufe</th><th>Fehler</th><th>Zeilen</th><th>Zuletzt</th></tr></thead>
+        <tbody><tr th:each="c : ${callers}">
+          <td th:text="${c.caller}"></td><td th:text="${c.executions}"></td><td th:text="${c.errors}"></td><td th:text="${c.rows}"></td>
+          <td th:text="${#temporals.format(c.lastSeen, 'dd.MM. HH:mm')}"></td></tr>
+        <tr th:if="${callers.isEmpty()}"><td colspan="5" class="muted">keine Daten</td></tr></tbody>
+      </table>
+    </div>
+    <div>
+      <h2>Verlauf pro Tag</h2>
+      <table class="list">
+        <thead><tr><th>Tag</th><th>Aufrufe</th><th>Fehler</th><th>Cache-Treffer</th><th></th></tr></thead>
+        <tbody><tr th:each="d : ${perDay}">
+          <td th:text="${d.day}"></td><td th:text="${d.executions}"></td><td th:text="${d.errors}"></td><td th:text="${d.cacheHits}"></td>
+          <td><div class="bar" th:style="'width:' + ${summary.executions == 0 ? 0 : d.executions * 100 / summary.executions} + '%'"></div></td></tr>
+        <tr th:if="${perDay.isEmpty()}"><td colspan="5" class="muted">keine Daten</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Letzte Ausführungen</h2>
+  <form method="get" th:action="@{/admin/stats}" class="inline-form">
+    <input type="hidden" name="period" th:value="${period}">
+    <label>Query <input type="text" name="queryName" th:value="${queryName}"></label>
+    <label>Aufrufer <input type="text" name="caller" th:value="${caller}"></label>
+    <label>Status <select name="status">
+      <option value="">alle</option>
+      <option th:each="s : ${T(at.jdbcodata.stats.ExecutionStatus).values()}" th:value="${s}" th:text="${s}" th:selected="${s.name() == status}"></option>
+    </select></label>
+    <button type="submit">Filtern</button>
+  </form>
+  <div class="scroll">
+    <table class="list">
+      <thead><tr><th>Zeit</th><th>Query</th><th>Aufrufer</th><th>DB-User</th><th>Modus</th><th>Client</th><th>Cache</th><th>DB ms</th><th>Gesamt ms</th><th>Zeilen</th><th>Status</th><th>Parameter</th><th>Fehler</th></tr></thead>
+      <tbody>
+      <tr th:each="e : ${executions}">
+        <td th:text="${#temporals.format(e.startedAt, 'dd.MM. HH:mm:ss')}"></td>
+        <td th:text="${e.queryName} + ' v' + ${e.queryVersion}"></td>
+        <td th:text="${e.caller}"></td>
+        <td th:text="${e.effectiveDbUser}"></td>
+        <td th:text="${e.executionMode}"></td>
+        <td th:text="${e.client}"></td>
+        <td th:text="${e.cacheStatus}"></td>
+        <td th:text="${e.dbDurationMs}"></td>
+        <td th:text="${e.totalDurationMs}"></td>
+        <td th:text="${e.rowCount}"></td>
+        <td><span th:class="${e.status == 'OK'} ? 'badge ok' : 'badge warn'" th:text="${e.status}"></span></td>
+        <td class="mono" th:text="${e.parameters}"></td>
+        <td class="muted" th:text="${e.errorMessage}"></td>
+      </tr>
+      <tr th:if="${executions.isEmpty()}"><td colspan="13" class="muted">Keine Ausführungen im Zeitraum.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+</body>
+</html>

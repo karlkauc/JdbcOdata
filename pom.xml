@@ -67,6 +67,12 @@
       <version>5.65.21</version>
     </dependency>
 
+    <!-- In-memory layer of the result cache -->
+    <dependency>
+      <groupId>com.github.ben-manes.caffeine</groupId>
+      <artifactId>caffeine</artifactId>
+    </dependency>
+
     <!-- SQL validation: only SELECT statements may be stored -->
     <dependency>
       <groupId>com.github.jsqlparser</groupId>

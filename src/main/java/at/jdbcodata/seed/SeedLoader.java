@@ -101,7 +101,7 @@ public class SeedLoader implements ApplicationRunner {
                     bool(p, "required", false), str(p, "default"), str(p, "description"), bool(p, "sensitive", false)));
         }
         QuerySpec spec = new QuerySpec(str(q, "name"), str(q, "description"), ds.id(), str(q, "sql"),
-                ExecutionMode.valueOf(str(q, "executionMode", "CALLER").toUpperCase()),
+                ExecutionMode.valueOf(str(q, "executionMode", "CALLER").toUpperCase()), null,
                 bool(q, "cacheEnabled", false), integer(q, "cacheTtlSec"), integer(q, "timeoutSec"),
                 integer(q, "maxRows"), KeyMode.valueOf(str(q, "keyMode", "ROWID").toUpperCase()),
                 bool(q, "enabled", true), params);

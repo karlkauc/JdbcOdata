@@ -39,6 +39,15 @@ jdbcodata:
     default-timeout-sec: 60
   seed:
     file: ""               # YAML file with datasources and queries, e.g. config/seed.yml
+  master-key: ""           # Base64, 32 bytes (AES-256). Empty: a key file is created in <data-dir>/master.key
+  data-dir: ./data
+  cache:
+    max-size-mb: 1024      # persistent cache, total compressed size
+    memory-mb: 256         # in-memory layer (Caffeine)
+    cleanup-interval-ms: 300000
+  stats:
+    retention-days: 90     # execution log retention
+    async: true            # write execution log records off the request thread
 
 logging:
   level:

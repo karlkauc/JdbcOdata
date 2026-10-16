@@ -31,7 +31,7 @@
       <label class="span2">Beschreibung <input type="text" th:field="*{description}"></label>
     </div>
 
-    <label for="sql">SQL (nur SELECT, Parameter als <code>:name</code>)</label>
+    <label for="sql" class="inline-label">SQL (nur SELECT, Parameter als <code>:name</code>)</label>
     <textarea id="sql" th:field="*{sql}" rows="12" class="mono"></textarea>
     <span class="field-error" th:errors="*{sql}"></span>
 
@@ -72,16 +72,22 @@
     <div class="grid3">
       <label>Modus
         <select th:field="*{executionMode}">
-          <option th:each="m : ${executionModes}" th:value="${m}" th:text="${m}" th:disabled="${m.name() == 'FIXED'}"></option>
+          <option value="CALLER">CALLER – unter Identität des Aufrufers</option>
+          <option value="FIXED">FIXED – unter technischem Account</option>
+        </select></label>
+      <label>Technischer Account (für FIXED)
+        <select th:field="*{fixedCredentialId}">
+          <option value="">– keiner –</option>
+          <option th:each="c : ${fixedCredentials}" th:value="${c.id}" th:text="${c.name} + ' (' + ${c.datasourceName} + ' / ' + ${c.dbUsername} + ')'"></option>
         </select>
-        <small class="muted">FIXED (technischer Account) folgt mit Meilenstein M3.</small></label>
+        <small class="muted">Muss zur Datenquelle der Query gehören. Freigaben unten.</small></label>
       <label>Schlüssel
         <select th:field="*{keyMode}">
           <option value="ROWID">RowId (synthetisch)</option>
           <option value="COLUMNS">Spalten (unten markieren)</option>
         </select></label>
       <label class="check"><input type="checkbox" th:field="*{enabled}"> Query aktiv</label>
-      <label class="check"><input type="checkbox" th:field="*{cacheEnabled}"> Cache aktiv (wirksam ab M3)</label>
+      <label class="check"><input type="checkbox" th:field="*{cacheEnabled}"> Cache aktiv (pro DB-User und Parametern)</label>
       <label>Cache-TTL (s) <input type="number" th:field="*{cacheTtlSec}" min="0"></label>
       <label>Timeout (s) <input type="number" th:field="*{timeoutSec}" min="1" max="3600" placeholder="Datenquelle"></label>
       <label>Max. Zeilen <input type="number" th:field="*{maxRows}" min="1" placeholder="Datenquelle"></label>
@@ -106,6 +112,24 @@
   <section class="card" th:if="${query != null}">
     <h2>Spalten (Schema-Snapshot)</h2>
     <div id="columns" th:insert="~{admin/queries/columns :: columns}"></div>
+  </section>
+
+  <section class="card" th:if="${query != null}">
+    <h2>Freigaben (nur Modus FIXED)</h2>
+    <p class="muted">Wer die Query im Service-Dokument sieht und ausführen darf. CALLER-Queries sind für alle sichtbar, die DB entscheidet.</p>
+    <form th:action="@{/admin/queries/{id}/grants(id=${query.id})}" method="post">
+      <label class="check"><input type="checkbox" name="all" th:checked="${grantedAll}"> alle authentifizierten Aufrufer</label>
+      <div class="grid2">
+        <div><strong>Service-User</strong>
+          <label class="check" th:each="u : ${serviceUsers}"><input type="checkbox" th:name="'user_' + ${u.id}" th:checked="${grantedIds.contains(u.id)}"> <span th:text="${u.username}"></span></label>
+          <span class="muted" th:if="${serviceUsers.isEmpty()}">keine Service-User</span></div>
+        <div><strong>Gruppen</strong>
+          <label class="check" th:each="g : ${serviceGroups}"><input type="checkbox" th:name="'group_' + ${g.id}" th:checked="${grantedIds.contains(g.id)}"> <span th:text="${g.name}"></span></label>
+          <span class="muted" th:if="${serviceGroups.isEmpty()}">keine Gruppen</span></div>
+      </div>
+      <div class="actions"><button type="submit" class="small">Freigaben speichern</button>
+        <span class="muted" th:text="${grants.size()} + ' Freigabe(n) aktiv'"></span></div>
+    </form>
   </section>
 
   <section class="card" th:if="${query != null and !versions.isEmpty()}">

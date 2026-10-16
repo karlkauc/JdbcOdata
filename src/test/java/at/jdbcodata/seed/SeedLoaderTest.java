@@ -33,8 +33,7 @@ class SeedLoaderTest extends DemoProfileTest {
     Path dir;
 
     private SeedLoader loader(String file) {
-        JdbcOdataProperties props = new JdbcOdataProperties(new JdbcOdataProperties.Admin("a", "b"),
-                new JdbcOdataProperties.OData(10, 10), new JdbcOdataProperties.Seed(file));
+        JdbcOdataProperties props = at.jdbcodata.testutil.TestData.props(10, 10, file);
         return new SeedLoader(props, resourceLoader, environment, datasourceService, queryService, snapshotService);
     }
 

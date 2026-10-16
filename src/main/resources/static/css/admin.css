@@ -45,3 +45,5 @@ table.preview th small { display:block; font-weight:400; text-transform:none; }
 .login-box { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:32px; width:340px; }
 .login-box h1 { margin:0; } .login-box form { display:flex; flex-direction:column; gap:12px; margin-top:16px; }
 @media (max-width:800px) { .grid2, .grid3 { grid-template-columns:1fr; } .span2 { grid-column:span 1; } .container { padding:16px; } }
+.bar { height:10px; background:var(--primary); border-radius:3px; min-width:2px; }
+label.inline-label { display:block; margin-top:12px; }

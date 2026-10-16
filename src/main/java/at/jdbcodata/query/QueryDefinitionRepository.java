@@ -13,4 +13,6 @@ public interface QueryDefinitionRepository extends JpaRepository<QueryDefinition
     List<QueryDefinitionEntity> findAllByOrderByName();
 
     long countByDatasourceId(UUID datasourceId);
+
+    long countByFixedCredentialId(UUID fixedCredentialId);
 }

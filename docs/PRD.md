@@ -1,6 +1,6 @@
 # JdbcOdata – Project Requirement Document (PRD)
 
-Stand: 2026-10-16 · Version 0.3 · Status: abgestimmt, Umsetzung läuft (M1, M2 fertig)
+Stand: 2026-10-16 · Version 0.4 · Status: abgestimmt, Umsetzung läuft (M1 bis M3 fertig)
 Architektur: siehe [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 1. Ziel und Hintergrund
@@ -375,7 +375,7 @@ Payload-Skizze Query (POST/PUT):
 |---|---|---|
 | **M1 – Skeleton** ✅ 2026-10-16 | Maven-Projekt, Spring Boot 4, Flyway + H2, Datenquellen-CRUD (API), Queries aus YAML-Seed mit Schema-Snapshot, Olingo-Endpunkt mit Service-Dokument, `$metadata`, Daten (`$top`, `$skip`, `$select`, `$count`, Parameter), Basic-Auth-Pass-Through mit Pools pro Identität, Demo-Profil, Dockerfile, 66 Tests mit 94 % Zeilenabdeckung | Feed in Excel sichtbar |
 | **M2 – Query-Verwaltung** ✅ 2026-10-16 | Query-CRUD über API und UI, SQL-Validierung mit JSqlParser (nur SELECT), Parameter-Editor, Testlauf mit Vorschau (auch für ungespeicherte Queries), Schema-Snapshot und Spalteneinstellungen (Schlüssel, sichtbar), Versionshistorie mit Wiederherstellen, `$filter` und `$orderby` in-memory, Admin-UI mit Login (Thymeleaf + htmx + CodeMirror), 128 Tests mit 94 % Zeilenabdeckung | Admin pflegt Queries ohne Neustart |
-| **M3 – Identität, Cache, Statistik** | Service-User, hinterlegte Credentials, `FIXED`-Modus mit Freigaben, Verschlüsselung, persistenter Cache + Caffeine, Invalidierung, Execution-Log, Statistik-UI, Audit-Log | Alle MUST-Anforderungen erfüllt |
+| **M3 – Identität, Cache, Statistik** ✅ 2026-10-16 | Service-User mit Gruppen und verschlüsselt hinterlegten DB-Credentials (AES-256-GCM, Master-Key aus Konfiguration oder Key-Datei), technische Accounts und `FIXED`-Modus mit Freigaben (User, Gruppe, alle), personalisiertes Service-Dokument, Flag „Pass-Through erzwingen“, persistenter Cache in der Metadaten-DB mit Caffeine-Schicht, Stampede-Schutz, `?refresh=true`, `X-Cache`-Header, Invalidierung über UI/API, Execution-Log mit Statistik-Seite (Kennzahlen, Top-Queries, Aufrufer, Verlauf, Rohdaten, CSV), Retention-Job, Audit-Log, Admin-Konten mit Rollen ADMIN/VIEWER in der DB, 147 Tests mit 94 % Zeilenabdeckung, Browser-Check mit Playwright | Alle MUST-Anforderungen bis auf TLS/Rate-Limiting (M4) erfüllt |
 | **M4 – Betrieb und Härtung** | docker-compose mit PostgreSQL und Caddy, TLS, Rate-Limiting, Concurrency-Limits, Retention-Jobs, Metriken, Start-Skripte Linux/Windows, Dokumentation (Admin, Betrieb, Excel/PowerBI-Anleitung), Abnahme-Checkliste | Release 1.0 |
 | **Phase 2 (Kandidaten)** | SQL-Push-Down, Cache-Vorwärmen, Gruppen aus LDAP, OIDC für Admin-UI, i18n, Import/Export | nach Bedarf |
 
@@ -394,6 +394,8 @@ Payload-Skizze Query (POST/PUT):
 | O-09 | Mehrinstanz-Betrieb mit H2 | Nicht möglich | Für Mehrinstanz PostgreSQL vorschreiben |
 | O-10 | SQL-Validierung mit JSqlParser lehnt herstellerspezifische Syntax ab (z.B. Oracle-Hints in Sonderformen, exotische Funktionen) | Gültige Queries können nicht gespeichert werden | In M2 strikt umgesetzt (FR-12). Bei Bedarf pro Datenquelle ein Flag „nur lexikalische Prüfung“ ergänzen |
 | O-11 | `$filter` wird in-memory nach dem vollständigen Laden ausgewertet | Excel-Query-Folding reduziert die DB-Last nicht | Verhalten wie geplant (ADR 4); Push-Down bleibt Phase 2 |
+| O-12 | Ohne konfigurierten Master-Key wird beim ersten Start eine Key-Datei unter `data/master.key` erzeugt | Verlust der Datei macht hinterlegte Credentials unlesbar | Für Produktion `JDBCODATA_MASTER_KEY` setzen oder die Datei sichern; Hinweis in Einstellungen und Log |
+| O-13 | Tagesaggregate (`execution_daily`, FR-55) sind noch nicht umgesetzt; Statistiken rechnen direkt auf `execution_log` | Bei sehr vielen Datensätzen langsamere Statistik-Seite | Mit Retention von 90 Tagen unkritisch; Aggregate in M4 oder Phase 2 |
 
 ## 13. Glossar
 

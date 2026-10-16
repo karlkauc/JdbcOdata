@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${user == null} ? 'Neuer Service-User' : 'Service-User ' + ${user.username}, ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1 th:text="${user == null} ? 'Neuer Service-User' : 'Service-User ' + ${user.username}">Service-User</h1>
+    <form th:if="${user != null}" th:action="@{/admin/users/{id}/delete(id=${user.id})}" method="post" onsubmit="return confirm('Service-User wirklich löschen?')">
+      <button type="submit" class="danger">Löschen</button>
+    </form>
+  </div>
+
+  <form th:object="${form}" th:action="${user == null} ? @{/admin/users} : @{/admin/users/{id}(id=${user.id})}" method="post" class="card">
+    <div class="grid2">
+      <label>Benutzername <input type="text" th:field="*{username}" required>
+        <span class="field-error" th:errors="*{username}"></span></label>
+      <label>Anzeigename <input type="text" th:field="*{displayName}"></label>
+      <label><span th:text="${user == null} ? 'Passwort (mind. 8 Zeichen)' : 'Neues Passwort (leer = unverändert)'">Passwort</span>
+        <input type="password" th:field="*{password}" autocomplete="new-password"></label>
+      <div>
+        <label class="check"><input type="checkbox" th:field="*{enabled}"> aktiv</label>
+        <label class="check"><input type="checkbox" th:field="*{forcePassthrough}"> Pass-Through erzwingen (hinterlegte Zugangsdaten ignorieren)</label>
+      </div>
+      <div class="span2"><strong>Gruppen</strong>
+        <label class="check" th:each="g : ${groups}"><input type="checkbox" th:field="*{groupIds}" th:value="${g.id}"> <span th:text="${g.name}"></span></label>
+        <span class="muted" th:if="${groups.isEmpty()}">keine Gruppen angelegt</span></div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary">Speichern</button>
+      <a class="button" th:href="@{/admin/users}">Zurück</a>
+    </div>
+  </form>
+
+  <section class="card" th:if="${user != null}">
+    <h2>Hinterlegte DB-Zugangsdaten</h2>
+    <p class="muted">Werden verschlüsselt gespeichert und bei CALLER-Queries der jeweiligen Datenquelle anstelle der Excel-Anmeldung verwendet.</p>
+    <table class="list" th:if="${!credentials.isEmpty()}">
+      <thead><tr><th>Datenquelle</th><th>DB-User</th><th>Geändert</th><th></th></tr></thead>
+      <tbody>
+      <tr th:each="c : ${credentials}">
+        <td th:text="${c.datasourceName}"></td>
+        <td class="mono" th:text="${c.dbUsername}"></td>
+        <td th:text="${#temporals.format(c.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
+        <td><form th:action="@{/admin/users/{id}/credentials/{ds}/delete(id=${user.id}, ds=${c.datasourceId})}" method="post"><button type="submit" class="small">Entfernen</button></form></td>
+      </tr>
+      </tbody>
+    </table>
+    <form th:action="@{/admin/users/{id}/credentials(id=${user.id})}" method="post" class="inline-form">
+      <label>Datenquelle <select name="datasourceId" required>
+        <option th:each="ds : ${datasources}" th:value="${ds.id}" th:text="${ds.name}"></option></select></label>
+      <label>DB-User <input type="text" name="dbUsername" required></label>
+      <label>DB-Passwort <input type="password" name="dbPassword" autocomplete="new-password"></label>
+      <button type="submit">Hinterlegen</button>
+    </form>
+  </section>
+</main>
+</body>
+</html>

@@ -13,6 +13,8 @@ public record QueryDefinition(
         String datasourceName,
         String sqlText,
         ExecutionMode executionMode,
+        UUID fixedCredentialId,
+        String fixedCredentialName,
         boolean cacheEnabled,
         int cacheTtlSec,
         Integer timeoutSec,

@@ -1,13 +1,16 @@
 package at.jdbcodata.datasource;
 
+import at.jdbcodata.audit.AuditService;
 import at.jdbcodata.common.ConflictException;
 import at.jdbcodata.common.NotFoundException;
+import at.jdbcodata.identity.FixedCredentialRepository;
 import at.jdbcodata.query.QueryDefinitionRepository;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
@@ -19,13 +22,17 @@ public class DatasourceService {
 
     private final DatasourceRepository repository;
     private final QueryDefinitionRepository queryRepository;
+    private final FixedCredentialRepository fixedCredentials;
     private final IdentityPoolManager pools;
+    private final AuditService audit;
 
     public DatasourceService(DatasourceRepository repository, QueryDefinitionRepository queryRepository,
-                             IdentityPoolManager pools) {
+                             FixedCredentialRepository fixedCredentials, IdentityPoolManager pools, AuditService audit) {
         this.repository = repository;
         this.queryRepository = queryRepository;
+        this.fixedCredentials = fixedCredentials;
         this.pools = pools;
+        this.audit = audit;
     }
 
     @Transactional(readOnly = true)
@@ -56,7 +63,9 @@ public class DatasourceService {
         DatasourceEntity e = new DatasourceEntity();
         e.setCreatedAt(Instant.now());
         apply(e, spec);
-        return repository.save(e).toRecord();
+        Datasource created = repository.save(e).toRecord();
+        audit.record("CREATE", "DATASOURCE", created.id(), created.name(), Map.of("jdbcUrl", created.jdbcUrl()));
+        return created;
     }
 
     @Transactional
@@ -69,6 +78,7 @@ public class DatasourceService {
         apply(e, spec);
         Datasource updated = repository.save(e).toRecord();
         pools.closePoolsFor(id);
+        audit.record("UPDATE", "DATASOURCE", updated.id(), updated.name(), Map.of("jdbcUrl", updated.jdbcUrl(), "enabled", updated.enabled()));
         return updated;
     }
 
@@ -88,8 +98,13 @@ public class DatasourceService {
         if (references > 0) {
             throw new ConflictException("Datasource is referenced by " + references + " query definition(s)");
         }
+        long accounts = fixedCredentials.countByDatasourceId(id);
+        if (accounts > 0) {
+            throw new ConflictException("Datasource is referenced by " + accounts + " technical account(s)");
+        }
         repository.delete(e);
         pools.closePoolsFor(id);
+        audit.record("DELETE", "DATASOURCE", id, e.getName(), null);
     }
 
     /** Opens one connection with the given credentials outside of any pool. Credentials are not stored. */

@@ -5,6 +5,7 @@ import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
+import at.jdbcodata.identity.ServiceAuthenticationException;
 import at.jdbcodata.query.ResultTooLargeException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -42,6 +43,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(DbAuthenticationException.class)
     ProblemDetail dbAuth(DbAuthenticationException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
+    }
+
+    @ExceptionHandler(ServiceAuthenticationException.class)
+    ProblemDetail serviceAuth(ServiceAuthenticationException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
     }
 

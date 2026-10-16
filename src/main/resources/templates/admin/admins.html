@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Admin-Konten', ~{:: main})}">
+<body>
+<main>
+  <h1>Admin-Konten</h1>
+  <p class="muted">ADMIN darf alles, VIEWER nur lesen und Statistiken sehen. Mindestens ein aktiver ADMIN muss bestehen bleiben.</p>
+  <table class="list">
+    <thead><tr><th>Benutzer</th><th>Rolle</th><th>Status</th><th>Letzter Login</th><th>Ändern</th><th></th></tr></thead>
+    <tbody>
+    <tr th:each="a : ${admins}">
+      <td th:text="${a.username}"></td>
+      <td th:text="${a.role}"></td>
+      <td><span th:class="${a.enabled} ? 'badge ok' : 'badge off'" th:text="${a.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
+      <td th:text="${a.lastLoginAt != null} ? ${#temporals.format(a.lastLoginAt, 'dd.MM.yyyy HH:mm')} : '–'"></td>
+      <td><form th:action="@{/admin/admins/{id}(id=${a.id})}" method="post" class="inline-form">
+        <select name="role"><option th:each="r : ${roles}" th:value="${r}" th:text="${r}" th:selected="${r == a.role}"></option></select>
+        <label class="check"><input type="checkbox" name="enabled" value="true" th:checked="${a.enabled}"> aktiv</label>
+        <input type="password" name="password" placeholder="neues Passwort" autocomplete="new-password">
+        <button type="submit" class="small">Speichern</button></form></td>
+      <td><form th:action="@{/admin/admins/{id}/delete(id=${a.id})}" method="post" onsubmit="return confirm('Konto löschen?')"><button type="submit" class="small">Löschen</button></form></td>
+    </tr>
+    </tbody>
+  </table>
+  <form th:action="@{/admin/admins}" method="post" class="card inline-form">
+    <label>Benutzer <input type="text" name="username" required></label>
+    <label>Passwort <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+    <label>Rolle <select name="role"><option th:each="r : ${roles}" th:value="${r}" th:text="${r}"></option></select></label>
+    <button type="submit" class="primary">Konto anlegen</button>
+  </form>
+</main>
+</body>
+</html>

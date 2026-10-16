@@ -3,6 +3,8 @@ package at.jdbcodata.admin.api;
 import at.jdbcodata.admin.api.QueryDtos.AdHocTestRequest;
 import at.jdbcodata.admin.api.QueryDtos.ColumnSettingRequest;
 import at.jdbcodata.admin.api.QueryDtos.ColumnSettingsRequest;
+import at.jdbcodata.admin.api.QueryDtos.GrantRequest;
+import at.jdbcodata.admin.api.QueryDtos.GrantsRequest;
 import at.jdbcodata.admin.api.QueryDtos.QueryRequest;
 import at.jdbcodata.admin.api.QueryDtos.QueryResponse;
 import at.jdbcodata.admin.api.QueryDtos.QueryVersionResponse;
@@ -11,6 +13,7 @@ import at.jdbcodata.admin.api.QueryDtos.TestRunResponse;
 import at.jdbcodata.identity.ExecutionIdentity;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.QueryDefinition;
+import at.jdbcodata.query.QueryGrant;
 import at.jdbcodata.query.QueryService;
 import at.jdbcodata.query.QueryTestService;
 import at.jdbcodata.query.SchemaSnapshotService;
@@ -106,6 +109,17 @@ public class QueryController {
     public QueryResponse columns(@PathVariable UUID id, @Valid @RequestBody ColumnSettingsRequest request) {
         return QueryResponse.from(queryService.updateColumnSettings(id,
                 request.columns().stream().map(ColumnSettingRequest::toRecord).toList()));
+    }
+
+    @GetMapping("/{id}/grants")
+    public List<QueryGrant> grants(@PathVariable UUID id) {
+        queryService.require(id);
+        return queryService.grants(id);
+    }
+
+    @PutMapping("/{id}/grants")
+    public List<QueryGrant> setGrants(@PathVariable UUID id, @Valid @RequestBody GrantsRequest request) {
+        return queryService.setGrants(id, request.grants().stream().map(GrantRequest::toSpec).toList());
     }
 
     private static ExecutionIdentity identity(String username, String password) {
