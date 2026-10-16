@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:fragment="page(title, main)">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title} + ' · JdbcOdata'">JdbcOdata</title>
+  <link rel="stylesheet" th:href="@{/css/admin.css}">
+  <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/lib/codemirror.css}">
+  <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/theme/eclipse.css}">
+  <script th:src="@{/webjars/htmx.org/2.0.11/dist/htmx.min.js}"></script>
+  <script th:src="@{/webjars/codemirror/5.65.21/lib/codemirror.js}"></script>
+  <script th:src="@{/webjars/codemirror/5.65.21/mode/sql/sql.js}"></script>
+  <script th:src="@{/js/admin.js}" defer></script>
+</head>
+<body th:attr="hx-headers='{&quot;X-CSRF-TOKEN&quot;: &quot;' + (${_csrf} != null ? ${_csrf.token} : '') + '&quot;}'">
+<header class="topbar">
+  <a class="brand" th:href="@{/admin}">JdbcOdata</a>
+  <nav>
+    <a th:href="@{/admin/datasources}">Datenquellen</a>
+    <a th:href="@{/admin/queries}">Queries</a>
+  </nav>
+  <div class="user" th:if="${currentUser != null}">
+    <span th:text="${currentUser}">admin</span>
+    <form th:action="@{/logout}" method="post" class="inline"><button type="submit" class="link">Abmelden</button></form>
+  </div>
+</header>
+<main class="container">
+  <div class="flash ok" th:if="${message}" th:text="${message}"></div>
+  <div class="flash err" th:if="${error}" th:text="${error}"></div>
+  <th:block th:replace="${main}"/>
+</main>
+</body>
+</html>

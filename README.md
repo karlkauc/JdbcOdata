@@ -18,8 +18,10 @@ Stellt SQL-Abfragen gegen firmeninterne Datenbanken (Oracle, PostgreSQL, MySQL/M
 
 ## Status
 
-Meilenstein M1 ist umgesetzt (siehe PRD §11): Datenquellen-API, Queries aus YAML-Seed, OData-Feed mit
-Basic-Auth-Pass-Through, Demo-Profil, Dockerfile. Als Nächstes folgt M2 (Query-Verwaltung mit Admin-UI).
+Meilensteine M1 und M2 sind umgesetzt (siehe PRD §11): OData-Feed mit Basic-Auth-Pass-Through, `$filter`/`$orderby`
+in-memory, Datenquellen- und Query-Verwaltung über REST-API und Admin-UI (Login, SQL-Editor, Testlauf,
+Schema-Snapshot, Versionshistorie), YAML-Seed, Demo-Profil, Dockerfile. Als Nächstes folgt M3 (Service-User,
+hinterlegte Credentials, FIXED-Modus, Cache, Statistiken).
 
 ## Bauen und starten
 
@@ -40,14 +42,17 @@ Passwort `demo`) und registriert die Query `Sales` als OData-Feed.
 | OData-Service-Dokument | `http://localhost:8080/odata/` | DB-User, z.B. `demo` / `demo` |
 | `$metadata` | `http://localhost:8080/odata/$metadata` | DB-User |
 | Daten | `http://localhost:8080/odata/Sales?p_year=2025&$top=100` | DB-User |
+| Admin-UI | `http://localhost:8080/admin` | `admin` / `JDBCODATA_ADMIN_PASSWORD` |
 | Admin-API | `http://localhost:8080/api/v1/datasources`, `/api/v1/queries` | `admin` / `JDBCODATA_ADMIN_PASSWORD` |
 | Health | `http://localhost:8080/actuator/health` | offen |
 
 In Excel: *Daten → Daten abrufen → Aus anderen Quellen → Aus OData-Feed*, URL `http://localhost:8080/odata/`,
 Anmeldung *Standard* mit DB-User und Passwort. Ohne TLS nur lokal verwenden; TLS kommt mit M4.
 
-Eigene Datenquellen und Queries: YAML-Datei nach dem Muster von `src/main/resources/seed-demo.yml` anlegen und
-mit `--jdbcodata.seed.file=config/seed.yml` laden, oder Datenquellen über die REST-API pflegen.
+Eigene Datenquellen und Queries werden in der Admin-UI angelegt: Datenquelle mit JDBC-URL, dann Query mit SQL
+(nur SELECT, Parameter als `:name`), Testlauf mit eigenen DB-Zugangsdaten, Schema-Snapshot erstellen. Danach
+erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muster von
+`src/main/resources/seed-demo.yml` mit `--jdbcodata.seed.file=config/seed.yml` laden oder die REST-API nutzen.
 
 ### Docker
 
@@ -69,7 +74,8 @@ JdbcOdata/
 ├── docs/                 # Architektur, PRD, Betriebs- und Admin-Doku
 ├── src/main/java/at/jdbcodata/
 │   ├── odata/            # Olingo-Endpunkt, dynamisches EDM
-│   ├── admin/            # Web-UI und REST-API
+│   ├── admin/api/        # REST-API
+│   ├── admin/ui/         # Thymeleaf-Controller der Admin-UI
 │   ├── query/            # Query-Definitionen, Validierung, Ausführung
 │   ├── identity/         # Identitätsauflösung, Credentials
 │   ├── cache/            # Ergebnis-Cache
@@ -80,7 +86,8 @@ JdbcOdata/
 │   └── config/           # Konfiguration, Security
 ├── src/main/resources/
 │   ├── db/migration/     # Flyway
-│   └── templates/        # Thymeleaf
+│   ├── templates/        # Thymeleaf-Seiten (layout, login, admin/…)
+│   └── static/           # CSS und JS der Admin-UI (htmx und CodeMirror kommen als WebJars)
 ├── src/test/java/        # Unit- und Integrationstests (JUnit 5, Spring Boot Test, JaCoCo)
 ├── contrib/              # systemd-Unit, WinSW, Beispiel-Konfiguration (M4)
 ├── docker/               # Dockerfile, docker-compose.yml, .env.example

@@ -1,6 +1,6 @@
 # JdbcOdata – Architektur
 
-Stand: 2026-10-16 · Status: abgestimmt, Umsetzung läuft (M1 fertig)
+Stand: 2026-10-16 · Status: abgestimmt, Umsetzung läuft (M1, M2 fertig)
 
 JdbcOdata stellt SQL-Abfragen gegen firmeninterne Datenbanken als OData-V4-Feeds für Excel und PowerBI bereit. Abfragen werden zur Laufzeit von Admins verwaltet, laufen unter der DB-Identität des anfragenden Users, werden pro User gecacht und vollständig protokolliert.
 
@@ -147,7 +147,7 @@ Fehlerfälle: DB-Login schlägt fehl → `401` mit `WWW-Authenticate: Basic`, da
 | BINARY, VARBINARY, BLOB | `Edm.Binary` | Standardmäßig aus dem EntityType ausgeblendet |
 | Sonstige | `Edm.String` | `toString()`, mit Warnung im Snapshot |
 
-**Query-Optionen.** `$top`, `$skip`, `$filter`, `$select`, `$orderby`, `$count` werden von Olingo geparst und **in-memory** auf der vollständigen Ergebnismenge (aus Cache oder DB) ausgewertet. Das ist bewusst, weil die Ergebnismenge ohnehin pro User gecacht wird und Excel beim Laden meist den gesamten Feed holt. Push-Down von `$filter`/`$top` in SQL (Subquery-Wrapping) ist Phase 2. Nicht unterstützt: `$expand`, `$search`, `$apply`.
+**Query-Optionen.** `$top`, `$skip`, `$filter`, `$select`, `$orderby`, `$count` werden von Olingo geparst und **in-memory** auf der vollständigen Ergebnismenge (aus Cache oder DB) ausgewertet (`QueryOptionsEvaluator`, `EntityExpressionVisitor`). Reihenfolge: `$filter` → `$orderby` → `$count` → `$skip` → `$top`. Unterstützt in `$filter`: Vergleiche, `and`/`or`/`not`, `in`, Arithmetik, String-Funktionen (`contains`, `startswith`, `endswith`, `length`, `indexof`, `substring`, `tolower`, `toupper`, `trim`, `concat`), Datumsfunktionen (`year` … `second`, `date`, `time`, `now`), `round`/`floor`/`ceiling`. Das ist bewusst, weil die Ergebnismenge ohnehin pro User gecacht wird und Excel beim Laden meist den gesamten Feed holt. Push-Down von `$filter`/`$top` in SQL (Subquery-Wrapping) ist Phase 2. Nicht unterstützt: `$expand`, `$search`, `$apply`, Lambda-Ausdrücke.
 
 **Query-Parameter.** SQL darf benannte Parameter `:name` enthalten. Jeder Parameter wird mit Typ (`STRING`, `INT`, `DECIMAL`, `DATE`, `TIMESTAMP`, `BOOLEAN`), Pflicht-Flag und optionalem Default deklariert. Clients übergeben Werte als **Custom Query Options** (`?p_jahr=2025`; OData erlaubt Optionen ohne `$`-Präfix, Excel reicht sie unverändert durch). Werte werden ausschließlich per `PreparedStatement` gebunden und sind Teil des Cache-Keys.
 
@@ -200,7 +200,7 @@ flowchart TD
 - `FIXED`-Accounts: regulärer Pool pro Query-Account, Größe konfigurierbar.
 - Jede Connection: `setReadOnly(true)`, `setAutoCommit(false)` + Rollback am Ende, Statement-Timeout und `maxRows` aus Datenquelle bzw. Query (Query darf Datenquellen-Limit nur unterschreiten).
 
-**SQL-Sicherheit.** SQL wird nur von Admins geschrieben, ist also vertrauenswürdig, aber: JSqlParser erzwingt `SELECT`/`WITH` (keine DML/DDL, kein `INTO`), Parameter werden nie konkateniert, die DB-Connection ist read-only, und pro Datenquelle gelten Timeout und Zeilenlimit. Fehlermeldungen an Clients enthalten nie SQL-Text.
+**SQL-Sicherheit.** SQL wird nur von Admins geschrieben, ist also vertrauenswürdig, aber: JSqlParser erzwingt `SELECT`/`WITH` (keine DML/DDL, kein `INTO`), Parameter werden nie konkateniert, die DB-Connection ist read-only, und pro Datenquelle gelten Timeout und Zeilenlimit. Fehlermeldungen an Clients enthalten nie SQL-Text. Jede Änderung an SQL, Parametern oder Datenquelle erzeugt einen Eintrag in `query_version` (Autor, Zeit, Kommentar); ältere Versionen können wiederhergestellt werden.
 
 ## 6. Caching
 
@@ -266,7 +266,7 @@ Audit: Änderungen an Queries, Datenquellen, Usern und Credentials landen in `au
 | Cache | `GET /cache`, `DELETE /cache?queryId=&dbUser=` |
 | Statistiken | `GET /stats/summary`, `GET /stats/executions?from=&to=&queryId=&caller=`, `GET /stats/export.csv` |
 
-**Admin-Authentifizierung.** Eigene Admin-Accounts in `admin_user` (bcrypt), Session-Login für die UI, API-Token (Bearer) für Automatisierung. Rollen `ADMIN` (alles) und `VIEWER` (nur lesen, Statistiken). Der erste Admin wird beim Start aus `JDBCODATA_ADMIN_USER` / `JDBCODATA_ADMIN_PASSWORD` angelegt, falls keiner existiert.
+**Admin-Authentifizierung.** Drei Security-Chains: `/odata/**` ohne Spring-Security-Prüfung (Basic-Credentials gehen an die DB), `/api/**` mit zustandslosem Basic Auth, alles andere mit Session-Login-Formular (`/login`, CSRF aktiv, htmx sendet den Token im Header). Bis M3 gibt es ein Admin-Konto aus `JDBCODATA_ADMIN_USER` / `JDBCODATA_ADMIN_PASSWORD`; danach Admin-Accounts in `admin_user` (bcrypt), API-Token (Bearer) und die Rollen `ADMIN` und `VIEWER`.
 
 **Endpunkt-Übersicht**
 
@@ -288,7 +288,7 @@ Spring Data JPA, Flyway-Migrationen unter `db/migration`. Standard H2 im Dateimo
 |---|---|
 | `datasource` | Name, JDBC-URL, Treiberklasse, Limits, Pool-Einstellungen, Zeitzone |
 | `query_definition` | Name, Datenquelle, SQL, Modus, `FIXED`-Credential-Referenz, Cache-Einstellungen, Version, Status (aktiv/inaktiv) |
-| `query_version` | Historie der Definition (SQL, Parameter) mit Autor und Zeitstempel |
+| `query_version` | Historie der Definition (SQL, Parameter als JSON, Datenquelle) mit Autor, Zeitstempel und Kommentar |
 | `query_parameter` | Name, Typ, Pflicht, Default, sensitiv |
 | `query_column` | Schema-Snapshot: Spalte, JDBC-Typ, EDM-Typ, Precision, Scale, Nullable, Key-Flag, sichtbar |
 | `query_grant` | Freigaben für `FIXED`-Queries (Service-User oder Gruppe) |

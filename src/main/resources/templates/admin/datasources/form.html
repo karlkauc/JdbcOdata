@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${datasource == null} ? 'Neue Datenquelle' : 'Datenquelle ' + ${datasource.name}, ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1 th:text="${datasource == null} ? 'Neue Datenquelle' : 'Datenquelle ' + ${datasource.name}">Datenquelle</h1>
+    <form th:if="${datasource != null}" th:action="@{/admin/datasources/{id}/delete(id=${datasource.id})}" method="post"
+          onsubmit="return confirm('Datenquelle wirklich löschen?')">
+      <button type="submit" class="danger">Löschen</button>
+    </form>
+  </div>
+
+  <form id="ds-form" th:object="${form}" th:action="${datasource == null} ? @{/admin/datasources} : @{/admin/datasources/{id}(id=${datasource.id})}" method="post" class="card">
+    <div class="grid2">
+      <label>Name <input type="text" th:field="*{name}" required>
+        <span class="field-error" th:errors="*{name}"></span></label>
+      <label>Beschreibung <input type="text" th:field="*{description}"></label>
+      <label class="span2">JDBC-URL <input type="text" th:field="*{jdbcUrl}" class="mono" required placeholder="jdbc:postgresql://host:5432/db">
+        <span class="field-error" th:errors="*{jdbcUrl}"></span></label>
+      <label>Treiberklasse <input type="text" th:field="*{driverClass}" class="mono" placeholder="optional, z.B. oracle.jdbc.OracleDriver"></label>
+      <label>Zeitzone <input type="text" th:field="*{timezone}" placeholder="z.B. Europe/Vienna"></label>
+      <label>Standard-Timeout (s) <input type="number" th:field="*{defaultTimeoutSec}" min="1" max="3600">
+        <span class="field-error" th:errors="*{defaultTimeoutSec}"></span></label>
+      <label>Max. Zeilen <input type="number" th:field="*{maxRows}" min="1">
+        <span class="field-error" th:errors="*{maxRows}"></span></label>
+      <label>Max. parallele Ausführungen <input type="number" th:field="*{maxConcurrent}" min="1" max="1000"></label>
+      <label class="check"><input type="checkbox" th:field="*{enabled}"> aktiv</label>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary">Speichern</button>
+      <a class="button" th:href="@{/admin/datasources}">Zurück</a>
+    </div>
+  </form>
+
+  <section class="card" th:if="${datasource != null}">
+    <h2>Verbindung testen</h2>
+    <p class="muted">Die Zugangsdaten werden nur für diesen Test verwendet und nicht gespeichert.</p>
+    <form class="inline-form" th:attr="hx-post=@{/admin/datasources/{id}/test(id=${datasource.id})}" hx-target="#test-result" hx-swap="innerHTML">
+      <label>DB-User <input type="text" name="dbUser" required></label>
+      <label>Passwort <input type="password" name="dbPassword"></label>
+      <button type="submit">Testen</button>
+    </form>
+    <div id="test-result"></div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # JdbcOdata – Project Requirement Document (PRD)
 
-Stand: 2026-10-16 · Version 0.2 · Status: abgestimmt, Umsetzung läuft
+Stand: 2026-10-16 · Version 0.3 · Status: abgestimmt, Umsetzung läuft (M1, M2 fertig)
 Architektur: siehe [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## 1. Ziel und Hintergrund
@@ -374,7 +374,7 @@ Payload-Skizze Query (POST/PUT):
 | Meilenstein | Inhalt | Ergebnis |
 |---|---|---|
 | **M1 – Skeleton** ✅ 2026-10-16 | Maven-Projekt, Spring Boot 4, Flyway + H2, Datenquellen-CRUD (API), Queries aus YAML-Seed mit Schema-Snapshot, Olingo-Endpunkt mit Service-Dokument, `$metadata`, Daten (`$top`, `$skip`, `$select`, `$count`, Parameter), Basic-Auth-Pass-Through mit Pools pro Identität, Demo-Profil, Dockerfile, 66 Tests mit 94 % Zeilenabdeckung | Feed in Excel sichtbar |
-| **M2 – Query-Verwaltung** | Query-CRUD mit Validierung, Parameter, Schema-Snapshot, Testlauf, Admin-UI (Login, Datenquellen, Queries), Versionshistorie, OData-Optionen in-memory | Admin pflegt Queries ohne Neustart |
+| **M2 – Query-Verwaltung** ✅ 2026-10-16 | Query-CRUD über API und UI, SQL-Validierung mit JSqlParser (nur SELECT), Parameter-Editor, Testlauf mit Vorschau (auch für ungespeicherte Queries), Schema-Snapshot und Spalteneinstellungen (Schlüssel, sichtbar), Versionshistorie mit Wiederherstellen, `$filter` und `$orderby` in-memory, Admin-UI mit Login (Thymeleaf + htmx + CodeMirror), 128 Tests mit 94 % Zeilenabdeckung | Admin pflegt Queries ohne Neustart |
 | **M3 – Identität, Cache, Statistik** | Service-User, hinterlegte Credentials, `FIXED`-Modus mit Freigaben, Verschlüsselung, persistenter Cache + Caffeine, Invalidierung, Execution-Log, Statistik-UI, Audit-Log | Alle MUST-Anforderungen erfüllt |
 | **M4 – Betrieb und Härtung** | docker-compose mit PostgreSQL und Caddy, TLS, Rate-Limiting, Concurrency-Limits, Retention-Jobs, Metriken, Start-Skripte Linux/Windows, Dokumentation (Admin, Betrieb, Excel/PowerBI-Anleitung), Abnahme-Checkliste | Release 1.0 |
 | **Phase 2 (Kandidaten)** | SQL-Push-Down, Cache-Vorwärmen, Gruppen aus LDAP, OIDC für Admin-UI, i18n, Import/Export | nach Bedarf |
@@ -392,6 +392,8 @@ Payload-Skizze Query (POST/PUT):
 | O-07 | Service-User-Name kollidiert mit DB-Username | Auflösung greift fälschlich den Service-User | **Entschieden 2026-10-16:** Namenskonvention mit Präfix `svc_` für Service-User (FR-32b); zusätzlich Flag „Pass-Through erzwingen“ (FR-32c) |
 | O-08 | Mehrere Instanzen: Caffeine-Cache ist lokal, Invalidierung muss alle Instanzen erreichen | Veraltete Daten für max. TTL der Caffeine-Schicht | Caffeine-TTL kurz (60 s) halten oder Invalidierung über DB-Versionszähler |
 | O-09 | Mehrinstanz-Betrieb mit H2 | Nicht möglich | Für Mehrinstanz PostgreSQL vorschreiben |
+| O-10 | SQL-Validierung mit JSqlParser lehnt herstellerspezifische Syntax ab (z.B. Oracle-Hints in Sonderformen, exotische Funktionen) | Gültige Queries können nicht gespeichert werden | In M2 strikt umgesetzt (FR-12). Bei Bedarf pro Datenquelle ein Flag „nur lexikalische Prüfung“ ergänzen |
+| O-11 | `$filter` wird in-memory nach dem vollständigen Laden ausgewertet | Excel-Query-Folding reduziert die DB-Last nicht | Verhalten wie geplant (ADR 4); Push-Down bleibt Phase 2 |
 
 ## 13. Glossar
 

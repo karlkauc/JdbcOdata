@@ -101,7 +101,11 @@ class ODataFeedTest extends DemoProfileTest {
 
     @Test
     void unsupportedOptionYields501() throws Exception {
-        HttpResponse<String> r = get("/odata/Sales?$filter=sale_month%20eq%201", "demo", "demo");
+        HttpResponse<String> r = get("/odata/Sales?$expand=foo", "demo", "demo");
+        assertThat(r.statusCode()).isIn(400, 501);
+        r = get("/odata/Sales?$search=foo", "demo", "demo");
+        assertThat(r.statusCode()).isEqualTo(501);
+        r = get("/odata/Sales(1)", "demo", "demo");
         assertThat(r.statusCode()).isEqualTo(501);
     }
 

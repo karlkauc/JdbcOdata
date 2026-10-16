@@ -85,10 +85,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
         Execution exec = execute(entitySet.getName(), uriInfo);
-
-        int skip = uriInfo.getSkipOption() == null ? 0 : uriInfo.getSkipOption().getValue();
-        Integer top = uriInfo.getTopOption() == null ? null : uriInfo.getTopOption().getValue();
-        EntityCollection collection = EntityMapper.toCollection(exec.query(), exec.table(), skip, top);
+        EntityCollection collection = QueryOptionsEvaluator.apply(
+                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo);
 
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), null, uriInfo.getSelectOption());
@@ -115,7 +113,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
         Execution exec = execute(entitySet.getName(), uriInfo);
-        byte[] body = String.valueOf(exec.table().rows().size()).getBytes(StandardCharsets.UTF_8);
+        EntityCollection collection = QueryOptionsEvaluator.apply(
+                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo);
+        byte[] body = String.valueOf(collection.getCount()).getBytes(StandardCharsets.UTF_8);
         response.setContent(new ByteArrayInputStream(body));
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
         response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.TEXT_PLAIN.toContentTypeString());
@@ -171,11 +171,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     }
 
     private static void rejectUnsupportedOptions(UriInfo uriInfo) throws ODataApplicationException {
-        if (uriInfo.getFilterOption() != null || uriInfo.getOrderByOption() != null
-                || uriInfo.getExpandOption() != null || uriInfo.getSearchOption() != null
-                || uriInfo.getApplyOption() != null) {
+        if (uriInfo.getExpandOption() != null || uriInfo.getSearchOption() != null || uriInfo.getApplyOption() != null) {
             throw new ODataApplicationException(
-                    "$filter, $orderby, $expand, $search and $apply are not supported yet; use $top, $skip, $select, $count",
+                    "$expand, $search and $apply are not supported; use $filter, $orderby, $top, $skip, $select, $count",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
         }
     }

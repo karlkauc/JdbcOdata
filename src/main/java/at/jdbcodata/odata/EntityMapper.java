@@ -10,7 +10,6 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.olingo.commons.api.data.Entity;
-import org.apache.olingo.commons.api.data.EntityCollection;
 import org.apache.olingo.commons.api.data.Property;
 import org.apache.olingo.commons.api.data.ValueType;
 import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
@@ -24,7 +23,8 @@ final class EntityMapper {
     private EntityMapper() {
     }
 
-    static EntityCollection toCollection(QueryDefinition q, ResultTable table, int skip, Integer top) {
+    /** All rows as entities, in result order. Query options are applied afterwards by {@link QueryOptionsEvaluator}. */
+    static List<Entity> toEntities(QueryDefinition q, ResultTable table) {
         List<Slot> slots = new ArrayList<>();
         for (QueryColumn c : q.columns()) {
             if (!c.visible()) continue;
@@ -32,11 +32,8 @@ final class EntityMapper {
         }
         boolean rowIdKey = q.keyMode() != KeyMode.COLUMNS || q.columns().stream().noneMatch(QueryColumn::key);
 
-        EntityCollection collection = new EntityCollection();
-        int total = table.rows().size();
-        int from = Math.min(Math.max(skip, 0), total);
-        int to = top == null ? total : Math.min(total, from + Math.max(top, 0));
-        for (int r = from; r < to; r++) {
+        List<Entity> entities = new ArrayList<>(table.rows().size());
+        for (int r = 0; r < table.rows().size(); r++) {
             Object[] row = table.rows().get(r);
             Entity e = new Entity();
             e.setType(DynamicEdmProvider.typeName(q.name()).getFullQualifiedNameAsString());
@@ -54,10 +51,9 @@ final class EntityMapper {
                 }
             }
             e.setId(URI.create(q.name() + "(" + (rowIdKey ? String.valueOf(rowId) : key) + ")"));
-            collection.getEntities().add(e);
+            entities.add(e);
         }
-        collection.setCount(total);
-        return collection;
+        return entities;
     }
 
     private static Object convert(Object value, Slot s) {

@@ -73,6 +73,10 @@ public class QueryColumnEntity {
         return e;
     }
 
+    String getPropertyName() { return propertyName; }
+    void setKey(boolean key) { this.key = key; }
+    void setVisible(boolean visible) { this.visible = visible; }
+
     QueryColumn toRecord() {
         return new QueryColumn(ordinal, columnName, propertyName, jdbcType, jdbcTypeName, edmType, precision, scale,
                 nullable, key, visible);

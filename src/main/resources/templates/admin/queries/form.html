@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${query == null} ? 'Neue Query' : 'Query ' + ${query.name}, ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1 th:text="${query == null} ? 'Neue Query' : 'Query ' + ${query.name}">Query</h1>
+    <div th:if="${query != null}" class="head-actions">
+      <span class="badge" th:text="'Version ' + ${query.version}"></span>
+      <form th:action="@{/admin/queries/{id}/delete(id=${query.id})}" method="post" onsubmit="return confirm('Query wirklich löschen?')">
+        <button type="submit" class="danger">Löschen</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card feed" th:if="${query != null}">
+    <strong>Feed-URL für Excel / PowerBI:</strong>
+    <code id="feed-url" th:text="${feedUrl} + ${query.name}"></code>
+    <button type="button" class="small" onclick="navigator.clipboard.writeText(document.getElementById('feed-url').textContent)">Kopieren</button>
+    <span class="muted" th:unless="${query.hasSnapshot()}">Erst nach dem Schema-Snapshot im Service-Dokument sichtbar.</span>
+  </div>
+
+  <form id="query-form" th:object="${form}" th:action="${query == null} ? @{/admin/queries} : @{/admin/queries/{id}(id=${query.id})}" method="post" class="card">
+    <div class="grid2">
+      <label>Name (EntitySet) <input type="text" th:field="*{name}" required pattern="[A-Za-z][A-Za-z0-9_]*">
+        <span class="field-error" th:errors="*{name}"></span></label>
+      <label>Datenquelle
+        <select th:field="*{datasourceId}" required>
+          <option th:each="ds : ${datasources}" th:value="${ds.id}" th:text="${ds.name}"></option>
+        </select>
+        <span class="field-error" th:errors="*{datasourceId}"></span></label>
+      <label class="span2">Beschreibung <input type="text" th:field="*{description}"></label>
+    </div>
+
+    <label for="sql">SQL (nur SELECT, Parameter als <code>:name</code>)</label>
+    <textarea id="sql" th:field="*{sql}" rows="12" class="mono"></textarea>
+    <span class="field-error" th:errors="*{sql}"></span>
+
+    <h2>Parameter</h2>
+    <table class="list params" id="params">
+      <thead><tr><th>Name</th><th>Typ</th><th>Pflicht</th><th>Default</th><th>Beschreibung</th><th>Sensitiv</th><th>Testwert</th><th></th></tr></thead>
+      <tbody>
+      <tr th:each="p, st : *{parameters}" class="param-row">
+        <td><input type="text" th:field="*{parameters[__${st.index}__].name}" class="mono p-name" pattern="[A-Za-z][A-Za-z0-9_]*">
+          <span class="field-error" th:errors="*{parameters[__${st.index}__].name}"></span></td>
+        <td><select th:field="*{parameters[__${st.index}__].type}">
+          <option th:each="t : ${parameterTypes}" th:value="${t}" th:text="${t}"></option></select></td>
+        <td><input type="checkbox" th:field="*{parameters[__${st.index}__].required}"></td>
+        <td><input type="text" th:field="*{parameters[__${st.index}__].defaultValue}"></td>
+        <td><input type="text" th:field="*{parameters[__${st.index}__].description}"></td>
+        <td><input type="checkbox" th:field="*{parameters[__${st.index}__].sensitive}"></td>
+        <td><input type="text" class="p-test" th:name="'tp_' + ${p.name}" th:value="${p.defaultValue}"></td>
+        <td><button type="button" class="small remove-param">✕</button></td>
+      </tr>
+      </tbody>
+    </table>
+    <button type="button" class="small" id="add-param">Parameter hinzufügen</button>
+    <template id="param-template">
+      <tr class="param-row">
+        <td><input type="text" name="parameters[__IDX__].name" class="mono p-name" pattern="[A-Za-z][A-Za-z0-9_]*"></td>
+        <td><select name="parameters[__IDX__].type">
+          <option th:each="t : ${parameterTypes}" th:value="${t}" th:text="${t}"></option></select></td>
+        <td><input type="checkbox" name="parameters[__IDX__].required" value="true"></td>
+        <td><input type="text" name="parameters[__IDX__].defaultValue"></td>
+        <td><input type="text" name="parameters[__IDX__].description"></td>
+        <td><input type="checkbox" name="parameters[__IDX__].sensitive" value="true"></td>
+        <td><input type="text" class="p-test" name="tp_"></td>
+        <td><button type="button" class="small remove-param">✕</button></td>
+      </tr>
+    </template>
+
+    <h2>Ausführung und Cache</h2>
+    <div class="grid3">
+      <label>Modus
+        <select th:field="*{executionMode}">
+          <option th:each="m : ${executionModes}" th:value="${m}" th:text="${m}" th:disabled="${m.name() == 'FIXED'}"></option>
+        </select>
+        <small class="muted">FIXED (technischer Account) folgt mit Meilenstein M3.</small></label>
+      <label>Schlüssel
+        <select th:field="*{keyMode}">
+          <option value="ROWID">RowId (synthetisch)</option>
+          <option value="COLUMNS">Spalten (unten markieren)</option>
+        </select></label>
+      <label class="check"><input type="checkbox" th:field="*{enabled}"> Query aktiv</label>
+      <label class="check"><input type="checkbox" th:field="*{cacheEnabled}"> Cache aktiv (wirksam ab M3)</label>
+      <label>Cache-TTL (s) <input type="number" th:field="*{cacheTtlSec}" min="0"></label>
+      <label>Timeout (s) <input type="number" th:field="*{timeoutSec}" min="1" max="3600" placeholder="Datenquelle"></label>
+      <label>Max. Zeilen <input type="number" th:field="*{maxRows}" min="1" placeholder="Datenquelle"></label>
+    </div>
+
+    <h2>Testen mit eigenen Zugangsdaten</h2>
+    <p class="muted">Zugangsdaten werden nur für den Testlauf oder den Schema-Snapshot verwendet und nicht gespeichert.</p>
+    <div class="inline-form">
+      <label>DB-User <input type="text" name="dbUser"></label>
+      <label>Passwort <input type="password" name="dbPassword"></label>
+      <button type="button" th:attr="hx-post=@{/admin/queries/test}" hx-include="#query-form" hx-target="#test-result" hx-swap="innerHTML">Testlauf</button>
+      <button type="button" th:if="${query != null}" th:attr="hx-post=@{/admin/queries/{id}/snapshot(id=${query.id})}" hx-include="#query-form" hx-target="#columns" hx-swap="innerHTML">Schema-Snapshot erstellen</button>
+    </div>
+    <div id="test-result"></div>
+
+    <div class="actions">
+      <button type="submit" class="primary">Speichern</button>
+      <a class="button" th:href="@{/admin/queries}">Zurück</a>
+    </div>
+  </form>
+
+  <section class="card" th:if="${query != null}">
+    <h2>Spalten (Schema-Snapshot)</h2>
+    <div id="columns" th:insert="~{admin/queries/columns :: columns}"></div>
+  </section>
+
+  <section class="card" th:if="${query != null and !versions.isEmpty()}">
+    <h2>Versionen</h2>
+    <table class="list">
+      <thead><tr><th>Version</th><th>Zeitpunkt</th><th>Von</th><th>Kommentar</th><th>SQL</th><th></th></tr></thead>
+      <tbody>
+      <tr th:each="v : ${versions}">
+        <td th:text="${v.version}"></td>
+        <td th:text="${#temporals.format(v.changedAt, 'dd.MM.yyyy HH:mm')}"></td>
+        <td th:text="${v.changedBy}"></td>
+        <td th:text="${v.comment}"></td>
+        <td><details><summary>anzeigen</summary><pre class="mono" th:text="${v.sqlText}"></pre></details></td>
+        <td><form th:if="${v.version != query.version}" th:action="@{/admin/queries/{id}/versions/{v}/restore(id=${query.id}, v=${v.version})}" method="post">
+          <button type="submit" class="small">Wiederherstellen</button></form></td>
+      </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body>
+</html>

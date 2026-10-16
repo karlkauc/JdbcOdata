@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Übersicht', ~{:: main})}">
+<body>
+<main>
+  <h1>Übersicht</h1>
+  <div class="tiles">
+    <a class="tile" th:href="@{/admin/datasources}"><span class="num" th:text="${datasourceCount}">0</span>Datenquellen</a>
+    <a class="tile" th:href="@{/admin/queries}"><span class="num" th:text="${queryCount}">0</span>Queries</a>
+    <div class="tile warn" th:if="${!queriesWithoutSnapshot.isEmpty()}">
+      <span class="num" th:text="${queriesWithoutSnapshot.size()}">0</span>ohne Schema-Snapshot
+      <small th:text="${#strings.listJoin(queriesWithoutSnapshot, ', ')}"></small>
+    </div>
+  </div>
+  <h2>Zuletzt geändert</h2>
+  <table class="list" th:if="${!recentQueries.isEmpty()}">
+    <thead><tr><th>Query</th><th>Datenquelle</th><th>Version</th><th>Geändert</th></tr></thead>
+    <tbody>
+    <tr th:each="q : ${recentQueries}">
+      <td><a th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a></td>
+      <td th:text="${q.datasourceName}">demo</td>
+      <td th:text="${q.version}">1</td>
+      <td th:text="${#temporals.format(q.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
+    </tr>
+    </tbody>
+  </table>
+  <p class="muted" th:if="${recentQueries.isEmpty()}">Noch keine Queries. <a th:href="@{/admin/queries/new}">Erste Query anlegen</a>.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Queries', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1>Queries</h1>
+    <a class="button primary" th:href="@{/admin/queries/new}">Neue Query</a>
+  </div>
+  <table class="list">
+    <thead><tr><th>Name</th><th>Datenquelle</th><th>Modus</th><th>Parameter</th><th>Version</th><th>Snapshot</th><th>Status</th></tr></thead>
+    <tbody>
+    <tr th:each="q : ${queries}">
+      <td><a th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a>
+        <div class="muted" th:text="${q.description}"></div></td>
+      <td th:text="${q.datasourceName}"></td>
+      <td th:text="${q.executionMode}"></td>
+      <td th:text="${q.parameters.size()}"></td>
+      <td th:text="${q.version}"></td>
+      <td><span th:class="${q.hasSnapshot()} ? 'badge ok' : 'badge warn'" th:text="${q.hasSnapshot()} ? ${q.columns.size()} + ' Spalten' : 'fehlt'"></span></td>
+      <td><span th:class="${q.enabled} ? 'badge ok' : 'badge off'" th:text="${q.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
+    </tr>
+    <tr th:if="${queries.isEmpty()}"><td colspan="7" class="muted">Noch keine Queries.</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

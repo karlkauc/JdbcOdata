@@ -56,6 +56,12 @@ public class QueryExecutor {
         return run(query, ds, identity, params, maxRows, timeoutSec, true);
     }
 
+    /** Runs the query for a preview: returns at most {@code maxRows} rows and only flags truncation. */
+    public ResultTable preview(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
+                               Map<String, Object> params, int maxRows, int timeoutSec) {
+        return run(query, ds, identity, params, maxRows, timeoutSec, false);
+    }
+
     /** Fetches at most one row to read the result metadata; never fails because of the row count. */
     public ResultTable probe(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
                              Map<String, Object> params, int timeoutSec) {

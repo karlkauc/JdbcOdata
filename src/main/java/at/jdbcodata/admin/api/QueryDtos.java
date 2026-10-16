@@ -1,13 +1,23 @@
 package at.jdbcodata.admin.api;
 
 import at.jdbcodata.odata.ODataConfig;
+import at.jdbcodata.query.ColumnSetting;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
+import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
+import at.jdbcodata.query.QuerySpec;
+import at.jdbcodata.query.QueryTestService;
+import at.jdbcodata.query.QueryVersion;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +26,42 @@ import java.util.UUID;
 final class QueryDtos {
 
     private QueryDtos() {
+    }
+
+    record ParameterRequest(
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*") String name,
+            @NotNull ParameterType type,
+            Boolean required,
+            @Size(max = 1000) String defaultValue,
+            @Size(max = 1000) String description,
+            Boolean sensitive) {
+
+        QueryParameter toRecord() {
+            return new QueryParameter(name, type, Boolean.TRUE.equals(required), blankToNull(defaultValue), description,
+                    Boolean.TRUE.equals(sensitive));
+        }
+    }
+
+    record QueryRequest(
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*") String name,
+            @Size(max = 1000) String description,
+            @NotNull UUID datasourceId,
+            @NotBlank String sql,
+            List<@Valid ParameterRequest> parameters,
+            ExecutionMode executionMode,
+            Boolean cacheEnabled,
+            @Min(0) Integer cacheTtlSec,
+            @Min(1) @Max(3600) Integer timeoutSec,
+            @Min(1) Integer maxRows,
+            KeyMode keyMode,
+            Boolean enabled) {
+
+        QuerySpec toSpec() {
+            List<QueryParameter> params = parameters == null ? List.of()
+                    : parameters.stream().map(ParameterRequest::toRecord).toList();
+            return new QuerySpec(name, description, datasourceId, sql, executionMode, cacheEnabled, cacheTtlSec,
+                    timeoutSec, maxRows, keyMode, enabled, params);
+        }
     }
 
     record QueryResponse(
@@ -48,7 +94,43 @@ final class QueryDtos {
         }
     }
 
-    /** Credentials used once for the snapshot run; they are not stored. */
+    /** Credentials used once for the snapshot or test run; they are not stored. */
     record SnapshotRequest(@NotBlank String username, @NotNull String password, Map<String, String> parameters) {
+    }
+
+    /** Test run of an unsaved definition straight from the editor. */
+    record AdHocTestRequest(@Valid @NotNull QueryRequest query, @NotBlank String username, @NotNull String password,
+                            Map<String, String> parameters) {
+    }
+
+    record TestRunResponse(List<QueryColumn> columns, List<Map<String, Object>> rows, int rowCount, boolean truncated,
+                           int previewLimit, long durationMs) {
+
+        static TestRunResponse from(QueryTestService.TestRunResult r) {
+            return new TestRunResponse(r.columns(), r.rows(), r.rows().size(), r.truncated(),
+                    QueryTestService.PREVIEW_ROWS, r.durationMs());
+        }
+    }
+
+    record QueryVersionResponse(int version, String name, UUID datasourceId, String sql, List<QueryParameter> parameters,
+                                String changedBy, Instant changedAt, String comment) {
+
+        static QueryVersionResponse from(QueryVersion v) {
+            return new QueryVersionResponse(v.version(), v.name(), v.datasourceId(), v.sqlText(), v.parameters(),
+                    v.changedBy(), v.changedAt(), v.comment());
+        }
+    }
+
+    record ColumnSettingRequest(@NotBlank String propertyName, boolean key, boolean visible) {
+        ColumnSetting toRecord() {
+            return new ColumnSetting(propertyName, key, visible);
+        }
+    }
+
+    record ColumnSettingsRequest(@NotNull List<@Valid ColumnSettingRequest> columns) {
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s;
     }
 }

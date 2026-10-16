@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Anmelden · JdbcOdata</title>
+  <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body class="login-page">
+<main class="login-box">
+  <h1>JdbcOdata</h1>
+  <p class="muted">Administration</p>
+  <div class="flash err" th:if="${param.error}">Anmeldung fehlgeschlagen.</div>
+  <div class="flash ok" th:if="${param.logout}">Abgemeldet.</div>
+  <form th:action="@{/login}" method="post">
+    <label>Benutzer <input type="text" name="username" autofocus required></label>
+    <label>Passwort <input type="password" name="password" required></label>
+    <button type="submit" class="primary">Anmelden</button>
+  </form>
+</main>
+</body>
+</html>

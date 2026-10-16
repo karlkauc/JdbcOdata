@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Datenquellen', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <h1>Datenquellen</h1>
+    <a class="button primary" th:href="@{/admin/datasources/new}">Neue Datenquelle</a>
+  </div>
+  <table class="list">
+    <thead><tr><th>Name</th><th>JDBC-URL</th><th>Timeout</th><th>Max. Zeilen</th><th>Status</th></tr></thead>
+    <tbody>
+    <tr th:each="d : ${datasources}">
+      <td><a th:href="@{/admin/datasources/{id}(id=${d.id})}" th:text="${d.name}">demo</a>
+        <div class="muted" th:text="${d.description}"></div></td>
+      <td class="mono" th:text="${d.jdbcUrl}"></td>
+      <td th:text="${d.defaultTimeoutSec} + ' s'"></td>
+      <td th:text="${#numbers.formatInteger(d.maxRows, 1, 'POINT')}"></td>
+      <td><span th:class="${d.enabled} ? 'badge ok' : 'badge off'" th:text="${d.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
+    </tr>
+    <tr th:if="${datasources.isEmpty()}"><td colspan="5" class="muted">Noch keine Datenquellen.</td></tr>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

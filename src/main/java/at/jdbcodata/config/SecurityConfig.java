@@ -18,11 +18,12 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Two security chains:
+ * Three security chains:
  * <ul>
  *   <li>{@code /odata/**}: open for Spring Security. The OData servlet reads the Basic Auth header itself and
  *       forwards the credentials to the target database (pass-through). Nothing is validated here.</li>
- *   <li>everything else ({@code /api/**}, {@code /actuator/**}): Basic Auth against the admin account.</li>
+ *   <li>{@code /api/**}: stateless Basic Auth against the admin account, no CSRF.</li>
+ *   <li>everything else (admin UI, actuator): session login form (Basic Auth also accepted), CSRF enabled.</li>
  * </ul>
  */
 @Configuration
@@ -42,13 +43,25 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    SecurityFilterChain adminChain(HttpSecurity http) throws Exception {
-        http.authorizeHttpRequests(a -> a
-                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        .anyRequest().hasRole("ADMIN"))
+    SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
+        http.securityMatcher("/api/**")
+                .authorizeHttpRequests(a -> a.anyRequest().hasRole("ADMIN"))
                 .httpBasic(Customizer.withDefaults())
                 .csrf(c -> c.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        return http.build();
+    }
+
+    @Bean
+    @Order(3)
+    SecurityFilterChain uiChain(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests(a -> a
+                        .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error",
+                                "/webjars/**", "/css/**", "/js/**").permitAll()
+                        .anyRequest().hasRole("ADMIN"))
+                .formLogin(f -> f.loginPage("/login").defaultSuccessUrl("/admin", false).permitAll())
+                .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout"))
+                .httpBasic(Customizer.withDefaults());
         return http.build();
     }
 
