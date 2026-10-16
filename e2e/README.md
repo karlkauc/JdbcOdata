@@ -19,3 +19,9 @@ PW_DIR=/tmp/jdbcodata-e2e node check.mjs
 ```
 
 Screenshots landen in `$PW_DIR/shots`. Der Check ist nicht Teil von `mvnw verify`, weil er einen Browser braucht.
+
+## Screenshots
+
+`screenshots/` enthält die Aufnahmen des letzten Laufs (Login, Übersicht, Datenquelle mit Verbindungstest,
+Query-Editor nach Testlauf und Snapshot, Service-User mit hinterlegten Credentials, FIXED-Query mit Freigaben,
+Statistik, Einstellungen). Ein neuer Lauf schreibt nach `$PW_DIR/shots`; zum Aktualisieren von dort kopieren.
