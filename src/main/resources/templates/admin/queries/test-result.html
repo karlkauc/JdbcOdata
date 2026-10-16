@@ -8,7 +8,7 @@
     </div>
     <div class="scroll">
       <table class="list preview">
-        <thead><tr><th th:each="c : ${result.columns}"><span th:text="${c.propertyName}"></span><small class="muted" th:text="${c.edmType}"></small></th></tr></thead>
+        <thead><tr><th th:each="c : ${result.columns}"><span th:text="${c.propertyName}"></span><small th:text="${c.edmType}"></small></th></tr></thead>
         <tbody>
         <tr th:each="row : ${result.rows}">
           <td th:each="c : ${result.columns}" th:text="${row[c.propertyName]}"></td>

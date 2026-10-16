@@ -5,6 +5,19 @@
     cm.on('change', function () { cm.save(); });
   }
 
+  // Copy buttons: data-copy="#elementId" copies that element's text and gives short feedback.
+  document.querySelectorAll('[data-copy]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var source = document.querySelector(button.getAttribute('data-copy'));
+      if (!source || !navigator.clipboard) return;
+      var original = button.textContent;
+      navigator.clipboard.writeText(source.textContent.trim()).then(function () {
+        button.textContent = 'Kopiert';
+        setTimeout(function () { button.textContent = original; }, 1500);
+      });
+    });
+  });
+
   var table = document.getElementById('params');
   var template = document.getElementById('param-template');
   var addButton = document.getElementById('add-param');
@@ -21,6 +34,8 @@
       var testInput = row.querySelector('.p-test');
       if (nameInput && testInput) testInput.name = 'tp_' + nameInput.value;
     });
+    var empty = table.querySelector('tr.param-empty');
+    if (empty) empty.style.display = rows.length ? 'none' : '';
   }
 
   body.addEventListener('input', function (e) {
@@ -40,5 +55,8 @@
     var html = template.innerHTML.replace(/__IDX__/g, String(count));
     body.insertAdjacentHTML('beforeend', html);
     renumber();
+    var last = body.querySelector('tr.param-row:last-child .p-name');
+    if (last) last.focus();
   });
+  renumber();
 })();

@@ -3,13 +3,13 @@
 <body>
 <main>
   <div class="page-head">
-    <h1>Ergebnis-Cache</h1>
+    <div><h1>Ergebnis-Cache</h1><p class="lead">Zwischengespeicherte Ergebnisse pro Query, DB-User und Parameterwerten. Ein Eintrag wird nur an den DB-User ausgeliefert, unter dem er entstanden ist.</p></div>
     <form th:action="@{/admin/cache/invalidate}" method="post" onsubmit="return confirm('Gesamten Cache leeren?')"><button type="submit" class="danger">Alles invalidieren</button></form>
   </div>
   <div class="tiles">
-    <div class="tile"><span class="num" th:text="${stats.entries}">0</span>Einträge (persistent)</div>
-    <div class="tile"><span class="num" th:text="${#numbers.formatDecimal(stats.bytes / 1048576.0, 1, 1)} + ' MB'">0</span>Größe (von <span th:text="${stats.maxBytes / 1048576}"></span> MB)</div>
-    <div class="tile"><span class="num" th:text="${stats.memoryEntries}">0</span>Einträge im Speicher</div>
+    <div class="tile"><span class="label">Einträge (persistent)</span><span class="num" th:text="${stats.entries}">0</span></div>
+    <div class="tile"><span class="label">Belegt</span><span class="num" th:text="${#numbers.formatDecimal(stats.bytes / 1048576.0, 1, 1)} + ' MB'">0</span><small th:text="'von ' + ${stats.maxBytes / 1048576} + ' MB'"></small></div>
+    <div class="tile"><span class="label">Einträge im Speicher</span><span class="num" th:text="${stats.memoryEntries}">0</span></div>
   </div>
   <table class="list">
     <thead><tr><th>Query</th><th>Version</th><th>DB-User</th><th>Parameter</th><th>Zeilen</th><th>Größe</th><th>Erstellt</th><th>Läuft ab</th><th>Zugriff</th><th></th></tr></thead>
@@ -28,7 +28,7 @@
         <input type="hidden" name="queryId" th:value="${e.queryId}"><input type="hidden" name="dbUser" th:value="${e.dbUser}">
         <button type="submit" class="small">Invalidieren</button></form></td>
     </tr>
-    <tr th:if="${entries.isEmpty()}"><td colspan="10" class="muted">Keine Cache-Einträge. Cache wird pro Query aktiviert.</td></tr>
+    <tr th:if="${entries.isEmpty()}"><td colspan="10" class="empty">Keine Cache-Einträge. Der Cache wird pro Query im Query-Editor aktiviert.</td></tr>
     </tbody>
   </table>
 </main>

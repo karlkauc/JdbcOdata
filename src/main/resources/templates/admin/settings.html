@@ -2,17 +2,25 @@
 <html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Einstellungen', ~{:: main})}">
 <body>
 <main>
-  <h1>Einstellungen und Status</h1>
-  <p class="muted">Konfiguration erfolgt über <code>config/application.yml</code> oder Umgebungsvariablen mit Präfix <code>JDBCODATA_</code>.</p>
+  <div class="page-head">
+    <div><h1>Einstellungen und Status</h1><p class="lead">Konfiguration erfolgt über <code>config/application.yml</code> oder Umgebungsvariablen mit Präfix <code>JDBCODATA_</code>. Diese Seite zeigt die wirksamen Werte.</p></div>
+  </div>
+  <h2>Sicherheit und Speicher</h2>
   <table class="list">
     <tbody>
     <tr><th>Master-Key</th><td>Quelle: <span th:text="${keySource}"></span>, Key-ID <code th:text="${keyId}"></code></td></tr>
     <tr><th>Datenverzeichnis</th><td class="mono" th:text="${props.dataDir}"></td></tr>
     <tr><th>Cache</th><td>max. <span th:text="${props.cache.maxSizeMb}"></span> MB persistent, <span th:text="${props.cache.memoryMb}"></span> MB im Speicher; aktuell <span th:text="${cacheStats.entries}"></span> Einträge</td></tr>
     <tr><th>Statistik</th><td>Aufbewahrung <span th:text="${props.stats.retentionDays}"></span> Tage, asynchron: <span th:text="${props.stats.async}"></span>, verworfene Datensätze: <span th:text="${droppedLogRecords}"></span></td></tr>
+    </tbody>
+  </table>
+  <h2>OData und Laufzeit</h2>
+  <table class="list">
+    <tbody>
     <tr><th>OData-Limits</th><td>max. <span th:text="${#numbers.formatInteger(props.odata.maxRows, 1, 'POINT')}"></span> Zeilen, Standard-Timeout <span th:text="${props.odata.defaultTimeoutSec}"></span> s</td></tr>
     <tr><th>Verbindungspools</th><td><span th:text="${pools}"></span> aktive Pools pro Identität</td></tr>
     <tr><th>OData-Modelle</th><td><span th:text="${edmModels}"></span> personalisierte Modelle im Cache</td></tr>
+    <tr><th>Endpunkte</th><td><code>/actuator/health</code> offen, <code>/actuator/prometheus</code> mit Admin-Login</td></tr>
     </tbody>
   </table>
 </main>

@@ -1,23 +1,23 @@
 <div xmlns:th="http://www.thymeleaf.org" th:fragment="columns">
-  <div class="flash ok" th:if="${message}" th:text="${message}"></div>
-  <div class="flash err" th:if="${error}" th:text="${error}"></div>
-  <p class="muted" th:unless="${query.hasSnapshot()}">Noch kein Schema-Snapshot. Zugangsdaten oben eintragen und „Schema-Snapshot erstellen“ klicken.</p>
+  <div class="flash ok" th:if="${snapshotMessage}" th:text="${snapshotMessage}"></div>
+  <div class="flash err" th:if="${snapshotError}" th:text="${snapshotError}"></div>
+  <p class="muted" th:unless="${query.hasSnapshot()}">Noch kein Schema-Snapshot. Zugangsdaten oben eintragen und „Schema-Snapshot erstellen“ klicken. Erst danach erscheint die Query im Service-Dokument.</p>
   <form th:if="${query.hasSnapshot()}" th:action="@{/admin/queries/{id}/columns(id=${query.id})}" method="post">
     <table class="list">
       <thead><tr><th>#</th><th>DB-Spalte</th><th>Property</th><th>JDBC-Typ</th><th>EDM-Typ</th><th>Schlüssel</th><th>Sichtbar</th></tr></thead>
       <tbody>
       <tr th:each="c : ${query.columns}">
-        <td th:text="${c.ordinal + 1}"></td>
+        <td class="muted" th:text="${c.ordinal + 1}"></td>
         <td class="mono" th:text="${c.name}"></td>
         <td class="mono" th:text="${c.propertyName}"></td>
         <td th:text="${c.jdbcTypeName}"></td>
-        <td th:text="${c.edmType} + (${c.precision != null} ? ' (' + ${c.precision} + (${c.scale != null} ? ',' + ${c.scale} : '') + ')' : '')"></td>
+        <td><code th:text="${c.edmType} + (${c.precision != null} ? ' (' + ${c.precision} + (${c.scale != null} ? ',' + ${c.scale} : '') + ')' : '')"></code></td>
         <td><input type="checkbox" th:name="'key_' + ${c.propertyName}" th:checked="${c.key}"></td>
         <td><input type="checkbox" th:name="'visible_' + ${c.propertyName}" th:checked="${c.visible}"></td>
       </tr>
       </tbody>
     </table>
     <div class="actions"><button type="submit" class="small">Spalteneinstellungen speichern</button>
-      <span class="muted">Schlüsselspalten wirken nur bei Schlüsselmodus „Spalten“.</span></div>
+      <span class="hint">Schlüsselspalten wirken nur bei Schlüsselmodus „Spalten“. Unsichtbare Spalten fehlen im Feed.</span></div>
   </form>
 </div>

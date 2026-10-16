@@ -22,6 +22,9 @@ Screenshots landen in `$PW_DIR/shots`. Der Check ist nicht Teil von `mvnw verify
 
 ## Screenshots
 
-`screenshots/` enthält die Aufnahmen des letzten Laufs (Login, Übersicht, Datenquelle mit Verbindungstest,
+`screenshots/` enthält die Aufnahmen des letzten Laufs: Login, Übersicht, Datenquelle mit Verbindungstest,
 Query-Editor nach Testlauf und Snapshot, Service-User mit hinterlegten Credentials, FIXED-Query mit Freigaben,
-Statistik, Einstellungen). Ein neuer Lauf schreibt nach `$PW_DIR/shots`; zum Aktualisieren von dort kopieren.
+Statistik, Einstellungen, Query-Liste, Cache, Audit-Log, Admin-Konten sowie die Übersicht bei 420 px Breite.
+`screenshots/before/` hält den Stand von Release 1.0.0 vor dem UI-Polishing; `screenshots/compare.html` zeigt
+beide Stände nebeneinander (einfach im Browser öffnen). Ein neuer Lauf schreibt nach `$PW_DIR/shots`; zum
+Aktualisieren von dort kopieren.

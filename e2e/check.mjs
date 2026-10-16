@@ -101,7 +101,7 @@ await expectText('DB-Zugangsdaten hinterlegt', 'Credentials hinterlegen');
 await shot('05-service-user');
 
 // 6. Technical account
-await page.click('nav >> text=Techn. Accounts');
+await page.click('nav >> text=Technische Accounts');
 await page.click('a:has-text("Neuer Account")');
 await page.fill('input[name=name]', 'tech_pw');
 await page.selectOption('select[name=datasourceId]', { label: 'demo' });
@@ -137,23 +137,37 @@ const noauth = await api.get('/odata/');
 log(`ohne Auth: HTTP ${noauth.status()}, WWW-Authenticate=${noauth.headers()['www-authenticate']}`);
 
 // 8. Operations pages
+await page.click('nav >> text=Queries');
+await expectText('PwQuery', 'Query-Liste');
+await shot('09-queries');
 await page.click('nav >> text=Cache');
 await expectText('Ergebnis-Cache', 'Cache-Seite');
+await shot('10-cache');
 await page.click('nav >> text=Statistik');
 await expectText('Letzte Ausführungen', 'Statistik-Seite');
 await expectText('PwQuery', 'Statistik enthält PwQuery-Ausführung');
 await shot('07-stats');
 await page.click('nav >> text=Audit');
 await expectText('SET_GRANTS', 'Audit-Log enthält Freigabe');
-await page.click('nav >> text=Admins');
+await shot('11-audit');
+await page.click('nav >> text=Admin-Konten');
 await page.fill('form.card input[name=username]', 'pw_viewer');
 await page.fill('form.card input[name=password]', 'viewer-pass-1');
 await page.selectOption('form.card select[name=role]', 'VIEWER');
 await page.click('form.card button[type=submit]');
 await expectText('angelegt', 'Admin-Konto anlegen');
+await shot('12-admins');
 await page.click('nav >> text=Einstellungen');
 await expectText('Master-Key', 'Einstellungen');
 await shot('08-settings');
+const active = await page.locator('nav a.active').innerText();
+if (!/Einstellungen/.test(active)) throw new Error('Aktiver Navigationseintrag falsch: ' + active);
+log('Aktiver Navigationseintrag markiert');
+await page.setViewportSize({ width: 420, height: 860 });
+await page.goto(`${base}/admin`);
+await expectText('Übersicht', 'Dashboard (schmal)');
+await shot('13-mobile-dashboard');
+await page.setViewportSize({ width: 1280, height: 900 });
 
 // 9. Logout and viewer login
 await Promise.all([page.waitForNavigation(), page.click('button:has-text("Abmelden")')]);

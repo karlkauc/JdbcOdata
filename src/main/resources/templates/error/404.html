@@ -2,8 +2,7 @@
 <html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Nicht gefunden', ~{:: main})}">
 <body>
 <main>
-  <h1>Nicht gefunden</h1>
-  <p class="muted" th:text="${error}">Der Eintrag existiert nicht.</p>
+  <div class="page-head"><div><h1>Nicht gefunden</h1><p class="lead" th:text="${error}">Der Eintrag existiert nicht.</p></div></div>
   <a class="button" th:href="@{/admin}">Zur Übersicht</a>
 </main>
 </body>

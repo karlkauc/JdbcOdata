@@ -2,8 +2,10 @@
 <html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Technische Accounts', ~{:: main})}">
 <body>
 <main>
-  <div class="page-head"><h1>Technische Accounts</h1><a class="button primary" th:href="@{/admin/accounts/new}">Neuer Account</a></div>
-  <p class="muted">DB-Konten, unter denen Queries im Modus FIXED laufen. Passwörter werden verschlüsselt gespeichert.</p>
+  <div class="page-head">
+    <div><h1>Technische Accounts</h1><p class="lead">DB-Konten, unter denen Queries im Modus FIXED laufen. Passwörter werden verschlüsselt gespeichert.</p></div>
+    <a class="button primary" th:href="@{/admin/accounts/new}">Neuer Account</a>
+  </div>
   <table class="list">
     <thead><tr><th>Name</th><th>Datenquelle</th><th>DB-User</th><th>Geändert</th></tr></thead>
     <tbody>
@@ -13,7 +15,7 @@
       <td class="mono" th:text="${a.dbUsername}"></td>
       <td th:text="${#temporals.format(a.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
     </tr>
-    <tr th:if="${accounts.isEmpty()}"><td colspan="4" class="muted">Noch keine technischen Accounts.</td></tr>
+    <tr th:if="${accounts.isEmpty()}"><td colspan="4" class="empty">Noch keine technischen Accounts. <a th:href="@{/admin/accounts/new}">Ersten Account anlegen</a>.</td></tr>
     </tbody>
   </table>
 </main>

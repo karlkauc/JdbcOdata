@@ -3,24 +3,30 @@
 <body>
 <main>
   <div class="page-head">
-    <h1 th:text="${user == null} ? 'Neuer Service-User' : 'Service-User ' + ${user.username}">Service-User</h1>
+    <div>
+      <p class="hint"><a th:href="@{/admin/users}">Service-User</a></p>
+      <h1 th:text="${user == null} ? 'Neuer Service-User' : ${user.username}">Service-User</h1>
+      <p class="lead" th:if="${user != null}" th:text="${user.displayName}"></p>
+    </div>
     <form th:if="${user != null}" th:action="@{/admin/users/{id}/delete(id=${user.id})}" method="post" onsubmit="return confirm('Service-User wirklich löschen?')">
       <button type="submit" class="danger">Löschen</button>
     </form>
   </div>
 
   <form th:object="${form}" th:action="${user == null} ? @{/admin/users} : @{/admin/users/{id}(id=${user.id})}" method="post" class="card">
+    <h2>Konto</h2>
     <div class="grid2">
-      <label>Benutzername <input type="text" th:field="*{username}" required>
+      <label>Benutzername <input type="text" th:field="*{username}" required autocomplete="off">
+        <small>Wird in Excel/PowerBI als Benutzer eingegeben.</small>
         <span class="field-error" th:errors="*{username}"></span></label>
       <label>Anzeigename <input type="text" th:field="*{displayName}"></label>
       <label><span th:text="${user == null} ? 'Passwort (mind. 8 Zeichen)' : 'Neues Passwort (leer = unverändert)'">Passwort</span>
         <input type="password" th:field="*{password}" autocomplete="new-password"></label>
-      <div>
+      <div class="check-list">
         <label class="check"><input type="checkbox" th:field="*{enabled}"> aktiv</label>
         <label class="check"><input type="checkbox" th:field="*{forcePassthrough}"> Pass-Through erzwingen (hinterlegte Zugangsdaten ignorieren)</label>
       </div>
-      <div class="span2"><strong>Gruppen</strong>
+      <div class="span2 check-list"><strong>Gruppen</strong>
         <label class="check" th:each="g : ${groups}"><input type="checkbox" th:field="*{groupIds}" th:value="${g.id}"> <span th:text="${g.name}"></span></label>
         <span class="muted" th:if="${groups.isEmpty()}">keine Gruppen angelegt</span></div>
     </div>
@@ -44,10 +50,10 @@
       </tr>
       </tbody>
     </table>
-    <form th:action="@{/admin/users/{id}/credentials(id=${user.id})}" method="post" class="inline-form">
+    <form th:action="@{/admin/users/{id}/credentials(id=${user.id})}" method="post" class="inline-form" style="margin-top:14px">
       <label>Datenquelle <select name="datasourceId" required>
         <option th:each="ds : ${datasources}" th:value="${ds.id}" th:text="${ds.name}"></option></select></label>
-      <label>DB-User <input type="text" name="dbUsername" required></label>
+      <label>DB-User <input type="text" name="dbUsername" required autocomplete="off"></label>
       <label>DB-Passwort <input type="password" name="dbPassword" autocomplete="new-password"></label>
       <button type="submit">Hinterlegen</button>
     </form>

@@ -2,28 +2,50 @@
 <html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Übersicht', ~{:: main})}">
 <body>
 <main>
-  <h1>Übersicht</h1>
-  <div class="tiles">
-    <a class="tile" th:href="@{/admin/datasources}"><span class="num" th:text="${datasourceCount}">0</span>Datenquellen</a>
-    <a class="tile" th:href="@{/admin/queries}"><span class="num" th:text="${queryCount}">0</span>Queries</a>
-    <div class="tile warn" th:if="${!queriesWithoutSnapshot.isEmpty()}">
-      <span class="num" th:text="${queriesWithoutSnapshot.size()}">0</span>ohne Schema-Snapshot
-      <small th:text="${#strings.listJoin(queriesWithoutSnapshot, ', ')}"></small>
+  <div class="page-head">
+    <div><h1>Übersicht</h1><p class="lead">Status des Dienstes und die zuletzt geänderten Queries.</p></div>
+    <div class="head-actions">
+      <a class="button" th:href="@{/admin/datasources/new}">Neue Datenquelle</a>
+      <a class="button primary" th:href="@{/admin/queries/new}">Neue Query</a>
     </div>
   </div>
+
+  <div class="card feed">
+    <strong>Service-URL für Excel / PowerBI</strong>
+    <code id="service-root" th:text="${serviceRoot}">http://localhost:8080/odata/</code>
+    <button type="button" class="small" data-copy="#service-root">Kopieren</button>
+  </div>
+
+  <div class="tiles">
+    <a class="tile" th:href="@{/admin/datasources}"><span class="label">Datenquellen</span><span class="num" th:text="${datasourceCount}">0</span></a>
+    <a class="tile" th:href="@{/admin/queries}"><span class="label">Queries</span><span class="num" th:text="${queryCount}">0</span></a>
+    <a class="tile" th:href="@{/admin/users}"><span class="label">Service-User</span><span class="num" th:text="${serviceUserCount}">0</span></a>
+    <a class="tile" th:href="@{/admin/accounts}"><span class="label">Technische Accounts</span><span class="num" th:text="${accountCount}">0</span></a>
+    <a class="tile" th:href="@{/admin/stats(period='24h')}"><span class="label">Ausführungen 24 h</span><span class="num" th:text="${summary.executions}">0</span>
+      <small th:text="${summary.errors} + ' Fehler, ' + ${#numbers.formatPercent(summary.cacheHitRatio(), 1, 0)} + ' aus Cache'"></small></a>
+    <a class="tile" th:href="@{/admin/cache}"><span class="label">Cache</span><span class="num" th:text="${cacheStats.entries}">0</span>
+      <small th:text="${#numbers.formatDecimal(cacheStats.bytes / 1048576.0, 1, 1)} + ' MB belegt'"></small></a>
+    <a class="tile warn" th:href="@{/admin/queries}" th:if="${!queriesWithoutSnapshot.isEmpty()}">
+      <span class="label">Ohne Schema-Snapshot</span><span class="num" th:text="${queriesWithoutSnapshot.size()}">0</span>
+      <small th:text="${#strings.listJoin(queriesWithoutSnapshot, ', ')}"></small></a>
+  </div>
+
   <h2>Zuletzt geändert</h2>
-  <table class="list" th:if="${!recentQueries.isEmpty()}">
-    <thead><tr><th>Query</th><th>Datenquelle</th><th>Version</th><th>Geändert</th></tr></thead>
+  <table class="list">
+    <thead><tr><th>Query</th><th>Datenquelle</th><th>Modus</th><th>Version</th><th>Snapshot</th><th>Geändert</th></tr></thead>
     <tbody>
     <tr th:each="q : ${recentQueries}">
-      <td><a th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a></td>
+      <td><a th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a>
+        <div class="muted" th:text="${q.description}"></div></td>
       <td th:text="${q.datasourceName}">demo</td>
+      <td><span class="badge plain" th:text="${q.executionMode}"></span></td>
       <td th:text="${q.version}">1</td>
+      <td><span th:class="${q.hasSnapshot()} ? 'badge ok' : 'badge warn'" th:text="${q.hasSnapshot()} ? ${q.columns.size()} + ' Spalten' : 'fehlt'"></span></td>
       <td th:text="${#temporals.format(q.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
     </tr>
+    <tr th:if="${recentQueries.isEmpty()}"><td colspan="6" class="empty">Noch keine Queries. <a th:href="@{/admin/queries/new}">Erste Query anlegen</a>.</td></tr>
     </tbody>
   </table>
-  <p class="muted" th:if="${recentQueries.isEmpty()}">Noch keine Queries. <a th:href="@{/admin/queries/new}">Erste Query anlegen</a>.</p>
 </main>
 </body>
 </html>

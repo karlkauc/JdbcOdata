@@ -38,7 +38,7 @@ wiederherstellen.
 
 - **Service-User** (Service-User → Neu): Präfix `svc_`, Passwort, Gruppen; danach pro Datenquelle
   DB-Zugangsdaten hinterlegen. „Pass-Through erzwingen“ ignoriert hinterlegte Zugangsdaten.
-- **Technische Accounts** (Techn. Accounts → Neu): DB-Konto je Datenquelle, Verbindung testen.
+- **Technische Accounts** (Technische Accounts → Neuer Account): DB-Konto je Datenquelle, Verbindung testen.
 - **Freigaben** im Query-Editor (nur FIXED): einzelne Service-User, Gruppen oder „alle authentifizierten“.
   Nicht freigegebene Aufrufer sehen die Query nicht.
 - PowerBI Service über Gateway: nur Service-User mit hinterlegten Zugangsdaten verwenden (PRD FR-32a).
@@ -56,7 +56,7 @@ Rohdaten mit Filter und CSV-Export. Audit: alle Konfigurationsänderungen mit Ad
 
 ## 6. Admin-Konten
 
-Admins → Konto anlegen (ADMIN oder VIEWER), Passwort ändern, deaktivieren. Mindestens ein aktiver ADMIN bleibt
+Admin-Konten → Konto anlegen (ADMIN oder VIEWER), Passwort ändern, deaktivieren. Mindestens ein aktiver ADMIN bleibt
 immer bestehen; das eigene Konto kann nicht gelöscht werden.
 
 ## 7. Seed-Datei

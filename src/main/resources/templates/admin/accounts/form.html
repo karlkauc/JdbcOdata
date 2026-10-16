@@ -3,19 +3,24 @@
 <body>
 <main>
   <div class="page-head">
-    <h1 th:text="${account == null} ? 'Neuer technischer Account' : 'Technischer Account ' + ${account.name}">Account</h1>
+    <div>
+      <p class="hint"><a th:href="@{/admin/accounts}">Technische Accounts</a></p>
+      <h1 th:text="${account == null} ? 'Neuer technischer Account' : ${account.name}">Account</h1>
+      <p class="lead" th:if="${account != null}" th:text="${account.description}"></p>
+    </div>
     <form th:if="${account != null}" th:action="@{/admin/accounts/{id}/delete(id=${account.id})}" method="post" onsubmit="return confirm('Account wirklich löschen?')">
       <button type="submit" class="danger">Löschen</button>
     </form>
   </div>
   <form th:object="${form}" th:action="${account == null} ? @{/admin/accounts} : @{/admin/accounts/{id}(id=${account.id})}" method="post" class="card">
+    <h2>Konto</h2>
     <div class="grid2">
       <label>Name <input type="text" th:field="*{name}" required><span class="field-error" th:errors="*{name}"></span></label>
       <label>Datenquelle <select th:field="*{datasourceId}" required>
         <option th:each="ds : ${datasources}" th:value="${ds.id}" th:text="${ds.name}"></option></select>
         <span class="field-error" th:errors="*{datasourceId}"></span></label>
       <label class="span2">Beschreibung <input type="text" th:field="*{description}"></label>
-      <label>DB-User <input type="text" th:field="*{dbUsername}" class="mono" required><span class="field-error" th:errors="*{dbUsername}"></span></label>
+      <label>DB-User <input type="text" th:field="*{dbUsername}" class="mono" required autocomplete="off"><span class="field-error" th:errors="*{dbUsername}"></span></label>
       <label><span th:text="${account == null} ? 'DB-Passwort' : 'DB-Passwort (leer = unverändert)'">DB-Passwort</span>
         <input type="password" th:field="*{dbPassword}" autocomplete="new-password"></label>
     </div>
@@ -24,7 +29,7 @@
       <a class="button" th:href="@{/admin/accounts}">Zurück</a>
       <button type="button" th:if="${account != null}" th:attr="hx-post=@{/admin/accounts/{id}/test(id=${account.id})}" hx-target="#test-result" hx-swap="innerHTML">Verbindung testen</button>
     </div>
-    <div id="test-result"></div>
+    <div id="test-result" style="margin-top:14px"></div>
   </form>
 </main>
 </body>

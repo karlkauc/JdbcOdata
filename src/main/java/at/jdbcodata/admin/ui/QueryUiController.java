@@ -142,9 +142,9 @@ public class QueryUiController {
         QueryDefinition q = queryService.require(id);
         try {
             q = snapshotService.snapshot(q, identity(dbUser, dbPassword), testParams(all));
-            model.addAttribute("message", "Snapshot erstellt: " + q.columns().size() + " Spalten.");
+            model.addAttribute("snapshotMessage", "Snapshot erstellt: " + q.columns().size() + " Spalten.");
         } catch (InvalidRequestException | DbAuthenticationException | DbExecutionException e) {
-            model.addAttribute("error", e.getMessage());
+            model.addAttribute("snapshotError", e.getMessage());
         }
         model.addAttribute("query", q);
         return "admin/queries/columns";

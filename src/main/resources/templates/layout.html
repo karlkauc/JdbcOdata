@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title th:text="${title} + ' · JdbcOdata'">JdbcOdata</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h8' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" th:href="@{/css/admin.css}">
   <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/lib/codemirror.css}">
   <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/theme/eclipse.css}">
@@ -12,29 +13,56 @@
   <script th:src="@{/webjars/codemirror/5.65.21/mode/sql/sql.js}"></script>
   <script th:src="@{/js/admin.js}" defer></script>
 </head>
-<body th:attr="hx-headers='{&quot;X-CSRF-TOKEN&quot;: &quot;' + (${_csrf} != null ? ${_csrf.token} : '') + '&quot;}'">
-<header class="topbar">
-  <a class="brand" th:href="@{/admin}">JdbcOdata</a>
-  <nav>
-    <a th:href="@{/admin/datasources}">Datenquellen</a>
-    <a th:href="@{/admin/queries}">Queries</a>
-    <a th:href="@{/admin/users}">Service-User</a>
-    <a th:href="@{/admin/accounts}">Techn. Accounts</a>
-    <a th:href="@{/admin/cache}">Cache</a>
-    <a th:href="@{/admin/stats}">Statistik</a>
-    <a th:href="@{/admin/audit}">Audit</a>
-    <a th:href="@{/admin/admins}">Admins</a>
-    <a th:href="@{/admin/settings}">Einstellungen</a>
+<body class="app" th:attr="hx-headers='{&quot;X-CSRF-TOKEN&quot;: &quot;' + (${_csrf} != null ? ${_csrf.token} : '') + '&quot;}'">
+<aside class="sidebar"><div class="sidebar-inner">
+  <a class="brand" th:href="@{/admin}">
+    <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h8"/></svg></span>
+    <span>JdbcOdata<small>OData-Feeds für Excel und PowerBI</small></span>
+  </a>
+  <nav th:with="p=${currentPath ?: ''}">
+    <div class="nav-group">
+      <a th:href="@{/admin}" th:classappend="${p == '/admin' or p == '/admin/'} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Übersicht</a>
+    </div>
+    <div class="nav-group"><span>Daten</span>
+      <a th:href="@{/admin/datasources}" th:classappend="${#strings.startsWith(p, '/admin/datasources')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Datenquellen</a>
+      <a th:href="@{/admin/queries}" th:classappend="${#strings.startsWith(p, '/admin/queries')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/></svg>Queries</a>
+    </div>
+    <div class="nav-group"><span>Identität</span>
+      <a th:href="@{/admin/users}" th:classappend="${#strings.startsWith(p, '/admin/users') or #strings.startsWith(p, '/admin/groups')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.4.6 3.5 2.6 3.5 6"/></svg>Service-User</a>
+      <a th:href="@{/admin/accounts}" th:classappend="${#strings.startsWith(p, '/admin/accounts')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4.5"/><path d="M11.5 11.5 20 3m-3 3 3 3m-6 0 2.5 2.5"/></svg>Technische Accounts</a>
+    </div>
+    <div class="nav-group"><span>Betrieb</span>
+      <a th:href="@{/admin/cache}" th:classappend="${#strings.startsWith(p, '/admin/cache')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5"/></svg>Cache</a>
+      <a th:href="@{/admin/stats}" th:classappend="${#strings.startsWith(p, '/admin/stats')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Statistik</a>
+      <a th:href="@{/admin/audit}" th:classappend="${#strings.startsWith(p, '/admin/audit')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h3"/></svg>Audit-Log</a>
+    </div>
+    <div class="nav-group"><span>System</span>
+      <a th:href="@{/admin/admins}" th:classappend="${#strings.startsWith(p, '/admin/admins')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg>Admin-Konten</a>
+      <a th:href="@{/admin/settings}" th:classappend="${#strings.startsWith(p, '/admin/settings')} ? 'active'">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Einstellungen</a>
+    </div>
   </nav>
-  <div class="user" th:if="${currentUser != null}">
-    <span th:text="${currentUser}">admin</span>
+  <div class="sidebar-foot" th:if="${currentUser != null}">
+    <span class="avatar" th:text="${#strings.substring(currentUser, 0, 1)}">a</span>
+    <span class="who"><strong th:text="${currentUser}">admin</strong><small>angemeldet</small></span>
     <form th:action="@{/logout}" method="post" class="inline"><button type="submit" class="link">Abmelden</button></form>
   </div>
-</header>
-<main class="container">
-  <div class="flash ok" th:if="${message}" th:text="${message}"></div>
-  <div class="flash err" th:if="${error}" th:text="${error}"></div>
-  <th:block th:replace="${main}"/>
-</main>
+</div></aside>
+<div class="main">
+  <main class="container">
+    <div class="flash ok" th:if="${message}" th:text="${message}"></div>
+    <div class="flash err" th:if="${error}" th:text="${error}"></div>
+    <th:block th:replace="${main}"/>
+  </main>
+</div>
 </body>
 </html>
