@@ -1,0 +1,85 @@
+# Wird beim Start von JdbcOdata geladen (JDBCODATA_SEED_FILE=/app/config/seed.yml): legt die Datenquelle und die
+# Queries an bzw. aktualisiert sie per Name. Der Schema-Snapshot wird mit excel_demo erstellt; das Passwort kommt
+# aus der Container-Umgebung (DEMO_READER_PASSWORD).
+datasources:
+  - name: demo_postgres
+    description: Demo-PostgreSQL (Container demo-db) mit Beispieldaten im Schema verkauf
+    jdbcUrl: jdbc:postgresql://demo-db:5432/demo
+    driverClass: org.postgresql.Driver
+    timezone: Europe/Vienna
+    defaultTimeoutSec: 60
+    maxRows: 200000
+    maxConcurrent: 8
+
+queries:
+  - name: Kunden
+    description: Kundenstammdaten (Row-Level-Security in der DB entscheidet, welche Kunden ein User sieht)
+    datasource: demo_postgres
+    sql: |
+      SELECT id AS "KundeId", name AS "Name", region AS "Region", land AS "Land",
+             branche AS "Branche", kunde_seit AS "KundeSeit"
+      FROM verkauf.kunden
+      ORDER BY id
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}
+
+  - name: Produkte
+    description: Produktliste mit Kategorie und Listenpreis
+    datasource: demo_postgres
+    sql: |
+      SELECT id AS "ProduktId", bezeichnung AS "Bezeichnung", kategorie AS "Kategorie", listenpreis AS "Listenpreis"
+      FROM verkauf.produkte
+      ORDER BY id
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}
+
+  - name: Umsatz
+    description: Umsatz auf Positionsebene für ein Jahr (Parameter p_jahr)
+    datasource: demo_postgres
+    sql: |
+      SELECT "PositionId", "BestellungId", "Bestelldatum", "Jahr", "Monat", "Status",
+             "KundeId", "Kunde", "Region", "Land", "Produkt", "Kategorie", "Menge", "Einzelpreis", "Betrag"
+      FROM verkauf.v_umsatz
+      WHERE "Jahr" = :p_jahr
+      ORDER BY "PositionId"
+    parameters:
+      - name: p_jahr
+        type: INT
+        required: false
+        default: "2025"
+        description: Geschäftsjahr
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}
+
+  - name: UmsatzProMonat
+    description: Umsatz je Monat, Region und Kategorie für ein Jahr (Parameter p_jahr), ohne stornierte Bestellungen
+    datasource: demo_postgres
+    sql: |
+      SELECT "Jahr", "Monat", "Region", "Kategorie",
+             COUNT(DISTINCT "BestellungId") AS "Bestellungen",
+             SUM("Menge")                   AS "Menge",
+             SUM("Betrag")                  AS "Umsatz"
+      FROM verkauf.v_umsatz
+      WHERE "Jahr" = :p_jahr AND "Status" <> 'STORNIERT'
+      GROUP BY "Jahr", "Monat", "Region", "Kategorie"
+      ORDER BY "Jahr", "Monat", "Region", "Kategorie"
+    parameters:
+      - name: p_jahr
+        type: INT
+        required: false
+        default: "2025"
+        description: Geschäftsjahr
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}

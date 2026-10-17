@@ -61,6 +61,31 @@ docker compose logs -f jdbcodata
 Update: `JDBCODATA_VERSION` in `.env` erhöhen, `docker compose pull && docker compose up -d --build`.
 Flyway migriert das Schema beim Start.
 
+## Apache als Reverse Proxy
+
+Statt Caddy kann ein vorhandener Apache (oder nginx, Traefik, IIS) TLS terminieren. Der Service läuft dann mit
+`JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP=true` und `SERVER_FORWARD_HEADERS_STRATEGY=framework` nur auf
+`127.0.0.1`, der Proxy setzt `X-Forwarded-Proto`, `X-Forwarded-Port` und `X-Forwarded-For`. Ein komplettes
+Beispiel mit Docker-Stack, Let's-Encrypt-Zertifikat und Demo-PostgreSQL liegt unter
+`deploy/odata.status20.net/` (vHost in `apache/odata.status20.net.conf`).
+
+Für OData-URLs sind zwei Apache-Einstellungen Pflicht, sonst zerlegt der Proxy `$filter`, Klammern und
+prozentkodierte Zeichen:
+
+```apache
+AllowEncodedSlashes NoDecode
+ProxyPreserveHost On
+ProxyPass        /actuator/ !
+ProxyPass        / http://127.0.0.1:18085/ nocanon disablereuse=On
+ProxyPassReverse / http://127.0.0.1:18085/
+RequestHeader set X-Forwarded-Proto "https"
+RequestHeader set X-Forwarded-Port  "443"
+```
+
+`/actuator/` bleibt intern; `/actuator/health` nutzt nur der Docker-Healthcheck. Der Hostname darf `odata`
+enthalten (z. B. `odata.firma.at`): der Service reicht Olingo den Pfad so weiter, dass die Suche nach dem
+Servlet-Pfad im Hostnamen keine Rolle spielt.
+
 ## Metadaten-DB
 
 | | H2 (Default) | PostgreSQL |

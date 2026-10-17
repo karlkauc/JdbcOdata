@@ -81,6 +81,9 @@ docker compose up -d --build    # Caddy (TLS, Port 443) + JdbcOdata + PostgreSQL
 docker compose -f docker-compose.demo.yml up -d   # nur Demo: ein Container, H2, Port 8080
 ```
 
+Hinter einem vorhandenen Apache mit Let's Encrypt und einer Demo-PostgreSQL mit Beispieldaten: siehe
+`deploy/odata.status20.net/README.md`.
+
 ### Tests
 
 `./mvnw verify` führt Unit- und Integrationstests aus (H2 in-memory, kein Docker nötig) und bricht ab, wenn die
@@ -111,6 +114,7 @@ JdbcOdata/
 ├── bin/                  # Start-Skripte für das Distributions-ZIP
 ├── contrib/              # systemd-Unit, WinSW, Beispiel-Konfiguration, Seed-Beispiel
 ├── docker/               # Dockerfile, docker-compose.yml (Caddy + PostgreSQL), docker-compose.demo.yml
+├── deploy/               # Deployment-Beispiel: Host-Apache + Docker-Stack + Demo-PostgreSQL (odata.status20.net)
 ├── e2e/                  # Playwright-Browser-Check und Screenshots
 └── pom.xml
 ```

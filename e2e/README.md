@@ -28,3 +28,7 @@ Statistik, Einstellungen, Query-Liste, Cache, Audit-Log, Admin-Konten sowie die 
 `screenshots/before/` hält den Stand von Release 1.0.0 vor dem UI-Polishing; `screenshots/compare.html` zeigt
 beide Stände nebeneinander (einfach im Browser öffnen). Ein neuer Lauf schreibt nach `$PW_DIR/shots`; zum
 Aktualisieren von dort kopieren.
+
+`14-live-status20-dashboard.png` und `15-live-status20-queries.png` stammen nicht aus `check.mjs`, sondern aus dem
+Live-Deployment `https://odata.status20.net` (siehe `deploy/odata.status20.net/`): Übersicht mit der Datenquelle
+`demo_postgres` und die Query-Liste mit den vier PostgreSQL-Queries, aufgenommen durch den Host-Apache.

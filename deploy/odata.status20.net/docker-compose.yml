@@ -1,0 +1,78 @@
+# Demo-Deployment für odata.status20.net: JdbcOdata hinter dem Host-Apache (TLS dort),
+# PostgreSQL als Metadaten-DB und eine zweite PostgreSQL mit Beispieldaten.
+# Secrets kommen aus .env (siehe .env.example), nie aus dieser Datei.
+name: jdbcodata-status20
+
+services:
+  jdbcodata:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+    image: jdbcodata:${JDBCODATA_VERSION:-1.0.0}
+    container_name: jdbcodata-status20
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18085:8080"      # nur lokal, der Host-Apache proxyt odata.status20.net hierher
+    environment:
+      JDBCODATA_ADMIN_USER: ${JDBCODATA_ADMIN_USER:-admin}
+      JDBCODATA_ADMIN_PASSWORD: ${JDBCODATA_ADMIN_PASSWORD:?JDBCODATA_ADMIN_PASSWORD in .env setzen}
+      JDBCODATA_MASTER_KEY: ${JDBCODATA_MASTER_KEY:?JDBCODATA_MASTER_KEY in .env setzen (Base64, 32 Bytes)}
+      JDBCODATA_META_URL: jdbc:postgresql://meta-db:5432/jdbcodata
+      JDBCODATA_META_USERNAME: jdbcodata
+      JDBCODATA_META_PASSWORD: ${META_DB_PASSWORD:?META_DB_PASSWORD in .env setzen}
+      JDBCODATA_SEED_FILE: /app/config/seed.yml
+      JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP: "true"   # TLS endet am Host-Apache
+      SERVER_FORWARD_HEADERS_STRATEGY: framework    # X-Forwarded-* vom Apache auswerten
+      DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:?DEMO_READER_PASSWORD in .env setzen}   # für den Schema-Snapshot im Seed
+      TZ: Europe/Vienna
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75}
+    volumes:
+      - app-data:/app/data
+      - ./config:/app/config:ro
+    depends_on:
+      meta-db:
+        condition: service_healthy
+      demo-db:
+        condition: service_healthy
+
+  meta-db:
+    image: postgres:16-alpine
+    container_name: jdbcodata-status20-meta-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jdbcodata
+      POSTGRES_USER: jdbcodata
+      POSTGRES_PASSWORD: ${META_DB_PASSWORD:?META_DB_PASSWORD in .env setzen}
+    volumes:
+      - meta-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jdbcodata -d jdbcodata"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  demo-db:
+    image: postgres:16-alpine
+    container_name: jdbcodata-status20-demo-db
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5440:5432"       # nur lokal, für psql-Inspektion
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: demo_admin
+      POSTGRES_PASSWORD: ${DEMO_ADMIN_PASSWORD:?DEMO_ADMIN_PASSWORD in .env setzen}
+      DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:?DEMO_READER_PASSWORD in .env setzen}
+      DEMO_NORD_PASSWORD: ${DEMO_NORD_PASSWORD:?DEMO_NORD_PASSWORD in .env setzen}
+    volumes:
+      - demo-data:/var/lib/postgresql/data
+      - ./demo-db:/docker-entrypoint-initdb.d:ro   # läuft nur beim ersten Start (leeres Volume)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo_admin -d demo"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  app-data:
+  meta-data:
+  demo-data:
