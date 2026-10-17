@@ -8,8 +8,11 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import org.apache.olingo.commons.api.data.Entity;
 import org.apache.olingo.commons.api.data.Property;
 import org.apache.olingo.commons.api.edm.EdmEnumType;
@@ -18,24 +21,141 @@ import org.apache.olingo.commons.api.edm.EdmType;
 import org.apache.olingo.commons.api.http.HttpStatusCode;
 import org.apache.olingo.server.api.ODataApplicationException;
 import org.apache.olingo.server.api.uri.UriResource;
+import org.apache.olingo.server.api.uri.UriResourceCount;
+import org.apache.olingo.server.api.uri.UriResourceLambdaAll;
+import org.apache.olingo.server.api.uri.UriResourceLambdaAny;
+import org.apache.olingo.server.api.uri.UriResourceLambdaVariable;
+import org.apache.olingo.server.api.uri.UriResourceNavigation;
 import org.apache.olingo.server.api.uri.UriResourcePrimitiveProperty;
+import org.apache.olingo.server.api.uri.queryoption.expression.Binary;
 import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind;
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
 import org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitException;
 import org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitor;
 import org.apache.olingo.server.api.uri.queryoption.expression.Literal;
 import org.apache.olingo.server.api.uri.queryoption.expression.Member;
+import org.apache.olingo.server.api.uri.queryoption.expression.Method;
 import org.apache.olingo.server.api.uri.queryoption.expression.MethodKind;
+import org.apache.olingo.server.api.uri.queryoption.expression.Unary;
 import org.apache.olingo.server.api.uri.queryoption.expression.UnaryOperatorKind;
 
-/** Evaluates an OData expression against one entity. Values are canonicalised via {@link FilterValues}. */
+/**
+ * Evaluates an OData expression against one entity. Values are canonicalised via {@link FilterValues}.
+ *
+ * <p>Member paths may follow navigation properties when a {@link NavigationResolver} is given: single-valued
+ * navigations ({@code Kunde/Region}), chains of them, {@code any}/{@code all} lambdas over collections
+ * ({@code Umsaetze/any(u: u/Betrag gt 1000)}) and {@code Umsaetze/$count}. Because Olingo's {@code Member.accept}
+ * hands lambdas to the visitor without the path that leads to the collection, {@link #evaluate} walks the
+ * expression tree itself instead of using {@code accept}.
+ */
 final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
 
     private static final Locale LOCALE = Locale.ENGLISH;
+    /** Value of a single-valued navigation that leads to an entity, so {@code Kunde eq null} / {@code ne null} work. */
+    static final Object RELATED_ENTITY = new Object() {
+        @Override
+        public String toString() {
+            return "related entity";
+        }
+    };
     private final Entity entity;
+    private final NavigationResolver navigation;
+    private final Map<String, Entity> lambdaVariables;
 
     EntityExpressionVisitor(Entity entity) {
+        this(entity, null, Map.of());
+    }
+
+    EntityExpressionVisitor(Entity entity, NavigationResolver navigation) {
+        this(entity, navigation, Map.of());
+    }
+
+    private EntityExpressionVisitor(Entity entity, NavigationResolver navigation, Map<String, Entity> lambdaVariables) {
         this.entity = entity;
+        this.navigation = navigation;
+        this.lambdaVariables = lambdaVariables;
+    }
+
+    /** Evaluates {@code expr}; use this instead of {@code expr.accept(visitor)} so lambdas keep their path. */
+    Object evaluate(Expression expr) throws ExpressionVisitException, ODataApplicationException {
+        if (expr instanceof Member m) {
+            return member(m);
+        }
+        if (expr instanceof Binary b) {
+            if (b.getOperator() == BinaryOperatorKind.IN) {
+                List<Object> right = new ArrayList<>();
+                for (Expression e : b.getExpressions()) right.add(evaluate(e));
+                return visitBinaryOperator(b.getOperator(), evaluate(b.getLeftOperand()), right);
+            }
+            return visitBinaryOperator(b.getOperator(), evaluate(b.getLeftOperand()), evaluate(b.getRightOperand()));
+        }
+        if (expr instanceof Unary u) {
+            return visitUnaryOperator(u.getOperator(), evaluate(u.getOperand()));
+        }
+        if (expr instanceof Method m) {
+            List<Object> params = new ArrayList<>();
+            for (Expression e : m.getParameters()) params.add(evaluate(e));
+            return visitMethodCall(m.getMethod(), params);
+        }
+        return expr.accept(this);
+    }
+
+    private Object member(Member member) throws ExpressionVisitException, ODataApplicationException {
+        List<UriResource> parts = member.getResourcePath().getUriResourceParts();
+        Entity current = entity;
+        for (int i = 0; i < parts.size(); i++) {
+            UriResource part = parts.get(i);
+            boolean last = i == parts.size() - 1;
+            if (part instanceof UriResourceLambdaVariable v && i == 0) {
+                current = lambdaVariables.get(v.getVariableName());
+                if (current == null) throw bad("Unknown lambda variable '" + v.getVariableName() + "'");
+                if (last) throw unsupported("Comparing whole entities");
+                continue;
+            }
+            if (part instanceof UriResourcePrimitiveProperty prop) {
+                if (!last) throw unsupported("Paths below a primitive property");
+                Property property = current.getProperty(prop.getProperty().getName());
+                return property == null ? null : FilterValues.canonical(property.getValue());
+            }
+            if (part instanceof UriResourceNavigation nav) {
+                if (navigation == null) throw unsupported("Navigation in $filter and $orderby");
+                List<Entity> targets = navigation.navigate(current, nav.getProperty().getName());
+                if (!nav.isCollection()) {
+                    if (last) return targets.isEmpty() ? null : RELATED_ENTITY; // only meaningful against null
+                    if (targets.isEmpty()) return null; // like SQL: a missing related row compares as null
+                    current = targets.get(0);
+                    continue;
+                }
+                if (last) throw unsupported("Comparing collections; use any(), all() or /$count");
+                UriResource next = parts.get(i + 1);
+                if (next instanceof UriResourceLambdaAny any) {
+                    return lambda(targets, any.getLambdaVariable(), any.getExpression(), true);
+                }
+                if (next instanceof UriResourceLambdaAll all) {
+                    return lambda(targets, all.getLambdaVariable(), all.getExpression(), false);
+                }
+                if (next instanceof UriResourceCount) {
+                    return BigDecimal.valueOf(targets.size());
+                }
+                throw unsupported("Path segment " + next.getSegmentValue() + " after a collection navigation");
+            }
+            throw unsupported("Path segment " + part.getSegmentValue() + " in $filter and $orderby");
+        }
+        throw bad("Empty member path");
+    }
+
+    /** {@code any}: true if one element matches (false for an empty collection); {@code all}: true if none fails. */
+    private boolean lambda(List<Entity> elements, String variable, Expression body, boolean any)
+            throws ExpressionVisitException, ODataApplicationException {
+        if (body == null) return any ? !elements.isEmpty() : true; // any() without argument
+        for (Entity element : elements) {
+            Map<String, Entity> vars = new HashMap<>(lambdaVariables);
+            vars.put(variable, element);
+            boolean match = bool(new EntityExpressionVisitor(entity, navigation, vars).evaluate(body));
+            if (any && match) return true;
+            if (!any && !match) return false;
+        }
+        return !any;
     }
 
     @Override
@@ -192,12 +312,7 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
 
     @Override
     public Object visitMember(Member member) throws ExpressionVisitException, ODataApplicationException {
-        List<UriResource> parts = member.getResourcePath().getUriResourceParts();
-        if (parts.size() != 1 || !(parts.get(0) instanceof UriResourcePrimitiveProperty prop)) {
-            throw unsupported("Only direct property access is supported in $filter and $orderby");
-        }
-        Property property = entity.getProperty(prop.getProperty().getName());
-        return property == null ? null : FilterValues.canonical(property.getValue());
+        return member(member);
     }
 
     @Override
@@ -212,13 +327,14 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
 
     @Override
     public Object visitLambdaReference(String variableName) throws ExpressionVisitException, ODataApplicationException {
-        throw unsupported("Lambda expressions");
+        throw unsupported("Lambda variables outside a navigation path");
     }
 
     @Override
     public Object visitLambdaExpression(String lambdaFunction, String lambdaVariable, Expression expression)
             throws ExpressionVisitException, ODataApplicationException {
-        throw unsupported("Lambda expressions");
+        // Only reached through Member.accept, i.e. not via evaluate(); the collection path is unknown here.
+        throw unsupported("Lambda expressions outside a navigation path");
     }
 
     @Override

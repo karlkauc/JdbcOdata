@@ -26,19 +26,25 @@ final class QueryOptionsEvaluator {
     }
 
     static EntityCollection apply(List<Entity> entities, UriInfo uriInfo) throws ODataApplicationException {
+        return apply(entities, uriInfo, null);
+    }
+
+    /** With {@code navigation}, member paths in $filter/$orderby may follow navigation properties. */
+    static EntityCollection apply(List<Entity> entities, UriInfo uriInfo, NavigationResolver navigation)
+            throws ODataApplicationException {
         return apply(entities, uriInfo.getFilterOption(), uriInfo.getOrderByOption(), uriInfo.getSkipOption(),
-                uriInfo.getTopOption());
+                uriInfo.getTopOption(), navigation);
     }
 
     /** Same evaluation for the nested options of an {@code $expand} item. */
     static EntityCollection apply(List<Entity> entities, FilterOption filter, OrderByOption orderBy, SkipOption skipOption,
-                                  TopOption topOption) throws ODataApplicationException {
+                                  TopOption topOption, NavigationResolver navigation) throws ODataApplicationException {
         List<Entity> result = entities;
         if (filter != null) {
             Expression expr = filter.getExpression();
             List<Entity> filtered = new ArrayList<>();
             for (Entity e : entities) {
-                Object v = evaluate(expr, e);
+                Object v = evaluate(expr, e, navigation);
                 if (v instanceof Boolean b) {
                     if (b) filtered.add(e);
                 } else {
@@ -54,7 +60,7 @@ final class QueryOptionsEvaluator {
             for (OrderByItem item : items) {
                 Map<Entity, Object> perEntity = new IdentityHashMap<>();
                 for (Entity e : result) {
-                    perEntity.put(e, evaluate(item.getExpression(), e));
+                    perEntity.put(e, evaluate(item.getExpression(), e, navigation));
                 }
                 keys.add(perEntity);
             }
@@ -84,9 +90,9 @@ final class QueryOptionsEvaluator {
         return collection;
     }
 
-    private static Object evaluate(Expression expr, Entity e) throws ODataApplicationException {
+    private static Object evaluate(Expression expr, Entity e, NavigationResolver navigation) throws ODataApplicationException {
         try {
-            return expr.accept(new EntityExpressionVisitor(e));
+            return new EntityExpressionVisitor(e, navigation).evaluate(expr);
         } catch (ExpressionVisitException ex) {
             throw new ODataApplicationException("Invalid expression: " + ex.getMessage(),
                     HttpStatusCode.BAD_REQUEST.getStatusCode(), Locale.ENGLISH, ex);

@@ -29,7 +29,9 @@ Queries → Neue Query:
    eingetragen; mit **Partner** verweisen beide aufeinander. Beziehungen erscheinen im `$metadata` als
    NavigationProperties und machen die Zusammenhänge in OData-Werkzeugen, Excel und Power BI sichtbar.
    Clients können sie mit `$expand` mitladen, z. B. `/odata/Umsatz?$expand=Kunde` oder
-   `/odata/Kunden?$expand=Umsaetze($top=5;$orderby=Betrag desc)`.
+   `/odata/Kunden?$expand=Umsaetze($top=5;$orderby=Betrag desc)`. Auch in `$filter`/`$orderby` lassen sich
+   Beziehungen nutzen: `/odata/Umsatz?$filter=Kunde/Region eq 'Nord'`,
+   `/odata/Kunden?$filter=Umsaetze/any(u:u/Betrag gt 10000)` oder `$filter=Umsaetze/$count gt 50`.
 
 Jede Änderung an SQL, Parametern oder Datenquelle erzeugt eine Version; ältere Versionen lassen sich
 wiederherstellen.

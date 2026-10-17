@@ -127,6 +127,83 @@ class ExpandTest extends DemoProfileTest {
         }
     }
 
+    // --- navigation in $filter / $orderby ------------------------------------------------------------------
+
+    private static String enc(String s) {
+        return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    @Test
+    void filterOverToOneNavigation() throws Exception {
+        JsonNode all = odata("/odata/Sales?$select=RowId,customer&$expand=Customer($select=region)");
+        String region = null;
+        int expected = 0;
+        for (JsonNode row : all.get("value")) {
+            if (!row.get("Customer").isNull()) {
+                region = region == null ? row.get("Customer").get("region").asString() : region;
+            }
+        }
+        for (JsonNode row : all.get("value")) {
+            JsonNode c = row.get("Customer");
+            if (!c.isNull() && region.equals(c.get("region").asString())) expected++;
+        }
+        JsonNode filtered = odata("/odata/Sales?$count=true&$filter=" + enc("Customer/region eq '" + region + "'"));
+        assertThat(filtered.get("@odata.count").asInt()).isEqualTo(expected).isPositive();
+        HttpResponse<String> count = get("/odata/Sales/$count?$filter=" + enc("Customer/region eq '" + region + "'"), "demo", "demo");
+        assertThat(count.body()).isEqualTo(String.valueOf(expected));
+
+        // A missing related row compares as null (Alpha GmbH has no customer row).
+        JsonNode orphans = odata("/odata/Sales?$filter=" + enc("Customer eq null or Customer/customer eq null"));
+        assertThat(orphans.get("value")).isNotEmpty();
+        assertThat(orphans.get("value")).allSatisfy(r -> assertThat(r.get("customer").asString()).isEqualTo("Alpha GmbH"));
+        JsonNode negated = odata("/odata/Sales?$count=true&$filter=" + enc("not (Customer/customer eq null)"));
+        JsonNode alpha = odata("/odata/Sales?$count=true&$filter=" + enc("customer eq 'Alpha GmbH'"));
+        assertThat(negated.get("@odata.count").asInt()).isEqualTo(24 - alpha.get("@odata.count").asInt());
+    }
+
+    @Test
+    void orderByNavigationProperty() throws Exception {
+        JsonNode rows = odata("/odata/Sales?$filter=" + enc("customer ne 'Alpha GmbH'") + "&$orderby=" + enc("Customer/customer desc,RowId"));
+        String previous = null;
+        for (JsonNode row : rows.get("value")) {
+            String c = row.get("customer").asString();
+            if (previous != null) assertThat(c.compareTo(previous)).isLessThanOrEqualTo(0);
+            previous = c;
+        }
+    }
+
+    @Test
+    void anyAllAndCountOverCollectionNavigation() throws Exception {
+        JsonNode customers = odata("/odata/ExpCustomers?$expand=Sales($select=amount)");
+        java.math.BigDecimal threshold = new java.math.BigDecimal("1000");
+        int any = 0, all = 0, many = 0;
+        for (JsonNode c : customers.get("value")) {
+            boolean a = false, l = true;
+            for (JsonNode s : c.get("Sales")) {
+                boolean gt = s.get("amount").decimalValue().compareTo(threshold) > 0;
+                a |= gt;
+                l &= gt;
+            }
+            if (a) any++;
+            if (l) all++;
+            if (c.get("Sales").size() > 3) many++;
+        }
+        assertThat(odata("/odata/ExpCustomers?$count=true&$filter=" + enc("Sales/any(s:s/amount gt 1000)")).get("@odata.count").asInt())
+                .isEqualTo(any);
+        assertThat(odata("/odata/ExpCustomers?$count=true&$filter=" + enc("Sales/all(s:s/amount gt 1000)")).get("@odata.count").asInt())
+                .isEqualTo(all);
+        assertThat(odata("/odata/ExpCustomers?$count=true&$filter=" + enc("Sales/$count gt 3")).get("@odata.count").asInt())
+                .isEqualTo(many);
+        // Lambda bodies may navigate further and nest: customers with a sale whose customer is themselves.
+        assertThat(odata("/odata/ExpCustomers?$count=true&$filter="
+                + enc("Sales/any(s:s/Customer/customer eq 'Beta AG')")).get("@odata.count").asInt()).isEqualTo(1);
+        // Navigation filters also work inside $expand.
+        JsonNode nested = odata("/odata/ExpCustomers?$top=1&$expand=Sales($filter=" + enc("Customer/region ne null") + ")");
+        assertThat(nested.get("value").get(0).get("Sales").size()).isPositive();
+        // Comparing a collection directly is rejected.
+        assertThat(get("/odata/ExpCustomers?$filter=" + enc("Sales eq null"), "demo", "demo").statusCode()).isIn(400, 501);
+    }
+
     @Test
     void nestedExpandStarAndLimits() throws Exception {
         JsonNode nested = odata("/odata/Sales?$top=3&$filter=customer%20ne%20'Alpha%20GmbH'&$expand=Customer($expand=Sales($top=1))");

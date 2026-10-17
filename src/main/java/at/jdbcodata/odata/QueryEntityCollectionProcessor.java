@@ -103,7 +103,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         Execution exec = execute(entitySet.getName(), custom, req.getRawQueryPath());
         executions.put(exec.query().name(), exec);
         EntityCollection collection = QueryOptionsEvaluator.apply(
-                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo);
+                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo, navigationResolver(custom));
         // Only the requested page is expanded, after $filter/$orderby/$skip/$top of the outer collection.
         if (uriInfo.getExpandOption() != null) {
             expand(collection.getEntities(), exec.query(), uriInfo.getExpandOption(), custom, 1);
@@ -133,9 +133,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
-        Execution exec = execute(entitySet.getName(), customOptions(uriInfo), req.getRawQueryPath());
+        Map<String, String> custom = customOptions(uriInfo);
+        Execution exec = execute(entitySet.getName(), custom, req.getRawQueryPath());
+        executions.put(exec.query().name(), exec);
         EntityCollection collection = QueryOptionsEvaluator.apply(
-                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo);
+                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo, navigationResolver(custom));
         byte[] body = String.valueOf(collection.getCount()).getBytes(StandardCharsets.UTF_8);
         response.setContent(new ByteArrayInputStream(body));
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
@@ -188,11 +190,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     throw new ODataApplicationException("Navigation property '" + navName
                             + "' has no join columns and cannot be expanded", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
                 }
-                Execution target = executions.get(relation.targetQuery());
-                if (target == null) {
-                    target = execute(relation.targetQuery(), custom, "$expand=" + navName + " from " + source.name());
-                    executions.put(relation.targetQuery(), target);
-                }
+                Execution target = target(relation, custom, "$expand=" + navName + " from " + source.name());
                 RelationJoin join = new RelationJoin(relation, EntityMapper.toEntities(target.query(), target.table()));
 
                 // Matches per source entity; nested options are applied per collection, nested $expand once on
@@ -204,7 +202,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     List<Entity> matches = join.matches(e);
                     if (relation.toMany()) {
                         EntityCollection c = QueryOptionsEvaluator.apply(matches, item.getFilterOption(),
-                                item.getOrderByOption(), item.getSkipOption(), item.getTopOption());
+                                item.getOrderByOption(), item.getSkipOption(), item.getTopOption(), navigationResolver(custom));
                         inlineSets.put(e, c);
                         c.getEntities().forEach(t -> distinct.put(t, Boolean.TRUE));
                     } else if (!matches.isEmpty()) {
@@ -230,6 +228,50 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 }
             }
         }
+    }
+
+    /** The target query's execution, run at most once per request. */
+    private Execution target(QueryRelation relation, Map<String, String> custom, String why) throws ODataApplicationException {
+        Execution target = executions.get(relation.targetQuery());
+        if (target == null) {
+            target = execute(relation.targetQuery(), custom, why);
+            executions.put(relation.targetQuery(), target);
+        }
+        return target;
+    }
+
+    /** Joins for navigation in $filter/$orderby, per "Source/Navigation"; built once per request. */
+    private final Map<String, RelationJoin> filterJoins = new HashMap<>();
+
+    /**
+     * Resolver for navigation paths in $filter and $orderby ({@code Kunde/Region eq 'Nord'},
+     * {@code Umsaetze/any(u: u/Betrag gt 1000)}): executes the target like $expand does and joins in memory.
+     */
+    private NavigationResolver navigationResolver(Map<String, String> custom) {
+        return (source, navName) -> {
+            String sourceQuery = source.getType() == null ? null
+                    : source.getType().substring(source.getType().lastIndexOf('.') + 1);
+            String key = sourceQuery + "/" + navName;
+            RelationJoin join = filterJoins.get(key);
+            if (join == null) {
+                Execution sourceExec = executions.get(sourceQuery);
+                if (sourceExec == null) {
+                    throw new ODataApplicationException("Cannot navigate from '" + sourceQuery + "'",
+                            HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+                }
+                QueryRelation relation = sourceExec.query().relations().stream().filter(r -> r.name().equals(navName))
+                        .findFirst().orElseThrow(() -> new ODataApplicationException("Unknown navigation property '"
+                                + navName + "'", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE));
+                if (relation.localColumns().isEmpty() || relation.localColumns().size() != relation.targetColumns().size()) {
+                    throw new ODataApplicationException("Navigation property '" + navName
+                            + "' has no join columns and cannot be used in $filter", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+                }
+                Execution target = target(relation, custom, "$filter via " + key);
+                join = new RelationJoin(relation, EntityMapper.toEntities(target.query(), target.table()));
+                filterJoins.put(key, join);
+            }
+            return join.matches(source);
+        };
     }
 
     /** Navigation property names an expand item stands for ({@code *} = all of the source type). */
