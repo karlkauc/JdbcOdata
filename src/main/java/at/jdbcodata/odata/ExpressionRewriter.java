@@ -26,18 +26,163 @@ final class ExpressionRewriter {
     private static final Set<String> KEYWORDS = Set.of("and", "or", "not", "eq", "ne", "gt", "ge", "lt", "le", "add",
             "sub", "mul", "div", "divby", "mod", "has", "in", "true", "false", "null", "inf", "nan", "asc", "desc");
 
-    private int counter;
+    /** Alias placeholder for {@code case(...)}; its branches travel as custom option {@link #CASE_OPTION}N. */
+    static final String CASE_ALIAS = "@jdbcodata_case";
+    static final String CASE_OPTION = "jdbcodata-case";
 
-    private ExpressionRewriter() {
+    private int counter;
+    private int caseCounter;
+    /** Bodies of the {@code case(...)} expressions found, in placeholder order (index 0 = placeholder 1). */
+    private final List<String> cases = new ArrayList<>();
+
+    /** Type the expressions refer to (resolves simple property paths for case result types), may be null. */
+    private final org.apache.olingo.commons.api.edm.EdmStructuredType context;
+
+    ExpressionRewriter() {
+        this(null);
+    }
+
+    ExpressionRewriter(org.apache.olingo.commons.api.edm.EdmStructuredType context) {
+        this.context = context;
+    }
+
+    List<String> cases() {
+        return cases;
     }
 
     static String rewrite(String expression) {
+        return new ExpressionRewriter().expression(expression);
+    }
+
+    /** All rewrites for an expression option ($filter, $orderby, $apply, $compute, aliases). */
+    String expression(String expression) {
         if (expression == null || expression.isEmpty()) return expression;
-        ExpressionRewriter r = new ExpressionRewriter();
-        String s = r.lambdaColons(expression);
-        s = r.matchesPattern(s);
-        s = r.countWithOptions(s);
+        String s = lambdaColons(expression);
+        s = matchesPattern(s);
+        s = caseExpressions(s);
+        s = countWithOptions(s);
         return s;
+    }
+
+    // --- case ------------------------------------------------------------------------------------------------
+
+    /**
+     * {@code case(c1:v1,c2:v2)} (OData 4.01) becomes the undefined alias {@code @jdbcodata_caseN}: Olingo gives an
+     * undefined alias no type, so it fits anywhere; the evaluator parses the branches itself.
+     */
+    private String caseExpressions(String s) {
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (i < s.length()) {
+            char c = s.charAt(i);
+            if (c == '\'') {
+                int end = stringEnd(s, i);
+                out.append(s, i, end);
+                i = end;
+                continue;
+            }
+            if (startsWithWord(s, i, "case") && nextNonSpace(s, i + 4) == '(') {
+                int open = s.indexOf('(', i);
+                int close = closing(s, open);
+                String body = caseExpressions(s.substring(open + 1, close));
+                cases.add(body);
+                // Olingo needs a type for computed aliases and comparisons: cast to the type of the branch values.
+                out.append("cast(").append(CASE_ALIAS).append(++caseCounter).append(',').append(caseType(body)).append(')');
+                i = close + 1;
+                continue;
+            }
+            out.append(c);
+            i++;
+        }
+        return out.toString();
+    }
+
+    /** EDM type of the case result: from the first branch value whose type is evident. */
+    private String caseType(String body) {
+        List<String[]> branches;
+        try {
+            branches = caseBranches(body);
+        } catch (IllegalArgumentException e) {
+            return "Edm.String";
+        }
+        for (String[] b : branches) {
+            String t = valueType(b[1]);
+            if (t != null) return t;
+        }
+        return "Edm.String";
+    }
+
+    private String valueType(String v) {
+        String t = v.strip();
+        if (t.isEmpty() || t.equals("null")) return null;
+        if (t.startsWith("'")) return "Edm.String";
+        if (t.equals("true") || t.equals("false")) return "Edm.Boolean";
+        if (t.matches("-?\\d+")) return "Edm.Int64";
+        if (t.matches("-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?")) return "Edm.Decimal";
+        if (t.matches("\\d{4}-\\d{2}-\\d{2}")) return "Edm.Date";
+        if (t.matches("\\d{4}-\\d{2}-\\d{2}T.*")) return "Edm.DateTimeOffset";
+        if (t.matches("\\d{2}:\\d{2}(:\\d{2}(\\.\\d+)?)?")) return "Edm.TimeOfDay";
+        if (t.startsWith(CASE_ALIAS) || t.startsWith("cast(" + CASE_ALIAS)) {
+            int comma = t.lastIndexOf(',');
+            return comma > 0 ? t.substring(comma + 1, t.length() - 1) : null;
+        }
+        if (context != null && t.matches("[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*")) {
+            org.apache.olingo.commons.api.edm.EdmStructuredType type = context;
+            String[] segments = t.split("/");
+            for (int i = 0; i < segments.length; i++) {
+                if (i < segments.length - 1) {
+                    org.apache.olingo.commons.api.edm.EdmNavigationProperty nav = type.getNavigationProperty(segments[i]);
+                    if (nav == null || nav.isCollection()) return null;
+                    type = nav.getType();
+                } else {
+                    org.apache.olingo.commons.api.edm.EdmProperty p = type.getStructuralProperty(segments[i]);
+                    if (p != null && p.getType() != null) return p.getType().getFullQualifiedName().getFullQualifiedNameAsString();
+                }
+            }
+        }
+        if (t.matches("(?s).*\\b(add|sub|mul|div|divby|mod)\\b.*")) return "Edm.Decimal";
+        if (t.matches("(?s)^(tolower|toupper|trim|concat|substring)\\(.*")) return "Edm.String";
+        if (t.matches("(?s)^(length|indexof|year|month|day|hour|minute|second)\\(.*")) return "Edm.Int32";
+        if (t.matches("(?s)^(round|floor|ceiling)\\(.*")) return "Edm.Decimal";
+        return null;
+    }
+
+    /**
+     * Branches of a case body: {@code [condition, value]} pairs. The separator is a colon on nesting level 0 that
+     * does not belong to a time literal ({@code 10:30}); write blanks around it when a condition ends with a
+     * two-digit number and the value starts with one.
+     */
+    static List<String[]> caseBranches(String body) {
+        List<String[]> branches = new ArrayList<>();
+        for (String branch : split(body, ',')) {
+            int colon = caseColon(branch);
+            if (colon < 0) throw new IllegalArgumentException("case branch without ':' – " + branch.strip());
+            branches.add(new String[] {branch.substring(0, colon).strip(), branch.substring(colon + 1).strip()});
+        }
+        return branches;
+    }
+
+    private static int caseColon(String b) {
+        int depth = 0;
+        int i = 0;
+        while (i < b.length()) {
+            char c = b.charAt(i);
+            if (c == '\'') {
+                i = stringEnd(b, i);
+                continue;
+            }
+            if (c == '(') depth++;
+            if (c == ')') depth--;
+            if (c == ':' && depth == 0) {
+                boolean spaced = (i > 0 && Character.isWhitespace(b.charAt(i - 1)))
+                        || (i + 1 < b.length() && Character.isWhitespace(b.charAt(i + 1)));
+                boolean time = i >= 2 && i + 2 < b.length() + 1 && Character.isDigit(b.charAt(i - 1)) && Character.isDigit(b.charAt(i - 2))
+                        && i + 2 <= b.length() - 1 && Character.isDigit(b.charAt(i + 1)) && Character.isDigit(b.charAt(i + 2));
+                if (spaced || !time) return i;
+            }
+            i++;
+        }
+        return -1;
     }
 
     /**
@@ -45,9 +190,13 @@ final class ExpressionRewriter {
      * inside nested expression options ({@code $filter=}, {@code $orderby=}, {@code $compute=}, {@code $apply=}).
      */
     static String rewriteExpand(String expand) {
+        return new ExpressionRewriter().expandOption(expand);
+    }
+
+    String expandOption(String expand) {
         if (expand == null || expand.isEmpty()) return expand;
-        ExpressionRewriter r = new ExpressionRewriter();
-        String s = r.matchesPattern(r.lambdaColons(expand));
+        ExpressionRewriter r = this;
+        String s = r.caseExpressions(r.matchesPattern(r.lambdaColons(expand)));
         StringBuilder out = new StringBuilder();
         int i = 0;
         while (i < s.length()) {

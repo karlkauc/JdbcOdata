@@ -169,7 +169,8 @@ public class ODataServlet extends HttpServlet {
         String prefix = req.getContextPath() + req.getServletPath();
         String uri = req.getRequestURI();
         String original = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
-        String odataPath = KeySegmentRewriter.rewrite(original, edm);
+        PathFilterRewriter.Result pathFilters = PathFilterRewriter.extract(original);
+        String odataPath = KeySegmentRewriter.rewrite(pathFilters.path(), edm);
         boolean singleEntity = "GET".equals(req.getMethod()) && KeySegmentRewriter.addressesSingleEntity(odataPath, edm);
         // Olingo takes the base URI as request URL minus OData path, so the URL must end with the rewritten path.
         String url = req.getRequestURL().toString();
@@ -198,7 +199,8 @@ public class ODataServlet extends HttpServlet {
 
             @Override
             public String getQueryString() {
-                return QueryRewriter.rewrite(super.getQueryString(), singleEntity);
+                return QueryRewriter.rewrite(PathFilterRewriter.mergeIntoQuery(super.getQueryString(), pathFilters.filters()),
+                        singleEntity, KeySegmentRewriter.targetType(odataPath, edm));
             }
         };
     }

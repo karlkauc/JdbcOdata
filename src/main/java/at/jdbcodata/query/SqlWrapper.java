@@ -9,16 +9,22 @@ import java.util.List;
  * whose values follow the query's own parameters.
  */
 public record SqlWrapper(SqlDialect dialect, String where, List<Object> whereBinds, String orderBy, Integer offset,
-                         Integer fetch) {
+                         Integer fetch, String select, String groupBy) {
 
     public SqlWrapper {
-        whereBinds = whereBinds == null ? List.of() : List.copyOf(whereBinds);
+        whereBinds = whereBinds == null ? List.of() : java.util.Collections.unmodifiableList(new ArrayList<>(whereBinds));
+    }
+
+    public SqlWrapper(SqlDialect dialect, String where, List<Object> whereBinds, String orderBy, Integer offset, Integer fetch) {
+        this(dialect, where, whereBinds, orderBy, offset, fetch, null, null);
     }
 
     /** The wrapped SQL for {@code querySql} (already in JDBC form with {@code ?} for the query parameters). */
     public String rows(String querySql) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM (").append(querySql).append(") jdbcodata_q");
+        StringBuilder sql = new StringBuilder("SELECT ").append(select == null || select.isBlank() ? "*" : select)
+                .append(" FROM (").append(querySql).append(") jdbcodata_q");
         if (where != null && !where.isBlank()) sql.append(" WHERE ").append(where);
+        if (groupBy != null && !groupBy.isBlank()) sql.append(" GROUP BY ").append(groupBy);
         if (orderBy != null && !orderBy.isBlank()) sql.append(" ORDER BY ").append(orderBy);
         if (offset != null || fetch != null) {
             if (dialect == SqlDialect.MYSQL) {

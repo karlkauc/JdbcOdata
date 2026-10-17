@@ -140,13 +140,16 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
                         tag(CAPABILITIES, "BatchSupported", true),
                         tag(CAPABILITIES, "KeyAsSegmentSupported", true),
                         tag(CAPABILITIES, "CrossJoinSupported", true),
-                        tag(CAPABILITIES, "AsynchronousRequestsSupported", false)));
+                        tag(CAPABILITIES, "AsynchronousRequestsSupported", false),
+                        stringCollection(AGGREGATION + ".CustomAggregationMethods",
+                                ApplyEvaluator.CUSTOM_METHODS.stream().map(m -> NAMESPACE + "." + m).toList())));
     }
 
     // --- vocabulary annotations ($metadata documentation and capabilities) -------------------------------------
 
     public static final String CORE = "Org.OData.Core.V1";
     public static final String CAPABILITIES = "Org.OData.Capabilities.V1";
+    public static final String AGGREGATION = "Org.OData.Aggregation.V1";
 
     /** Terms used here; Olingo writes an annotation only when its term resolves. */
     private static final Map<String, String> TERMS = Map.ofEntries(
@@ -165,7 +168,10 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             Map.entry(CAPABILITIES + ".ExpandRestrictions", CAPABILITIES + ".ExpandRestrictionsType"),
             Map.entry(CAPABILITIES + ".InsertRestrictions", CAPABILITIES + ".InsertRestrictionsType"),
             Map.entry(CAPABILITIES + ".UpdateRestrictions", CAPABILITIES + ".UpdateRestrictionsType"),
-            Map.entry(CAPABILITIES + ".DeleteRestrictions", CAPABILITIES + ".DeleteRestrictionsType"));
+            Map.entry(CAPABILITIES + ".DeleteRestrictions", CAPABILITIES + ".DeleteRestrictionsType"),
+            Map.entry(AGGREGATION + ".ApplySupported", AGGREGATION + ".ApplySupportedType"),
+            Map.entry(AGGREGATION + ".CustomAggregationMethods", "Collection(" + AGGREGATION + ".QualifiedName)"),
+            Map.entry(AGGREGATION + ".RecursiveHierarchy", AGGREGATION + ".RecursiveHierarchyType"));
 
     @Override
     public org.apache.olingo.commons.api.edm.provider.CsdlTerm getTerm(FullQualifiedName termName) {
@@ -177,7 +183,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
     /** {@code $metadata} references to the vocabularies, with the usual aliases. */
     public static List<org.apache.olingo.commons.api.edmx.EdmxReference> vocabularyReferences() {
         List<org.apache.olingo.commons.api.edmx.EdmxReference> refs = new ArrayList<>();
-        for (String[] v : new String[][] {{CORE, "Core"}, {CAPABILITIES, "Capabilities"}}) {
+        for (String[] v : new String[][] {{CORE, "Core"}, {CAPABILITIES, "Capabilities"}, {AGGREGATION, "Aggregation"}}) {
             org.apache.olingo.commons.api.edmx.EdmxReference ref = new org.apache.olingo.commons.api.edmx.EdmxReference(
                     java.net.URI.create("https://oasis-tcs.github.io/odata-vocabularies/vocabularies/" + v[0] + ".xml"));
             ref.addInclude(new org.apache.olingo.commons.api.edmx.EdmxReferenceInclude(v[0], v[1]));
@@ -188,8 +194,43 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
 
     private CsdlEntityType annotatedType(QueryDefinition q) {
         CsdlEntityType type = buildType(q).setNavigationProperties(navigationProperties(q));
-        if (q.description() != null && !q.description().isBlank()) type.setAnnotations(List.of(description(q.description())));
+        List<org.apache.olingo.commons.api.edm.provider.CsdlAnnotation> annotations = new ArrayList<>();
+        if (q.description() != null && !q.description().isBlank()) annotations.add(description(q.description()));
+        annotations.addAll(recursiveHierarchies(q));
+        type.setAnnotations(annotations);
         return type;
+    }
+
+    /**
+     * {@code Aggregation.RecursiveHierarchy#<Relation>} for every to-one relation of a query to itself with one
+     * column pair: the local column is the parent reference, the target column the node property. The relation
+     * name is the hierarchy qualifier for ancestors/descendants/traverse.
+     */
+    private List<org.apache.olingo.commons.api.edm.provider.CsdlAnnotation> recursiveHierarchies(QueryDefinition q) {
+        List<org.apache.olingo.commons.api.edm.provider.CsdlAnnotation> out = new ArrayList<>();
+        for (QueryRelation r : visibleRelations(q)) {
+            if (r.toMany() || !q.name().equals(r.targetQuery()) || r.targetColumns().size() != 1) continue;
+            List<org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue> values = List.of(
+                    new org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue().setProperty("NodeProperty")
+                            .setValue(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyPath().setValue(r.targetColumns().get(0))),
+                    new org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue().setProperty("ParentNavigationProperty")
+                            .setValue(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlNavigationPropertyPath().setValue(r.name())));
+            out.add(new org.apache.olingo.commons.api.edm.provider.CsdlAnnotation().setTerm(AGGREGATION + ".RecursiveHierarchy")
+                    .setQualifier(r.name())
+                    .setExpression(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlRecord()
+                            .setType(AGGREGATION + ".RecursiveHierarchyType").setPropertyValues(values)));
+        }
+        return out;
+    }
+
+    private static org.apache.olingo.commons.api.edm.provider.CsdlAnnotation stringCollection(String term, List<String> items) {
+        List<org.apache.olingo.commons.api.edm.provider.annotation.CsdlExpression> list = new ArrayList<>();
+        for (String i : items) {
+            list.add(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression(
+                    org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression.ConstantExpressionType.String, i));
+        }
+        return new org.apache.olingo.commons.api.edm.provider.CsdlAnnotation().setTerm(term)
+                .setExpression(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlCollection().setItems(list));
     }
 
     static org.apache.olingo.commons.api.edm.provider.CsdlAnnotation description(String text) {
@@ -243,6 +284,22 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         a.add(tag(CAPABILITIES, "TopSupported", true));
         a.add(tag(CAPABILITIES, "SkipSupported", true));
         a.add(tag(CAPABILITIES, "IndexableByKey", true));
+        List<org.apache.olingo.commons.api.edm.provider.annotation.CsdlExpression> transformations = new ArrayList<>();
+        for (String t : List.of("aggregate", "groupby", "concat", "identity", "filter", "search", "orderby", "top", "skip",
+                "compute", "expand", "topcount", "topsum", "toppercent", "bottomcount", "bottomsum", "bottompercent",
+                "join", "outerjoin", "nest", "ancestors", "descendants", "traverse")) {
+            transformations.add(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression(
+                    org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression.ConstantExpressionType.String, t));
+        }
+        a.add(new org.apache.olingo.commons.api.edm.provider.CsdlAnnotation().setTerm(AGGREGATION + ".ApplySupported")
+                .setExpression(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlRecord()
+                        .setType(AGGREGATION + ".ApplySupportedType").setPropertyValues(List.of(
+                                new org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue().setProperty("Transformations")
+                                        .setValue(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlCollection().setItems(transformations)),
+                                new org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue().setProperty("Rollup")
+                                        .setValue(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression(
+                                                org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression.ConstantExpressionType.EnumMember,
+                                                AGGREGATION + ".RollupType/MultipleHierarchies"))))));
         return a;
     }
 

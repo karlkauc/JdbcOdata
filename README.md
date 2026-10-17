@@ -76,9 +76,11 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 - **Suche und Aggregation:** `$search`, `$apply` (`groupby` mit `rollup`, `aggregate` mit `from` und Inline-Aggregaten,
   `topcount`, …) und `$compute` werden in-memory ausgewertet; dazu `$levels`, `$ref`, `$all`, `$crossjoin`,
   `cast`/`isof`/`$it`/`$root`.
-- **Push-Down (pro Query):** `$filter`, `$orderby`, `$top`, `$skip` und `$count` laufen auf Wunsch als SQL in der
+- **Push-Down (pro Query):** `$filter`, `$search`, `$orderby`, `$top`, `$skip`, `$count` und einfache `$apply`-Gruppierungen laufen auf Wunsch als SQL in der
   Datenbank (PostgreSQL, H2, Oracle, MySQL/MariaDB), Nicht-Übersetzbares weiter in-memory; Header `X-Push-Down`.
-- **4.01-Schreibweisen:** `matchesPattern`, `Umsaetze/$count($filter=…)`, Schlüssel als Pfadsegment (`Kunden/1`) und
+- **Weitere `$apply`-Transformationen:** `join`/`outerjoin`, `nest`, Hierarchien (`ancestors`, `descendants`, `traverse`), die
+  Transformation `expand` und eigene Aggregationsmethoden (`JdbcOdata.median`, `stddev`, `variance`).
+- **4.01-Schreibweisen:** `case(…)`, `$filter` als Pfadsegment, `matchesPattern`, `Umsaetze/$count($filter=…)`, Schlüssel als Pfadsegment (`Kunden/1`) und
   Leerzeichen nach dem Lambda-Doppelpunkt, die Olingo 5 selbst nicht parst, werden vorher umgeschrieben.
 - **Parameter als Funktion:** Queries mit Parametern sind auch als `GetUmsatz(p_jahr=2024)` aufrufbar, komponierbar
   mit Schlüssel, Navigation, `$count` und allen Optionen.

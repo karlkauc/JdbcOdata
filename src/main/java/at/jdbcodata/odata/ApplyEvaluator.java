@@ -1,5 +1,7 @@
 package at.jdbcodata.odata;
 
+import org.apache.olingo.server.api.uri.queryoption.ExpandItem;
+import org.apache.olingo.server.api.uri.queryoption.ExpandOption;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -101,6 +103,8 @@ final class ApplyEvaluator {
                 return groupBy(in, (GroupBy) item);
             case BOTTOM_TOP:
                 return bottomTop(in, (BottomTop) item);
+            case EXPAND:
+                return expand(in, ((org.apache.olingo.server.api.uri.queryoption.apply.Expand) item).getExpandOption());
             default:
                 throw unsupported("$apply transformation " + item.getKind().name().toLowerCase(LOCALE));
         }
@@ -125,7 +129,6 @@ final class ApplyEvaluator {
     private Entity aggregate(List<Entity> in, Aggregate aggregate) throws ODataApplicationException {
         Entity result = new Entity();
         for (AggregateExpression a : aggregate.getExpressions()) {
-            if (a.getCustomMethod() != null) throw unsupported("Custom aggregation methods");
             AggregateExpression inline = a.getInlineAggregateExpression();
             if (inline != null) {
                 // Umsaetze(Betrag with sum as S): aggregate over the related rows of all input rows.
@@ -149,6 +152,14 @@ final class ApplyEvaluator {
         boolean navigationCount = a.getExpression() == null && path != null && !path.isEmpty()
                 && path.get(path.size() - 1) instanceof UriResourceCount;
         AggregateExpression.StandardMethod method = a.getStandardMethod();
+        if (a.getCustomMethod() != null) {
+            if (!DynamicEdmProvider.NAMESPACE.equals(a.getCustomMethod().getNamespace())) {
+                throw unsupported("Aggregation method " + a.getCustomMethod().getFullQualifiedNameAsString());
+            }
+            List<Object> values = new ArrayList<>(rows.size());
+            for (Entity e : rows) values.add(value(a, e));
+            return customReduce(a.getCustomMethod().getName(), values);
+        }
         if (method == null) {
             if (!navigationCount) throw unsupported("Aggregation without 'with <method>'");
             method = AggregateExpression.StandardMethod.SUM; // Umsaetze/$count as N: related rows in total
@@ -416,12 +427,120 @@ final class ApplyEvaluator {
         throw bad("Expected a number");
     }
 
-    private static Entity copy(Entity e) {
+    static Entity copy(Entity e) {
         Entity c = new Entity();
         c.setType(e.getType());
         c.setId(e.getId());
         for (Property p : e.getProperties()) c.addProperty(p);
+        c.getNavigationLinks().addAll(e.getNavigationLinks());
         return c;
+    }
+
+    // --- expand transformation --------------------------------------------------------------------------------
+
+    /**
+     * {@code expand(Umsaetze,filter(Betrag gt 1000),expand(Produkt))}: every row keeps its place and gets the
+     * related rows (restricted by the nested filter, expanded further by the nested expand) attached.
+     */
+    private List<Entity> expand(List<Entity> in, ExpandOption option) throws ODataApplicationException {
+        if (option == null) return in;
+        if (navigation == null) throw unsupported("expand in $apply");
+        List<Entity> out = new ArrayList<>(in.size());
+        for (Entity e : in) {
+            Entity copy = copy(e);
+            for (ExpandItem item : option.getExpandItems()) {
+                List<UriResource> parts = item.getResourcePath() == null ? List.of() : item.getResourcePath().getUriResourceParts();
+                if (parts.size() != 1 || !(parts.get(0) instanceof UriResourceNavigation nav)) {
+                    throw unsupported("expand transformation other than over one navigation property");
+                }
+                String name = nav.getProperty().getName();
+                List<Entity> targets = navigation.navigate(e, name);
+                if (item.getFilterOption() != null) {
+                    targets = QueryOptionsEvaluator.apply(targets, item.getFilterOption(), null, null, null, navigation).getEntities();
+                }
+                if (item.getExpandOption() != null) targets = expand(targets, item.getExpandOption());
+                copy.getNavigationLinks().removeIf(l -> name.equals(l.getTitle()));
+                copy.getNavigationLinks().add(nav.getProperty().isCollection() ? ApplyLink.collection(name, targets)
+                        : ApplyLink.single(name, targets.isEmpty() ? null : targets.get(0)));
+            }
+            out.add(copy);
+        }
+        return out;
+    }
+
+    // --- custom aggregation methods ---------------------------------------------------------------------------
+
+    /** Custom aggregation methods ({@code Betrag with JdbcOdata.median as M}), declared in $metadata. */
+    static final List<String> CUSTOM_METHODS = List.of("median", "stddev", "stddevp", "variance", "variancep");
+
+    static Object customReduce(String method, List<Object> values) throws ODataApplicationException {
+        List<BigDecimal> numbers = new ArrayList<>();
+        for (Object v : values) {
+            if (v == null) continue;
+            if (!(v instanceof BigDecimal bd)) throw bad(method + " needs numeric values");
+            numbers.add(bd);
+        }
+        if (numbers.isEmpty()) return null;
+        java.math.MathContext mc = new java.math.MathContext(20, RoundingMode.HALF_UP);
+        switch (method) {
+            case "median": {
+                List<BigDecimal> sorted = new ArrayList<>(numbers);
+                sorted.sort(null);
+                int n = sorted.size();
+                BigDecimal m = n % 2 == 1 ? sorted.get(n / 2)
+                        : sorted.get(n / 2 - 1).add(sorted.get(n / 2)).divide(BigDecimal.valueOf(2), 10, RoundingMode.HALF_UP);
+                return m.stripTrailingZeros();
+            }
+            case "stddev", "stddevp", "variance", "variancep": {
+                boolean population = method.endsWith("p");
+                int n = numbers.size();
+                if (!population && n < 2) return null;
+                BigDecimal mean = numbers.stream().reduce(BigDecimal.ZERO, BigDecimal::add).divide(BigDecimal.valueOf(n), mc);
+                BigDecimal squares = BigDecimal.ZERO;
+                for (BigDecimal x : numbers) squares = squares.add(x.subtract(mean).pow(2, mc), mc);
+                BigDecimal variance = squares.divide(BigDecimal.valueOf(population ? n : n - 1), mc);
+                BigDecimal result = method.startsWith("stddev") ? variance.sqrt(mc) : variance;
+                return result.setScale(10, RoundingMode.HALF_UP).stripTrailingZeros();
+            }
+            default:
+                throw bad("Aggregation method " + DynamicEdmProvider.NAMESPACE + "." + method
+                        + " (available: " + String.join(", ", CUSTOM_METHODS) + ")");
+        }
+    }
+
+    // --- grouping for extended pipelines ----------------------------------------------------------------------
+
+    /**
+     * {@code groupby((P1,P2))} without nested transformations, as groups: a row with the group properties and the
+     * member rows. Used when the nested transformations are evaluated elsewhere (join, nest, …).
+     */
+    Map<Entity, List<Entity>> groups(List<Entity> in, GroupBy groupBy) throws ODataApplicationException {
+        List<List<UriResource>> paths = new ArrayList<>();
+        for (GroupByItem g : groupBy.getGroupByItems()) {
+            if (g.getRollup() != null && !g.getRollup().isEmpty()) throw unsupported("rollup together with nest/join");
+            paths.add(g.getPath());
+        }
+        Map<List<Object>, List<Entity>> members = new LinkedHashMap<>();
+        Map<List<Object>, List<Object>> keyValues = new LinkedHashMap<>();
+        for (Entity e : in) {
+            List<Object> values = new ArrayList<>();
+            List<Object> key = new ArrayList<>();
+            for (List<UriResource> p : paths) {
+                Object v = path(p, e);
+                values.add(v);
+                key.add(normalized(v));
+            }
+            members.computeIfAbsent(key, k -> new ArrayList<>()).add(e);
+            keyValues.putIfAbsent(key, values);
+        }
+        Map<Entity, List<Entity>> out = new LinkedHashMap<>();
+        for (Map.Entry<List<Object>, List<Entity>> g : members.entrySet()) {
+            Entity row = new Entity();
+            List<Object> values = keyValues.get(g.getKey());
+            for (int i = 0; i < paths.size(); i++) set(row, name(paths.get(i)), values.get(i));
+            out.put(row, g.getValue());
+        }
+        return out;
     }
 
     private static void set(Entity e, String name, Object value) {

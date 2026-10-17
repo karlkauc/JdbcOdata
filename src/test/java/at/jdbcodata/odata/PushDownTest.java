@@ -6,6 +6,7 @@ import at.jdbcodata.testutil.DemoProfileTest;
 import java.net.URLEncoder;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -120,7 +121,7 @@ class PushDownTest extends DemoProfileTest {
                 .hasValue("filter(partial)");
         assertThat(both("PdSales", "?$filter=" + enc("region gt 'M'")).headers().firstValue("X-Push-Down")).isEmpty();
         assertThat(both("PdSales", "?$top=3").headers().firstValue("X-Push-Down")).hasValue("top");
-        assertThat(both("PdSales", "?$apply=" + enc("filter(amount gt 0)")).headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$apply=" + enc("filter(amount gt 0)")).headers().firstValue("X-Push-Down")).hasValue("apply:filter");
     }
 
     @ParameterizedTest
@@ -145,7 +146,7 @@ class PushDownTest extends DemoProfileTest {
         assertThat(both("PdSales", "?$filter=amount%20gt%203000&$orderby=id&$top=2&$count=true").headers().firstValue("X-Push-Down"))
                 .hasValue("filter,orderby,top,count");
         assertThat(both("PdSales", "?$filter=region%20gt%20'M'&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
-        assertThat(both("PdSales", "?$search=Beta&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$search=e&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
     }
 
     @ParameterizedTest
@@ -162,6 +163,84 @@ class PushDownTest extends DemoProfileTest {
         HttpResponse<String> r = both("PdSales/$count", "?$filter=region%20eq%20null");
         assertThat(r.headers().firstValue("X-Push-Down")).hasValue("filter,count");
         assertThat(r.body()).isEqualTo("6");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "?$search=Beta&$orderby=id",
+            "?$search=AG%20OR%20Nord&$orderby=id",
+            "?$search=NOT%20gmbh&$orderby=id",
+            "?$search=%22Beta%20AG%22%20AND%20S%C3%BCd&$orderby=id",
+            "?$search=e&$orderby=id",
+            "?$search=2025&$orderby=id",
+            "?$search=Beta&$filter=amount%20gt%205000&$orderby=amount&$top=3&$count=true",
+    })
+    void searchAnswersLikeInMemory(String q) throws Exception {
+        HttpResponse<String> pushed = both("PdSales", q);
+        assertThat(pushed.statusCode()).as(pushed.body()).isEqualTo(200);
+        assertThat(body(pushed)).as(q).isEqualTo(body(both("MemSales", q)));
+    }
+
+    @Test
+    void searchIsPushedOnlyWhenNoNumberOrDateCanMatch() throws Exception {
+        assertThat(both("PdSales", "?$search=Beta").headers().firstValue("X-Push-Down")).hasValue("search");
+        assertThat(both("PdSales", "?$search=Beta&$top=2").headers().firstValue("X-Push-Down")).hasValue("search,top");
+        assertThat(both("PdSales", "?$search=e").headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$search=2025").headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales/$count", "?$search=Beta").headers().firstValue("X-Push-Down")).hasValue("search,count");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "filter(amount gt 3000)/groupby((customer),aggregate(amount with sum as S,$count as N))|$orderby=customer",
+            "aggregate(amount with average as A,amount with min as Mi,amount with max as Ma,region with countdistinct as R,$count as N)|",
+            "groupby((region))|$orderby=region",
+            "groupby((customer,delivered),aggregate(amount with average as A))|$orderby=customer,delivered",
+            "groupby((sold_on),aggregate(amount with sum as S))|$orderby=sold_on",
+            "filter(contains(customer,'eta'))/orderby(amount desc)/top(3)|",
+            "search(Beta)/aggregate($count as N)|",
+            "filter(region eq null)/groupby((customer),aggregate(sale_month with max as M))|$orderby=customer",
+            "groupby((rollup(customer,region)),aggregate(amount with sum as S))|$orderby=customer,region",
+            "groupby((sold_at),aggregate(amount with sum as S))|$orderby=sold_at",
+            "filter(amount gt 3000)/groupby((customer),aggregate(amount with sum as S))|$filter=S gt 20000&$count=true",
+            "groupby((customer),aggregate(amount with JdbcOdata.median as M))|$orderby=customer",
+    })
+    void applyAnswersLikeInMemory(String spec) throws Exception {
+        String[] p = spec.split("\\|", -1);
+        String q = "?$apply=" + enc(p[0]) + (p[1].isEmpty() ? "" : "&" + p[1].replace(" ", "%20"));
+        HttpResponse<String> pushed = both("PdSales", q);
+        assertThat(pushed.statusCode()).as(pushed.body()).isEqualTo(200);
+        JsonNode a = body(pushed);
+        JsonNode b = body(both("MemSales", q));
+        if (p[1].contains("$orderby") || !a.get("value").isArray() || a.get("value").size() <= 1) {
+            assertThat(normalized(a)).as(spec).isEqualTo(normalized(b));
+        } else {
+            assertThat(java.util.Set.copyOf(rowsOf(normalized(a)))).as(spec).isEqualTo(java.util.Set.copyOf(rowsOf(normalized(b))));
+        }
+        assertThat(both("PdSales/$count", q).body()).isEqualTo(both("MemSales/$count", q).body());
+    }
+
+    /** Numbers compared by value (1.0 = 1.00). */
+    private JsonNode normalized(JsonNode n) throws Exception {
+        return json.readTree(n.toString().replaceAll("(\\d+)\\.0+(?=[,}\\]])", "$1").replaceAll("(\\d+\\.\\d*?)0+(?=[,}\\]])", "$1"));
+    }
+
+    private static List<String> rowsOf(JsonNode n) {
+        List<String> out = new java.util.ArrayList<>();
+        for (JsonNode r : n.get("value")) out.add(r.toString());
+        return out;
+    }
+
+    @Test
+    void applyPushDownHeader() throws Exception {
+        assertThat(both("PdSales", "?$apply=" + enc("filter(amount gt 3000)/groupby((customer),aggregate(amount with sum as S))"))
+                .headers().firstValue("X-Push-Down")).hasValue("apply:filter,groupby");
+        assertThat(both("PdSales", "?$apply=" + enc("aggregate(amount with average as A)")).headers().firstValue("X-Push-Down"))
+                .hasValue("apply:aggregate");
+        assertThat(both("PdSales", "?$apply=" + enc("filter(amount gt 3000)/top(2)")).headers().firstValue("X-Push-Down"))
+                .hasValue("apply:filter");
+        assertThat(both("PdSales", "?$apply=" + enc("groupby((sold_at))")).headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$apply=" + enc("groupby((rollup(customer,region)))")).headers().firstValue("X-Push-Down")).isEmpty();
     }
 
     @Test

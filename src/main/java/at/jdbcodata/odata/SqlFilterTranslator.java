@@ -250,6 +250,153 @@ final class SqlFilterTranslator {
         return new Value(new Sql(sql, arg.sql().binds()), false, type);
     }
 
+    // --- $search -------------------------------------------------------------------------------------------------
+
+    /**
+     * {@code $search} as {@code LOWER(col) LIKE '%term%'} over the string columns. In memory a term also matches the
+     * text of numbers, dates, times and booleans; the translation is only exact when no term could match such a
+     * text (only digits, '.', '-', ':', 't', 'z', or part of "true"/"false"), or when there are no such columns.
+     */
+    Sql search(org.apache.olingo.server.api.uri.queryoption.search.SearchExpression e) throws Untranslatable {
+        if (!dialect.supportsLike()) throw new Untranslatable("LIKE is case- and accent-insensitive on this database");
+        if (e instanceof org.apache.olingo.server.api.uri.queryoption.search.SearchBinary b) {
+            Sql l = search(b.getLeftOperand());
+            Sql r = search(b.getRightOperand());
+            boolean or = b.getOperator() == org.apache.olingo.server.api.uri.queryoption.search.SearchBinaryOperatorKind.OR;
+            return join("(" + l.text() + (or ? " OR " : " AND ") + r.text() + ")", l, r);
+        }
+        if (e instanceof org.apache.olingo.server.api.uri.queryoption.search.SearchUnary u) {
+            Sql inner = search(u.getOperand());
+            return new Sql("(CASE WHEN " + inner.text() + " THEN 0 ELSE 1 END = 1)", inner.binds());
+        }
+        if (e instanceof org.apache.olingo.server.api.uri.queryoption.search.SearchTerm t) {
+            String needle = unquoteSearch(t.getSearchTerm()).toLowerCase(java.util.Locale.ROOT);
+            if (needle.isEmpty()) return Sql.of("1=1");
+            boolean otherTypes = columns.values().stream().anyMatch(c -> !"Edm.String".equals(c.edmType()));
+            if (otherTypes && (needle.matches("[0-9.:\\-tz]+") || "true".contains(needle) || "false".contains(needle))) {
+                throw new Untranslatable("search term may match a number, date or boolean");
+            }
+            if (columns.values().stream().anyMatch(c -> "Edm.Binary".equals(c.edmType()))) throw new Untranslatable("binary column");
+            List<String> parts = new ArrayList<>();
+            List<Object> binds = new ArrayList<>();
+            String pattern = "%" + needle.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+            for (QueryColumn c : columns.values()) {
+                if (!"Edm.String".equals(c.edmType())) continue;
+                parts.add("LOWER(jdbcodata_q." + dialect.quote(c.name()) + ") LIKE ? ESCAPE '!'");
+                binds.add(pattern);
+            }
+            if (parts.isEmpty()) return Sql.of("1=0");
+            return new Sql("(CASE WHEN (" + String.join(" OR ", parts) + ") THEN 1 ELSE 0 END = 1)", binds);
+        }
+        throw new Untranslatable("search expression");
+    }
+
+    private static String unquoteSearch(String term) {
+        if (term == null) return "";
+        String t = term.strip();
+        if (t.length() >= 2 && t.startsWith("\"") && t.endsWith("\"")) {
+            t = t.substring(1, t.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\");
+        }
+        return t;
+    }
+
+    // --- $apply groupby/aggregate --------------------------------------------------------------------------------
+
+    /** One output column of a pushed aggregation. */
+    record Slot(String kind, String name, String label, String edmType) {
+    }
+
+    /** SELECT list, GROUP BY and how to read the result back. */
+    record Aggregation(String select, String groupBy, List<Slot> slots) {
+    }
+
+    private static final java.util.Set<String> GROUPABLE = java.util.Set.of("Edm.String", "Edm.Int16", "Edm.Int32",
+            "Edm.Int64", "Edm.Byte", "Edm.SByte", "Edm.Decimal", "Edm.Boolean", "Edm.Date");
+    private static final java.util.Set<String> SUMMABLE = java.util.Set.of("Edm.Int16", "Edm.Int32", "Edm.Int64",
+            "Edm.Byte", "Edm.SByte", "Edm.Decimal");
+
+    /**
+     * {@code groupby((P1,P2),aggregate(...))} or {@code aggregate(...)} over plain columns with sum, min, max,
+     * average, countdistinct and {@code $count}. Average is read as SUM and COUNT and divided like in memory;
+     * double columns are not summed (floating point sums differ), strings are not compared by min/max (collation).
+     */
+    Aggregation aggregation(List<List<UriResource>> groupPaths,
+                            List<org.apache.olingo.server.api.uri.queryoption.apply.AggregateExpression> aggregates)
+            throws Untranslatable {
+        List<String> select = new ArrayList<>();
+        List<String> group = new ArrayList<>();
+        List<Slot> slots = new ArrayList<>();
+        int n = 0;
+        for (List<UriResource> path : groupPaths) {
+            QueryColumn c = column(path);
+            if (!GROUPABLE.contains(c.edmType())) throw new Untranslatable("grouping by " + c.edmType());
+            if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) throw new Untranslatable("case-insensitive grouping");
+            String label = "g" + (++n);
+            String col = "jdbcodata_q." + dialect.quote(c.name());
+            select.add(col + " AS " + dialect.quote(label));
+            group.add(col);
+            slots.add(new Slot("group", c.propertyName(), label, c.edmType()));
+        }
+        int a = 0;
+        for (org.apache.olingo.server.api.uri.queryoption.apply.AggregateExpression agg : aggregates) {
+            List<UriResource> path = agg.getPath();
+            if (agg.getExpression() instanceof Member m) path = m.getResourcePath().getUriResourceParts(); // amount with sum
+            else if (agg.getExpression() != null) throw new Untranslatable("aggregate over an expression");
+            if (agg.getAlias() == null || agg.getCustomMethod() != null
+                    || agg.getInlineAggregateExpression() != null || (agg.getFrom() != null && !agg.getFrom().isEmpty())) {
+                throw new Untranslatable("aggregate expression");
+            }
+            String label = "a" + (++a);
+            if (agg.getStandardMethod() == null) {
+                if (path == null || path.size() != 1 || !(path.get(0) instanceof org.apache.olingo.server.api.uri.UriResourceCount)) {
+                    throw new Untranslatable("aggregate without method");
+                }
+                select.add("COUNT(*) AS " + dialect.quote(label));
+                slots.add(new Slot("count", agg.getAlias(), label, null));
+                continue;
+            }
+            QueryColumn c = column(path);
+            String col = "jdbcodata_q." + dialect.quote(c.name());
+            switch (agg.getStandardMethod()) {
+                case SUM -> {
+                    if (!SUMMABLE.contains(c.edmType())) throw new Untranslatable("sum of " + c.edmType());
+                    select.add("SUM(" + col + ") AS " + dialect.quote(label));
+                    slots.add(new Slot("sum", agg.getAlias(), label, null));
+                }
+                case AVERAGE -> {
+                    if (!SUMMABLE.contains(c.edmType())) throw new Untranslatable("average of " + c.edmType());
+                    select.add("SUM(" + col + ") AS " + dialect.quote(label + "s"));
+                    select.add("COUNT(" + col + ") AS " + dialect.quote(label + "c"));
+                    slots.add(new Slot("average", agg.getAlias(), label, null));
+                }
+                case MIN, MAX -> {
+                    if (!SUMMABLE.contains(c.edmType()) && !"Edm.Date".equals(c.edmType())) {
+                        throw new Untranslatable(agg.getStandardMethod() + " of " + c.edmType());
+                    }
+                    select.add(agg.getStandardMethod().name() + "(" + col + ") AS " + dialect.quote(label));
+                    slots.add(new Slot("minmax", agg.getAlias(), label, null));
+                }
+                case COUNT_DISTINCT -> {
+                    if (!GROUPABLE.contains(c.edmType())) throw new Untranslatable("countdistinct of " + c.edmType());
+                    if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) throw new Untranslatable("case-insensitive distinct");
+                    select.add("COUNT(DISTINCT " + col + ") AS " + dialect.quote(label));
+                    slots.add(new Slot("count", agg.getAlias(), label, null));
+                }
+                default -> throw new Untranslatable("method " + agg.getStandardMethod());
+            }
+        }
+        return new Aggregation(String.join(", ", select), String.join(", ", group), slots);
+    }
+
+    private QueryColumn column(List<UriResource> path) throws Untranslatable {
+        if (path == null || path.size() != 1 || !(path.get(0) instanceof UriResourcePrimitiveProperty p)) {
+            throw new Untranslatable("path");
+        }
+        QueryColumn c = columns.get(p.getProperty().getName());
+        if (c == null) throw new Untranslatable("not a result column");
+        return c;
+    }
+
     // --- $orderby -----------------------------------------------------------------------------------------------
 
     /**

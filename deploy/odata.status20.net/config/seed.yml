@@ -116,3 +116,44 @@ queries:
     snapshotCredentials:
       username: excel_demo
       password: ${DEMO_READER_PASSWORD}
+
+  - name: Organisation
+    description: Organisationseinheiten als Hierarchie (Beispiel für ancestors, descendants, traverse und $levels)
+    datasource: demo_postgres
+    sql: |
+      SELECT "OrgId", "ParentId", "Name", "Leitung"
+      FROM (VALUES
+        (1, CAST(NULL AS INT), 'Geschäftsführung', 'Anna Berger'),
+        (2, 1, 'Vertrieb', 'Markus Huber'),
+        (3, 1, 'Technik', 'Eva Gruber'),
+        (4, 1, 'Verwaltung', 'Peter Wagner'),
+        (5, 2, 'Vertrieb Nord', 'Lisa Hofer'),
+        (6, 2, 'Vertrieb Süd', 'Stefan Moser'),
+        (7, 2, 'Key Accounts', 'Julia Steiner'),
+        (8, 3, 'Entwicklung', 'Thomas Bauer'),
+        (9, 3, 'Betrieb', 'Sandra Leitner'),
+        (10, 8, 'Labor', 'Michael Pichler'),
+        (11, 4, 'Buchhaltung', 'Claudia Fuchs'),
+        (12, 4, 'Personal', 'Martin Eder')
+      ) AS t("OrgId", "ParentId", "Name", "Leitung")
+      ORDER BY "OrgId"
+    keyMode: COLUMNS
+    keyColumns: [OrgId]
+    relations:
+      - name: Uebergeordnet
+        target: Organisation
+        columns: {ParentId: OrgId}
+        partner: Untergeordnet
+        description: Übergeordnete Einheit (Hierarchie-Qualifier für ancestors/descendants/traverse)
+      - name: Untergeordnet
+        target: Organisation
+        columns: {OrgId: ParentId}
+        toMany: true
+        partner: Uebergeordnet
+        description: Direkt untergeordnete Einheiten
+    pushDown: true
+    cacheEnabled: true
+    cacheTtlSec: 3600
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}

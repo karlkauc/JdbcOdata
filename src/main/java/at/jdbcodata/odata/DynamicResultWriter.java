@@ -172,6 +172,12 @@ final class DynamicResultWriter {
             for (Property p : e.getProperties()) {
                 if (select == null || select.isEmpty() || select.contains(p.getName())) columns.add(p.getName());
             }
+            // aliases of join/nest and results of the expand transformation
+            for (Link l : e.getNavigationLinks()) {
+                if (l instanceof ApplyLink && (select == null || select.isEmpty() || select.contains(l.getTitle()))) {
+                    columns.add(l.getTitle());
+                }
+            }
         }
         return columns;
     }
@@ -215,6 +221,21 @@ final class DynamicResultWriter {
                 } else {
                     for (Link l : e.getNavigationLinks()) items.putIfAbsent(l.getTitle(), item); // $expand=*
                 }
+            }
+        }
+        for (Link l : e.getNavigationLinks()) {
+            if (!(l instanceof ApplyLink) || items.containsKey(l.getTitle()) || !columns.contains(l.getTitle())) continue;
+            g.writeName(l.getTitle());
+            if (l.getInlineEntitySet() != null) {
+                List<Entity> inline = l.getInlineEntitySet().getEntities();
+                Set<String> nestedColumns = columns(inline, Set.of());
+                g.writeStartArray();
+                for (Entity t : inline) writeEntity(g, t, nestedColumns, null, null, Map.of());
+                g.writeEndArray();
+            } else if (l.getInlineEntity() != null) {
+                writeEntity(g, l.getInlineEntity(), columns(List.of(l.getInlineEntity()), Set.of()), null, null, Map.of());
+            } else {
+                g.writeNull();
             }
         }
         for (Map.Entry<String, ExpandItem> entry : items.entrySet()) {

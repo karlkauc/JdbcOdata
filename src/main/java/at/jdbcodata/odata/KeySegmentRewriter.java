@@ -120,4 +120,31 @@ final class KeySegmentRewriter {
         }
         return single;
     }
+
+    /** Entity type of the resource the (rewritten) path addresses, or null (properties, $metadata, …). */
+    static EdmEntityType targetType(String path, Edm edm) {
+        if (edm == null || path == null || path.length() < 2 || !path.startsWith("/")) return null;
+        EdmEntityContainer container = edm.getEntityContainer();
+        if (container == null) return null;
+        String[] segments = path.substring(1).split("/", -1);
+        String first = QueryRewriter.decode(segments[0]);
+        if (first == null) return null;
+        int paren = first.indexOf('(');
+        String name = paren < 0 ? first : first.substring(0, paren);
+        EdmEntityType type;
+        EdmEntitySet set = container.getEntitySet(name);
+        EdmFunctionImport fn = set == null ? container.getFunctionImport(name) : null;
+        if (set != null) type = set.getEntityType();
+        else if (fn != null && fn.getReturnedEntitySet() != null) type = fn.getReturnedEntitySet().getEntityType();
+        else return null;
+        for (int i = 1; i < segments.length; i++) {
+            String seg = QueryRewriter.decode(segments[i]);
+            if (seg == null || seg.isEmpty() || seg.startsWith("$")) break;
+            int p = seg.indexOf('(');
+            EdmNavigationProperty nav = type.getNavigationProperty(p < 0 ? seg : seg.substring(0, p));
+            if (nav == null) return null;
+            type = nav.getType();
+        }
+        return type;
+    }
 }

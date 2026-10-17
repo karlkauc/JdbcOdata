@@ -493,6 +493,17 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
     /** {@code @name}: evaluates the alias value given in the query string (an expression or a literal). */
     @Override
     public Object visitAlias(String aliasName) throws ExpressionVisitException, ODataApplicationException {
+        String bare = aliasName.startsWith("@") ? aliasName : "@" + aliasName;
+        if (bare.startsWith(ExpressionRewriter.CASE_ALIAS) && navigation != null) {
+            List<Expression[]> branches = navigation.caseBranches(bare, entity);
+            if (branches != null) {
+                // case(c1:v1,…): the value of the first true condition, null when none is true
+                for (Expression[] b : branches) {
+                    if (Boolean.TRUE.equals(evaluate(b[0]))) return evaluate(b[1]);
+                }
+                return null;
+            }
+        }
         AliasQueryOption alias = navigation == null ? null : navigation.alias(aliasName);
         if (alias == null) throw bad("Parameter alias '" + aliasName + "' is not defined in the query string");
         if (alias.getValue() != null) return evaluate(alias.getValue());

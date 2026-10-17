@@ -140,6 +140,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
         }
         EdmEntitySet entitySet = r.entitySet();
+        if (custom.containsKey(EXTENDED_APPLY)) {
+            writeExtendedResult(req, response, uriInfo, r, custom, responseFormat);
+            return;
+        }
         if (uriInfo.getApplyOption() != null || hasNestedApply(uriInfo.getExpandOption())) {
             writeDynamicResult(req, response, uriInfo, r, custom, responseFormat);
             return;
@@ -194,6 +198,12 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (r.entities() == null) {
             throw new ODataApplicationException("$count needs a collection", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
         }
+        if (custom.containsKey(EXTENDED_APPLY)) {
+            Extended x = extended(uriInfo, r, custom);
+            byte[] body = String.valueOf(x.filtered().getCount()).getBytes(StandardCharsets.UTF_8);
+            respond(req, response, new ByteArrayInputStream(body), ContentType.TEXT_PLAIN.toContentTypeString(), r.root());
+            return;
+        }
         List<Entity> input = uriInfo.getApplyOption() == null ? r.entities()
                 : new ApplyEvaluator(navigationResolver(custom)).apply(r.entities(), uriInfo.getApplyOption());
         EntityCollection collection = QueryOptionsEvaluator.apply(input, uriInfo, navigationResolver(custom));
@@ -210,8 +220,15 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                                     Map<String, String> custom, ContentType responseFormat) throws ODataApplicationException {
         requireJson(responseFormat);
         EvaluationContext navigation = navigationResolver(custom);
-        List<Entity> applied = uriInfo.getApplyOption() == null ? r.entities()
-                : new ApplyEvaluator(navigation).apply(r.entities(), uriInfo.getApplyOption());
+        List<Entity> applied;
+        if (r.pushDown() != null && r.pushDown().applyPushed()) {
+            response.setHeader("X-Push-Down", r.pushDown().summary());
+            applied = r.pushDown().remainingApply() == null ? r.entities()
+                    : new ApplyEvaluator(navigation).apply(r.entities(), r.pushDown().remainingApply());
+        } else {
+            applied = uriInfo.getApplyOption() == null ? r.entities()
+                    : new ApplyEvaluator(navigation).apply(r.entities(), uriInfo.getApplyOption());
+        }
         EntityCollection filtered = QueryOptionsEvaluator.apply(applied, uriInfo, navigation);
         Page page = page(req, uriInfo, filtered.getEntities());
         applyPreference(response, page);
@@ -226,6 +243,106 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
         byte[] body = DynamicResultWriter.collection(context, page.rows(), count ? filtered.getCount() : null,
                 page.nextLink(), select, uriInfo.getExpandOption(), null, format);
+        respond(req, response, new ByteArrayInputStream(body), format.contentType(), r.root());
+    }
+
+    // --- extended $apply (join, outerjoin, nest, ancestors, descendants, traverse) -----------------------------------
+
+    static final String EXTENDED_APPLY = QueryRewriter.EXTENDED_PREFIX + "apply";
+
+    /** Result of an extended $apply with the options the servlet moved along with it. */
+    private record Extended(EntityCollection filtered, org.apache.olingo.server.api.uri.queryoption.SelectOption select,
+                            ExpandOption expand) {
+    }
+
+    private Extended extended(UriInfo uriInfo, Resolved r, Map<String, String> custom) throws ODataApplicationException {
+        EvaluationContext context = navigationResolver(custom);
+        ExtendedApply.Host host = new ExtendedApply.Host() {
+            @Override
+            public EvaluationContext context() {
+                return context;
+            }
+
+            @Override
+            public org.apache.olingo.server.api.uri.queryoption.ApplyOption parseApply(String text,
+                    org.apache.olingo.commons.api.edm.EdmStructuredType type) throws ODataApplicationException {
+                org.apache.olingo.commons.api.edm.EdmStructuredType dynamic =
+                        type instanceof org.apache.olingo.server.core.uri.queryoption.apply.DynamicStructuredType ? type
+                                : new org.apache.olingo.server.core.uri.queryoption.apply.DynamicStructuredType(type);
+                return parse(text, t -> new org.apache.olingo.server.core.uri.parser.ApplyParser(serviceMetadata.getEdm(), odata)
+                        .parse(t, dynamic, null, aliases));
+            }
+
+            @Override
+            public EdmEntityType entityType(String entitySet) {
+                EdmEntitySet set = serviceMetadata.getEdm().getEntityContainer().getEntitySet(entitySet);
+                return set == null ? null : set.getEntityType();
+            }
+
+            @Override
+            public org.apache.olingo.commons.api.edm.Edm edm() {
+                return serviceMetadata.getEdm();
+            }
+        };
+        ExtendedApply apply = new ExtendedApply(host, r.entitySet().getEntityType());
+        List<Entity> rows = apply.run(r.entities(), custom.get(EXTENDED_APPLY));
+        org.apache.olingo.commons.api.edm.EdmStructuredType type = apply.type();
+        String f = custom.get(QueryRewriter.EXTENDED_PREFIX + "filter");
+        String o = custom.get(QueryRewriter.EXTENDED_PREFIX + "orderby");
+        String sel = custom.get(QueryRewriter.EXTENDED_PREFIX + "select");
+        String exp = custom.get(QueryRewriter.EXTENDED_PREFIX + "expand");
+        org.apache.olingo.server.api.uri.queryoption.FilterOption filter = f == null ? null
+                : parse(f, t -> new org.apache.olingo.server.core.uri.parser.FilterParser(serviceMetadata.getEdm(), odata).parse(t, type, null, aliases));
+        org.apache.olingo.server.api.uri.queryoption.OrderByOption orderBy = o == null ? null
+                : parse(o, t -> new org.apache.olingo.server.core.uri.parser.OrderByParser(serviceMetadata.getEdm(), odata).parse(t, type, null, aliases));
+        org.apache.olingo.server.api.uri.queryoption.SelectOption select = sel == null ? null
+                : parse(sel, t -> new org.apache.olingo.server.core.uri.parser.SelectParser(serviceMetadata.getEdm()).parse(t, type, true));
+        ExpandOption expand = exp == null ? null
+                : parse(exp, t -> new org.apache.olingo.server.core.uri.parser.ExpandParser(serviceMetadata.getEdm(), odata, aliases, null).parse(t, type));
+        EntityCollection filtered = QueryOptionsEvaluator.apply(rows, uriInfo.getSearchOption(), filter, orderBy,
+                uriInfo.getSkipOption(), uriInfo.getTopOption(), context);
+        return new Extended(filtered, select, expand);
+    }
+
+    @FunctionalInterface
+    private interface ParseStep<T> {
+        T parse(org.apache.olingo.server.core.uri.parser.UriTokenizer tokenizer)
+                throws org.apache.olingo.server.core.uri.parser.UriParserException,
+                org.apache.olingo.server.core.uri.validator.UriValidationException;
+    }
+
+    private static <T> T parse(String text, ParseStep<T> step) throws ODataApplicationException {
+        try {
+            org.apache.olingo.server.core.uri.parser.UriTokenizer tokenizer = new org.apache.olingo.server.core.uri.parser.UriTokenizer(text);
+            T result = step.parse(tokenizer);
+            if (!tokenizer.next(org.apache.olingo.server.core.uri.parser.UriTokenizer.TokenKind.EOF)) {
+                throw new ODataApplicationException("Unexpected text in '" + text + "'", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+            }
+            return result;
+        } catch (org.apache.olingo.server.core.uri.parser.UriParserException
+                 | org.apache.olingo.server.core.uri.validator.UriValidationException e) {
+            throw new ODataApplicationException("Cannot parse '" + text + "': " + e.getMessage(),
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+    }
+
+    private void writeExtendedResult(ODataRequest req, ODataResponse response, UriInfo uriInfo, Resolved r,
+                                     Map<String, String> custom, ContentType responseFormat) throws ODataApplicationException {
+        requireJson(responseFormat);
+        Extended x = extended(uriInfo, r, custom);
+        Page page = page(req, uriInfo, x.filtered().getEntities());
+        applyPreference(response, page);
+        if (x.expand() != null) {
+            requireTyped(page.rows());
+            expand(page.rows(), r.query(), x.expand(), custom, 1);
+        }
+        java.util.Set<String> select = DynamicResultWriter.selected(x.select());
+        boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
+        String context = "$metadata#" + r.entitySet().getName() + "("
+                + DynamicResultWriter.contextSelectList(page.rows(), select, x.expand()) + ")";
+        DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
+        byte[] body = DynamicResultWriter.collection(context, page.rows(), count ? x.filtered().getCount() : null,
+                page.nextLink(), select, x.expand(), null, format);
         respond(req, response, new ByteArrayInputStream(body), format.contentType(), r.root());
     }
 
@@ -267,7 +384,12 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      * What went to the database: the wrapper, the $filter conjuncts that stay in memory, and a summary for the
      * {@code X-Push-Down} header.
      */
-    private record PushDown(SqlWrapper wrapper, List<Expression> residual, boolean countOnly, String summary) {
+    private record PushDown(SqlWrapper wrapper, List<Expression> residual, boolean countOnly, String summary,
+                            boolean searchPushed, boolean applyPushed,
+                            org.apache.olingo.server.api.uri.queryoption.ApplyOption remainingApply) {
+        PushDown(SqlWrapper wrapper, List<Expression> residual, boolean countOnly, String summary) {
+            this(wrapper, residual, countOnly, summary, false, false, null);
+        }
     }
 
     /**
@@ -286,7 +408,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         boolean keyed = parts.get(0) instanceof UriResourceEntitySet es ? !es.getKeyPredicates().isEmpty()
                 : parts.get(0) instanceof UriResourceFunction fn && !fn.getKeyPredicates().isEmpty();
         if (rootSet == null || keyed) return null;
-        if (uriInfo.getApplyOption() != null || hasNestedApply(uriInfo.getExpandOption())) return null;
+        if (hasNestedApply(uriInfo.getExpandOption()) || custom.containsKey(EXTENDED_APPLY)) return null;
         QueryDefinition query = support.queryService().findEnabledByName(rootSet.getName()).orElse(null);
         if (query == null || !query.pushDown() || query.keyMode() != KeyMode.COLUMNS) return null;
         List<String> keys = query.columns().stream().filter(c -> c.visible() && c.key()).map(QueryColumn::propertyName).toList();
@@ -296,6 +418,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (dialect == null) return null;
 
         SqlFilterTranslator translator = new SqlFilterTranslator(query, dialect, navigationResolver(custom));
+        if (uriInfo.getApplyOption() != null) return pushApply(uriInfo, custom, req, query, rootSet, dialect, translator);
         List<String> where = new ArrayList<>();
         List<Object> binds = new ArrayList<>();
         List<Expression> residual = new ArrayList<>();
@@ -310,7 +433,18 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 }
             }
         }
-        boolean complete = residual.isEmpty() && uriInfo.getSearchOption() == null;
+        boolean searchPushed = false;
+        if (uriInfo.getSearchOption() != null && uriInfo.getSearchOption().getSearchExpression() != null) {
+            try {
+                SqlFilterTranslator.Sql sql = translator.search(uriInfo.getSearchOption().getSearchExpression());
+                where.add(sql.text());
+                binds.addAll(sql.binds());
+                searchPushed = true;
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                // stays in memory
+            }
+        }
+        boolean complete = residual.isEmpty() && (uriInfo.getSearchOption() == null || searchPushed);
         boolean paging = !countEndpoint && complete && (uriInfo.getTopOption() != null || uriInfo.getSkipOption() != null);
         SqlFilterTranslator.Sql order = null;
         if (paging) {
@@ -340,7 +474,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         executions.put(query.name(), root);
         List<String> summary = new ArrayList<>();
-        if (!where.isEmpty()) summary.add(residual.isEmpty() ? "filter" : "filter(partial)");
+        if (uriInfo.getFilterOption() != null && where.size() > (searchPushed ? 1 : 0)) {
+            summary.add(residual.isEmpty() ? "filter" : "filter(partial)");
+        }
+        if (searchPushed) summary.add("search");
         if (paging) {
             if (uriInfo.getOrderByOption() != null) summary.add("orderby");
             if (uriInfo.getSkipOption() != null) summary.add("skip");
@@ -349,7 +486,112 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (countOnly || withCount) summary.add("count");
         List<Entity> entities = countOnly ? List.of() : EntityMapper.toEntities(query, root.table());
         return new Resolved(root, query, rootSet, entities, null,
-                new PushDown(wrapper, residual, countOnly, String.join(",", summary)));
+                new PushDown(wrapper, residual, countOnly, String.join(",", summary), searchPushed, false, null));
+    }
+
+    /**
+     * $apply: leading {@code filter}/{@code search} steps become the WHERE clause, a following simple
+     * {@code aggregate} or {@code groupby} the SELECT list and GROUP BY; the remaining steps and all options after
+     * $apply run in memory on the (much smaller) result.
+     */
+    private Resolved pushApply(UriInfo uriInfo, Map<String, String> custom, ODataRequest req, QueryDefinition query,
+                               EdmEntitySet rootSet, SqlDialect dialect, SqlFilterTranslator translator)
+            throws ODataApplicationException {
+        List<org.apache.olingo.server.api.uri.queryoption.ApplyItem> items = uriInfo.getApplyOption().getApplyItems();
+        List<String> where = new ArrayList<>();
+        List<Object> binds = new ArrayList<>();
+        List<String> summary = new ArrayList<>();
+        int i = 0;
+        for (; i < items.size(); i++) {
+            org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
+            try {
+                SqlFilterTranslator.Sql sql;
+                if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Filter f) {
+                    sql = translator.predicate(f.getFilterOption().getExpression());
+                    summary.add("filter");
+                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Search se) {
+                    sql = translator.search(se.getSearchOption().getSearchExpression());
+                    summary.add("search");
+                } else {
+                    break;
+                }
+                where.add(sql.text());
+                binds.addAll(sql.binds());
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                break;
+            }
+        }
+        SqlFilterTranslator.Aggregation aggregation = null;
+        if (i < items.size()) {
+            try {
+                org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
+                if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Aggregate a) {
+                    aggregation = translator.aggregation(List.of(), a.getExpressions());
+                    summary.add("aggregate");
+                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.GroupBy g) {
+                    List<List<UriResource>> paths = new ArrayList<>();
+                    for (org.apache.olingo.server.api.uri.queryoption.apply.GroupByItem gi : g.getGroupByItems()) {
+                        if (gi.getRollup() != null && !gi.getRollup().isEmpty()) throw new SqlFilterTranslator.Untranslatable("rollup");
+                        paths.add(gi.getPath());
+                    }
+                    List<org.apache.olingo.server.api.uri.queryoption.apply.AggregateExpression> aggs = List.of();
+                    if (g.getApplyOption() != null) {
+                        List<org.apache.olingo.server.api.uri.queryoption.ApplyItem> nested = g.getApplyOption().getApplyItems();
+                        if (nested.size() != 1 || !(nested.get(0) instanceof org.apache.olingo.server.api.uri.queryoption.apply.Aggregate na)) {
+                            throw new SqlFilterTranslator.Untranslatable("groupby with nested transformations");
+                        }
+                        aggs = na.getExpressions();
+                    }
+                    aggregation = translator.aggregation(paths, aggs);
+                    summary.add("groupby");
+                }
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                aggregation = null;
+            }
+            if (aggregation != null) i++;
+        }
+        if (where.isEmpty() && aggregation == null) return null;
+        SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where), binds, null, null, null,
+                aggregation == null ? null : aggregation.select(), aggregation == null ? null : aggregation.groupBy());
+        Execution root;
+        try {
+            root = execute(query.name(), custom, req.getRawQueryPath(), wrapper, false, false);
+        } catch (ODataApplicationException e) {
+            if (e.getStatusCode() != HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode()) throw e;
+            log.warn("Push-down of $apply for '{}' failed, evaluating in memory: {}", query.name(), e.getMessage());
+            return null;
+        }
+        executions.put(query.name(), root);
+        List<Entity> rows = aggregation == null ? EntityMapper.toEntities(query, root.table())
+                : aggregatedRows(aggregation, root.table());
+        org.apache.olingo.server.core.uri.queryoption.ApplyOptionImpl remaining = new org.apache.olingo.server.core.uri.queryoption.ApplyOptionImpl();
+        for (int k = i; k < items.size(); k++) remaining.add(items.get(k));
+        return new Resolved(root, query, rootSet, rows, null, new PushDown(wrapper, List.of(), false,
+                "apply:" + String.join(",", summary), false, true, remaining.getApplyItems().isEmpty() ? null : remaining));
+    }
+
+    /** Rows of a pushed groupby/aggregate in the form the in-memory evaluation produces. */
+    private static List<Entity> aggregatedRows(SqlFilterTranslator.Aggregation aggregation, at.jdbcodata.query.ResultTable table) {
+        List<Entity> out = new ArrayList<>();
+        for (Object[] row : table.rows()) {
+            Entity e = new Entity();
+            for (SqlFilterTranslator.Slot slot : aggregation.slots()) {
+                Object value;
+                if (slot.kind().equals("average")) {
+                    Object sum = FilterValues.canonical(row[table.indexOf(slot.label() + "s")]);
+                    Object count = FilterValues.canonical(row[table.indexOf(slot.label() + "c")]);
+                    value = sum == null || count == null || ((java.math.BigDecimal) count).signum() == 0 ? null
+                            : ((java.math.BigDecimal) sum).divide((java.math.BigDecimal) count, 10, java.math.RoundingMode.HALF_UP)
+                                    .stripTrailingZeros();
+                } else {
+                    value = FilterValues.canonical(row[table.indexOf(slot.label())]);
+                }
+                e.addProperty(new Property(slot.kind().equals("group") ? slot.edmType() : null, slot.name(),
+                        org.apache.olingo.commons.api.data.ValueType.PRIMITIVE, value));
+            }
+            out.add(e);
+        }
+        return out;
     }
 
     /** Top-level {@code and} operands of a filter expression. */
@@ -371,9 +613,13 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         PushDown pd = r.pushDown();
         response.setHeader("X-Push-Down", pd.summary());
         List<Entity> rows = r.entities();
+        if (pd.applyPushed()) {
+            List<Entity> applied = pd.remainingApply() == null ? rows : new ApplyEvaluator(context).apply(rows, pd.remainingApply());
+            return QueryOptionsEvaluator.apply(applied, uriInfo, context);
+        }
         for (Expression e : pd.residual()) rows = QueryOptionsEvaluator.filterBy(rows, e, context);
         boolean sliced = pd.wrapper().pagingPushed();
-        EntityCollection c = QueryOptionsEvaluator.apply(rows, uriInfo.getSearchOption(), null,
+        EntityCollection c = QueryOptionsEvaluator.apply(rows, pd.searchPushed() ? null : uriInfo.getSearchOption(), null,
                 sliced ? null : uriInfo.getOrderByOption(), sliced ? null : uriInfo.getSkipOption(),
                 sliced ? null : uriInfo.getTopOption(), context);
         if (sliced && r.root().pushedCount() != null) c.setCount(r.root().pushedCount().intValue());
@@ -398,6 +644,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         expandedEntities = 0;
         aliases.clear();
         rootLookups.clear();
+        caseCache.clear();
         if (uriInfo.getAliases() != null) {
             for (AliasQueryOption a : uriInfo.getAliases()) {
                 aliases.put(a.getName().startsWith("@") ? a.getName() : "@" + a.getName(), a);
@@ -1167,6 +1414,21 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
 
             @Override
+            public List<Expression[]> caseBranches(String name, Entity entity) throws ODataApplicationException {
+                return QueryEntityCollectionProcessor.this.caseBranches(name, entity, custom);
+            }
+
+            @Override
+            public List<Entity> entitySet(String name) throws ODataApplicationException {
+                Execution exec = executions.get(name);
+                if (exec == null) {
+                    exec = execute(name, custom, "$root/" + name);
+                    executions.put(name, exec);
+                }
+                return EntityMapper.toEntities(exec.query(), exec.table());
+            }
+
+            @Override
             public Entity lookup(String entitySet, List<UriParameter> keys) throws ODataApplicationException {
                 StringBuilder cacheKey = new StringBuilder(entitySet);
                 for (UriParameter k : keys) cacheKey.append('|').append(k.getName()).append('=').append(k.getText());
@@ -1184,8 +1446,65 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         };
     }
 
+    /** Parsed case branches per placeholder and row shape (type plus property names). */
+    private final Map<String, List<Expression[]>> caseCache = new HashMap<>();
+
+    private List<Expression[]> caseBranches(String name, Entity entity, Map<String, String> custom)
+            throws ODataApplicationException {
+        String body = custom.get(ExpressionRewriter.CASE_OPTION + name.substring(ExpressionRewriter.CASE_ALIAS.length()));
+        if (body == null) return null;
+        StringBuilder shape = new StringBuilder(name).append('|').append(entity.getType());
+        for (Property p : entity.getProperties()) shape.append(',').append(p.getName());
+        for (Link l : entity.getNavigationLinks()) shape.append(",/").append(l.getTitle());
+        List<Expression[]> cached = caseCache.get(shape.toString());
+        if (cached != null) return cached;
+        org.apache.olingo.commons.api.edm.EdmStructuredType type = rowType(List.of(entity));
+        List<Expression[]> branches = new ArrayList<>();
+        try {
+            for (String[] b : ExpressionRewriter.caseBranches(body)) {
+                branches.add(new Expression[] {parseExpression(b[0], type), parseExpression(b[1], type)});
+            }
+        } catch (IllegalArgumentException e) {
+            throw new ODataApplicationException("case(): " + e.getMessage(), HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        caseCache.put(shape.toString(), branches);
+        return branches;
+    }
+
+    /** Olingo's type for rows of this shape: the declared entity type plus dynamic properties and navigations. */
+    org.apache.olingo.commons.api.edm.EdmStructuredType rowType(List<Entity> rows) {
+        String typeName = rows.stream().map(Entity::getType).filter(java.util.Objects::nonNull).findFirst().orElse(null);
+        EdmEntityType declared = typeName == null ? null
+                : serviceMetadata.getEdm().getEntityType(new org.apache.olingo.commons.api.edm.FullQualifiedName(typeName));
+        return RowType.of(rows, declared, serviceMetadata.getEdm());
+    }
+
+    /** One expression in the context of {@code type} (aliases of the request are known). */
+    Expression parseExpression(String text, org.apache.olingo.commons.api.edm.EdmType type) throws ODataApplicationException {
+        try {
+            org.apache.olingo.server.core.uri.parser.UriTokenizer tokenizer = new org.apache.olingo.server.core.uri.parser.UriTokenizer(text);
+            Expression e = new org.apache.olingo.server.core.uri.parser.ExpressionParser(serviceMetadata.getEdm(), odata)
+                    .parse(tokenizer, type, null, aliases);
+            if (!tokenizer.next(org.apache.olingo.server.core.uri.parser.UriTokenizer.TokenKind.EOF)) {
+                throw new ODataApplicationException("Unexpected text after expression '" + text + "'",
+                        HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+            }
+            return e;
+        } catch (org.apache.olingo.server.core.uri.parser.UriParserException
+                 | org.apache.olingo.server.core.uri.validator.UriValidationException e) {
+            throw new ODataApplicationException("Cannot parse '" + text + "': " + e.getMessage(),
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+    }
+
     private List<Entity> navigate(Entity source, String navName, Map<String, String> custom) throws ODataApplicationException {
         {
+            // Aliases of join/nest and inline results of the expand transformation travel as links on the row.
+            Link inline = source.getNavigationLink(navName);
+            if (inline instanceof ApplyLink) {
+                if (inline.getInlineEntitySet() != null) return inline.getInlineEntitySet().getEntities();
+                return inline.getInlineEntity() == null ? List.of() : List.of(inline.getInlineEntity());
+            }
             String sourceQuery = source.getType() == null ? null
                     : source.getType().substring(source.getType().lastIndexOf('.') + 1);
             String key = sourceQuery + "/" + navName;
