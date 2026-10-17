@@ -11,7 +11,11 @@ import org.apache.olingo.commons.api.data.EntityCollection;
 import org.apache.olingo.commons.api.http.HttpStatusCode;
 import org.apache.olingo.server.api.ODataApplicationException;
 import org.apache.olingo.server.api.uri.UriInfo;
+import org.apache.olingo.server.api.uri.queryoption.FilterOption;
 import org.apache.olingo.server.api.uri.queryoption.OrderByItem;
+import org.apache.olingo.server.api.uri.queryoption.OrderByOption;
+import org.apache.olingo.server.api.uri.queryoption.SkipOption;
+import org.apache.olingo.server.api.uri.queryoption.TopOption;
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
 import org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitException;
 
@@ -22,9 +26,16 @@ final class QueryOptionsEvaluator {
     }
 
     static EntityCollection apply(List<Entity> entities, UriInfo uriInfo) throws ODataApplicationException {
+        return apply(entities, uriInfo.getFilterOption(), uriInfo.getOrderByOption(), uriInfo.getSkipOption(),
+                uriInfo.getTopOption());
+    }
+
+    /** Same evaluation for the nested options of an {@code $expand} item. */
+    static EntityCollection apply(List<Entity> entities, FilterOption filter, OrderByOption orderBy, SkipOption skipOption,
+                                  TopOption topOption) throws ODataApplicationException {
         List<Entity> result = entities;
-        if (uriInfo.getFilterOption() != null) {
-            Expression expr = uriInfo.getFilterOption().getExpression();
+        if (filter != null) {
+            Expression expr = filter.getExpression();
             List<Entity> filtered = new ArrayList<>();
             for (Entity e : entities) {
                 Object v = evaluate(expr, e);
@@ -37,8 +48,8 @@ final class QueryOptionsEvaluator {
             }
             result = filtered;
         }
-        if (uriInfo.getOrderByOption() != null) {
-            List<OrderByItem> items = uriInfo.getOrderByOption().getOrders();
+        if (orderBy != null) {
+            List<OrderByItem> items = orderBy.getOrders();
             List<Map<Entity, Object>> keys = new ArrayList<>();
             for (OrderByItem item : items) {
                 Map<Entity, Object> perEntity = new IdentityHashMap<>();
@@ -61,11 +72,11 @@ final class QueryOptionsEvaluator {
             result.sort(comparator);
         }
         int total = result.size();
-        int skip = uriInfo.getSkipOption() == null ? 0 : Math.max(0, uriInfo.getSkipOption().getValue());
+        int skip = skipOption == null ? 0 : Math.max(0, skipOption.getValue());
         int from = Math.min(skip, total);
         int to = total;
-        if (uriInfo.getTopOption() != null) {
-            to = Math.min(total, from + Math.max(0, uriInfo.getTopOption().getValue()));
+        if (topOption != null) {
+            to = Math.min(total, from + Math.max(0, topOption.getValue()));
         }
         EntityCollection collection = new EntityCollection();
         collection.getEntities().addAll(result.subList(from, to));

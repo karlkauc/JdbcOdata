@@ -50,10 +50,19 @@ final class EntityMapper {
                     key.append(s.column().propertyName()).append('=').append(keyLiteral(value));
                 }
             }
-            e.setId(URI.create(q.name() + "(" + (rowIdKey ? String.valueOf(rowId) : key) + ")"));
+            e.setId(entityId(q.name() + "(" + (rowIdKey ? String.valueOf(rowId) : key) + ")"));
             entities.add(e);
         }
         return entities;
+    }
+
+    /** Relative entity id; characters such as spaces in string keys ({@code Customers(name='Beta AG')}) are encoded. */
+    static URI entityId(String path) {
+        try {
+            return new URI(null, null, path, null);
+        } catch (java.net.URISyntaxException e) {
+            throw new IllegalStateException("Cannot build entity id for " + path, e);
+        }
     }
 
     private static Object convert(Object value, Slot s) {

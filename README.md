@@ -68,7 +68,7 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 
 - **Pass-Through:** Excel sendet DB-User und DB-Passwort, der Service verbindet sich damit. Nichts wird gespeichert.
 - **Beziehungen:** Queries können aufeinander verweisen (`Umsatz.Kunde → Kunden`); das `$metadata` enthält
-  dann NavigationProperties, sodass Excel, Power BI und OData-Explorer die Zusammenhänge zeigen.
+  dann NavigationProperties, und `$expand` lädt die verknüpften Zeilen mit (`/odata/Umsatz?$expand=Kunde`).
 - **Anonym (optional):** Mit `jdbcodata.odata.anonymous-user` laufen Anfragen ohne Login als ein Service-User, z. B. für
   einen öffentlichen Demo-Feed, den Excel oder der [OData Online Viewer](https://www.odata-viewer.online) ohne
   Passwortabfrage öffnen.

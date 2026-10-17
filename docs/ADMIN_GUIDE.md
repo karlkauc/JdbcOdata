@@ -27,8 +27,9 @@ Queries → Neue Query:
 6. **Beziehungen** (optional): Verknüpfung zu einer anderen Query, z. B. `Umsatz.Kunde → Kunden` über
    `KundeId = KundeId`. Die Gegenrichtung (`Kunden.Umsaetze`, Häkchen „Viele“) wird bei der Ziel-Query
    eingetragen; mit **Partner** verweisen beide aufeinander. Beziehungen erscheinen im `$metadata` als
-   NavigationProperties und machen die Zusammenhänge in OData-Werkzeugen, Excel und Power BI sichtbar;
-   Daten werden weiterhin pro Feed gelesen (kein `$expand`).
+   NavigationProperties und machen die Zusammenhänge in OData-Werkzeugen, Excel und Power BI sichtbar.
+   Clients können sie mit `$expand` mitladen, z. B. `/odata/Umsatz?$expand=Kunde` oder
+   `/odata/Kunden?$expand=Umsaetze($top=5;$orderby=Betrag desc)`.
 
 Jede Änderung an SQL, Parametern oder Datenquelle erzeugt eine Version; ältere Versionen lassen sich
 wiederherstellen.

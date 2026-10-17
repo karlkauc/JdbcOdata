@@ -25,9 +25,9 @@ Hinweise:
 ## PowerBI Desktop
 
 Deklarierte Beziehungen zwischen Queries (Admin-UI → Query → Beziehungen) stehen im `$metadata` als
-Navigationseigenschaften. Der OData-Connector zeigt sie als zusätzliche Spalten (`Kunde`, `Umsaetze`);
-diese **nicht** aufklappen (kein `$expand`), sondern die Tabellen einzeln laden und die Beziehung in
-Power BI über die Schlüsselspalten (z. B. `KundeId`) anlegen.
+Navigationseigenschaften. Der OData-Connector zeigt sie als zusätzliche Spalten (`Kunde`, `Umsaetze`)
+und lädt sie beim Aufklappen per `$expand` mit. Für große Modelle ist es meist besser, die Tabellen einzeln
+zu laden und die Beziehung in Power BI über die Schlüsselspalten (z. B. `KundeId`) anzulegen.
 
 
 1. **Daten abrufen → OData-Feed**, URL wie oben, Anmeldung **Standard**.

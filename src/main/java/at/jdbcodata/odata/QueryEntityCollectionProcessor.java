@@ -15,6 +15,7 @@ import at.jdbcodata.identity.QueryNotVisibleException;
 import at.jdbcodata.query.ParameterBinder;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
+import at.jdbcodata.query.QueryRelation;
 import at.jdbcodata.query.ResultTable;
 import at.jdbcodata.query.ResultTooLargeException;
 import at.jdbcodata.query.SchemaSnapshotMissingException;
@@ -25,16 +26,22 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.olingo.commons.api.Constants;
 import org.apache.olingo.commons.api.data.ContextURL;
+import org.apache.olingo.commons.api.data.Entity;
 import org.apache.olingo.commons.api.data.EntityCollection;
+import org.apache.olingo.commons.api.data.Link;
 import org.apache.olingo.commons.api.edm.EdmEntitySet;
+import org.apache.olingo.commons.api.edm.EdmEntityType;
 import org.apache.olingo.commons.api.format.ContentType;
 import org.apache.olingo.commons.api.http.HttpHeader;
 import org.apache.olingo.commons.api.http.HttpStatusCode;
@@ -51,13 +58,17 @@ import org.apache.olingo.server.api.serializer.SerializerResult;
 import org.apache.olingo.server.api.uri.UriInfo;
 import org.apache.olingo.server.api.uri.UriResource;
 import org.apache.olingo.server.api.uri.UriResourceEntitySet;
+import org.apache.olingo.server.api.uri.UriResourceNavigation;
 import org.apache.olingo.server.api.uri.queryoption.CustomQueryOption;
+import org.apache.olingo.server.api.uri.queryoption.ExpandItem;
+import org.apache.olingo.server.api.uri.queryoption.ExpandOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Serves {@code GET /odata/{Query}} and {@code GET /odata/{Query}/$count}: resolves the identity, serves from the
- * per-user cache or runs the query, applies the OData options in memory and writes an execution log record.
+ * per-user cache or runs the query, applies the OData options in memory (including {@code $expand} along declared
+ * relations) and writes an execution log record per executed query.
  * One instance per request, because it carries the caller's identity.
  */
 public class QueryEntityCollectionProcessor implements CountEntityCollectionProcessor {
@@ -88,17 +99,24 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
         EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
-        Execution exec = execute(entitySet.getName(), uriInfo, req);
+        Map<String, String> custom = customOptions(uriInfo);
+        Execution exec = execute(entitySet.getName(), custom, req.getRawQueryPath());
+        executions.put(exec.query().name(), exec);
         EntityCollection collection = QueryOptionsEvaluator.apply(
                 EntityMapper.toEntities(exec.query(), exec.table()), uriInfo);
+        // Only the requested page is expanded, after $filter/$orderby/$skip/$top of the outer collection.
+        if (uriInfo.getExpandOption() != null) {
+            expand(collection.getEntities(), exec.query(), uriInfo.getExpandOption(), custom, 1);
+        }
 
         String selectList = odata.createUriHelper()
-                .buildContextURLSelectList(entitySet.getEntityType(), null, uriInfo.getSelectOption());
+                .buildContextURLSelectList(entitySet.getEntityType(), uriInfo.getExpandOption(), uriInfo.getSelectOption());
         ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList).build();
         EntityCollectionSerializerOptions options = EntityCollectionSerializerOptions.with()
                 .id(req.getRawBaseUri() + "/" + entitySet.getName())
                 .contextURL(contextUrl)
                 .select(uriInfo.getSelectOption())
+                .expand(uriInfo.getExpandOption())
                 .count(uriInfo.getCountOption())
                 .build();
         ODataSerializer serializer = odata.createSerializer(responseFormat);
@@ -115,7 +133,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
-        Execution exec = execute(entitySet.getName(), uriInfo, req);
+        Execution exec = execute(entitySet.getName(), customOptions(uriInfo), req.getRawQueryPath());
         EntityCollection collection = QueryOptionsEvaluator.apply(
                 EntityMapper.toEntities(exec.query(), exec.table()), uriInfo);
         byte[] body = String.valueOf(collection.getCount()).getBytes(StandardCharsets.UTF_8);
@@ -136,14 +154,111 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     private record Execution(QueryDefinition query, ResultTable table, CacheStatus cacheStatus, Long cacheAgeSeconds) {
     }
 
-    private Execution execute(String queryName, UriInfo uriInfo, ODataRequest req) throws ODataApplicationException {
+    // --- $expand ------------------------------------------------------------------------------------------------
+
+    /** Nesting depth of {@code $expand} (Umsatz → Kunde → Umsaetze …); deeper requests get 400. */
+    static final int MAX_EXPAND_DEPTH = 3;
+
+    /** Queries already executed for this request, so each target runs (or hits the cache) once. */
+    private final Map<String, Execution> executions = new HashMap<>();
+
+    /**
+     * Expands navigation properties in memory: the target query is executed with the caller's identity (and the
+     * same custom query options, so shared parameters such as {@code p_jahr} apply to both), its rows are joined
+     * on the relation's column pairs and attached as inline entity / entity set. Nested {@code $filter},
+     * {@code $orderby}, {@code $skip}, {@code $top}, {@code $count}, {@code $select} and {@code $expand} work as on
+     * the top level; {@code $levels}, {@code $search} and {@code $apply} are not supported.
+     */
+    private void expand(List<Entity> entities, QueryDefinition source, ExpandOption expandOption,
+                        Map<String, String> custom, int depth) throws ODataApplicationException {
+        if (depth > MAX_EXPAND_DEPTH) {
+            throw new ODataApplicationException("$expand may be nested at most " + MAX_EXPAND_DEPTH + " levels deep",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        for (ExpandItem item : expandOption.getExpandItems()) {
+            if (item.getLevelsOption() != null || item.getSearchOption() != null || item.getApplyOption() != null) {
+                throw new ODataApplicationException("$levels, $search and $apply are not supported inside $expand",
+                        HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+            }
+            for (String navName : navigationNames(source, item)) {
+                QueryRelation relation = source.relations().stream().filter(r -> r.name().equals(navName)).findFirst()
+                        .orElseThrow(() -> new ODataApplicationException("Unknown navigation property '" + navName + "'",
+                                HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE));
+                if (relation.localColumns().isEmpty() || relation.localColumns().size() != relation.targetColumns().size()) {
+                    throw new ODataApplicationException("Navigation property '" + navName
+                            + "' has no join columns and cannot be expanded", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+                }
+                Execution target = executions.get(relation.targetQuery());
+                if (target == null) {
+                    target = execute(relation.targetQuery(), custom, "$expand=" + navName + " from " + source.name());
+                    executions.put(relation.targetQuery(), target);
+                }
+                RelationJoin join = new RelationJoin(relation, EntityMapper.toEntities(target.query(), target.table()));
+
+                // Matches per source entity; nested options are applied per collection, nested $expand once on
+                // the distinct target entities (a customer shared by many rows is expanded only once).
+                Map<Entity, EntityCollection> inlineSets = new IdentityHashMap<>();
+                Map<Entity, Entity> inlineEntities = new IdentityHashMap<>();
+                Map<Entity, Boolean> distinct = new IdentityHashMap<>();
+                for (Entity e : entities) {
+                    List<Entity> matches = join.matches(e);
+                    if (relation.toMany()) {
+                        EntityCollection c = QueryOptionsEvaluator.apply(matches, item.getFilterOption(),
+                                item.getOrderByOption(), item.getSkipOption(), item.getTopOption());
+                        inlineSets.put(e, c);
+                        c.getEntities().forEach(t -> distinct.put(t, Boolean.TRUE));
+                    } else if (!matches.isEmpty()) {
+                        inlineEntities.put(e, matches.get(0));
+                        distinct.put(matches.get(0), Boolean.TRUE);
+                    }
+                }
+                if (item.getExpandOption() != null && !distinct.isEmpty()) {
+                    expand(new ArrayList<>(distinct.keySet()), target.query(), item.getExpandOption(), custom, depth + 1);
+                }
+                for (Entity e : entities) {
+                    Link link = new Link();
+                    link.setTitle(navName);
+                    link.setRel(Constants.NS_NAVIGATION_LINK_REL + navName);
+                    if (relation.toMany()) {
+                        link.setInlineEntitySet(inlineSets.get(e));
+                    } else {
+                        Entity t = inlineEntities.get(e);
+                        if (t == null) continue; // serialised as null
+                        link.setInlineEntity(t);
+                    }
+                    e.getNavigationLinks().add(link);
+                }
+            }
+        }
+    }
+
+    /** Navigation property names an expand item stands for ({@code *} = all of the source type). */
+    private List<String> navigationNames(QueryDefinition source, ExpandItem item) throws ODataApplicationException {
+        if (item.isStar()) {
+            if (item.isRef()) {
+                throw new ODataApplicationException("$expand=*/$ref is not supported",
+                        HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+            }
+            EdmEntityType type = serviceMetadata.getEdm().getEntityType(DynamicEdmProvider.typeName(source.name()));
+            return type == null ? List.of() : type.getNavigationPropertyNames();
+        }
+        List<UriResource> parts = item.getResourcePath() == null ? List.of() : item.getResourcePath().getUriResourceParts();
+        if (parts.size() != 1 || !(parts.get(0) instanceof UriResourceNavigation nav) || item.isRef() || item.hasCountPath()) {
+            throw new ODataApplicationException("Only $expand=<NavigationProperty> (optionally with nested options) is "
+                    + "supported", HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+        }
+        return List.of(nav.getProperty().getName());
+    }
+
+    private Execution execute(String queryName, Map<String, String> custom, String optionsForLog)
+            throws ODataApplicationException {
         Instant started = Instant.now();
         long t0 = System.nanoTime();
         QueryDefinition query = support.queryService().findEnabledByName(queryName)
                 .orElseThrow(() -> new ODataApplicationException("Entity set '" + queryName + "' not found",
                         HttpStatusCode.NOT_FOUND.getStatusCode(), LOCALE));
         Datasource ds = support.datasourceService().findById(query.datasourceId()).orElse(null);
-        LogDraft draft = new LogDraft(started, query, ds, req.getRawQueryPath());
+        LogDraft draft = new LogDraft(started, query, ds, optionsForLog);
         try {
             if (!query.hasSnapshot()) {
                 throw new SchemaSnapshotMissingException(queryName);
@@ -155,7 +270,6 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
             ExecutionIdentity identity = support.identityResolver().resolve(query, request.identity());
             draft.identity = identity;
-            Map<String, String> custom = customOptions(uriInfo);
             Map<String, Object> params = ParameterBinder.resolve(query, custom);
             draft.parameters = maskedParameters(query, params);
             boolean refresh = "true".equalsIgnoreCase(custom.get(REFRESH_OPTION));
@@ -297,9 +411,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     }
 
     private static void rejectUnsupportedOptions(UriInfo uriInfo) throws ODataApplicationException {
-        if (uriInfo.getExpandOption() != null || uriInfo.getSearchOption() != null || uriInfo.getApplyOption() != null) {
+        if (uriInfo.getSearchOption() != null || uriInfo.getApplyOption() != null) {
             throw new ODataApplicationException(
-                    "$expand, $search and $apply are not supported; use $filter, $orderby, $top, $skip, $select, $count",
+                    "$search and $apply are not supported; use $filter, $orderby, $top, $skip, $select, $count, $expand",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
         }
     }

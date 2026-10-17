@@ -59,7 +59,8 @@ Queries im Feed (alle im Modus CALLER, Cache 5 Minuten pro User):
 
 Beziehungen im `$metadata` (NavigationProperties): `Umsatz.Kunde → Kunden` und `Umsatz.Produkt → Produkte`
 (je über `KundeId` bzw. `ProduktId`), Gegenrichtung `Kunden.Umsaetze` und `Produkte.Umsaetze`. Schlüssel sind
-`KundeId`, `ProduktId` und `PositionId`.
+`KundeId`, `ProduktId` und `PositionId`. Beispiel: `/odata/Umsatz?$top=3&$expand=Kunde,Produkt` oder
+`/odata/Kunden?$expand=Umsaetze($top=2;$orderby=Betrag desc)`.
 
 ## Anonymer Lesezugriff (Service-User `demo`)
 
