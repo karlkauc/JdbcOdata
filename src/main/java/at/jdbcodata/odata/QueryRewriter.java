@@ -21,8 +21,21 @@ final class QueryRewriter {
     private QueryRewriter() {
     }
 
+    /** Custom options that carry {@code $compute}/{@code $select} of a single-entity request to the processor. */
+    static final String SINGLE_COMPUTE = "jdbcodata-compute";
+    static final String SINGLE_SELECT = "jdbcodata-select";
+
     static String rewrite(String query) {
+        return rewrite(query, false);
+    }
+
+    /**
+     * @param singleEntity the path addresses one entity: Olingo forbids {@code $apply} there, so {@code $compute}
+     *                     (and {@code $select}, which may name computed properties) travel as custom options
+     */
+    static String rewrite(String query, boolean singleEntity) {
         if (query == null || query.isEmpty()) return query;
+        if (singleEntity) query = moveSingleEntityCompute(query);
         List<String> parts = new ArrayList<>(List.of(query.split("&", -1)));
         boolean changed = false;
         for (int i = 0; i < parts.size(); i++) {
@@ -31,7 +44,7 @@ final class QueryRewriter {
             String raw = value(parts.get(i));
             String decoded = decode(raw);
             if (decoded == null) continue;
-            String rewritten = ExpressionRewriter.rewrite(decoded);
+            String rewritten = "$expand".equals(name) ? ExpressionRewriter.rewriteExpand(decoded) : ExpressionRewriter.rewrite(decoded);
             if (!rewritten.equals(decoded)) {
                 parts.set(i, parts.get(i).substring(0, parts.get(i).indexOf('=') + 1) + encode(rewritten));
                 changed = true;
@@ -56,6 +69,17 @@ final class QueryRewriter {
             parts.set(applyIndex, existing + "/" + transformation);
         } else {
             parts.add("$apply=" + transformation);
+        }
+        return String.join("&", parts);
+    }
+
+    private static String moveSingleEntityCompute(String query) {
+        List<String> parts = new ArrayList<>(List.of(query.split("&", -1)));
+        if (parts.stream().noneMatch(p -> "$compute".equals(optionName(p)))) return query;
+        for (int i = 0; i < parts.size(); i++) {
+            String name = optionName(parts.get(i));
+            if ("$compute".equals(name)) parts.set(i, SINGLE_COMPUTE + "=" + value(parts.get(i)));
+            if ("$select".equals(name)) parts.set(i, SINGLE_SELECT + "=" + value(parts.get(i)));
         }
         return String.join("&", parts);
     }

@@ -168,13 +168,13 @@ Fehlerfälle: DB-Login schlägt fehl → `401` mit `WWW-Authenticate: Basic`, da
 
 **`$apply`** (Data Aggregation Extension), in-memory: `filter`, `search`, `orderby`, `top`, `skip`, `identity`, `compute`, `concat`, `aggregate` (`sum`, `min`, `max`, `average`, `countdistinct`, `$count as N`, `Nav/$count as N`, Inline-Aggregate `Umsaetze(Betrag with sum as S)`, `from` in Olingo-Schreibweise `Betrag with sum as M from KundeId with max`), `groupby` (auch über einwertige Navigationen, mit verschachtelter Folge, `rollup(P1,P2)` und `rollup($all,P1,P2)`) sowie `topcount`/`bottomcount`/`topsum`/`bottomsum`/`toppercent`/`bottompercent`. Danach gelten `$filter`, `$orderby`, `$top`, `$skip`, `$count`, `$select` auf dem Ergebnis, auch mit Aliasnamen. `$expand` ist möglich, solange `$apply` die Entitäten erhält (filter, search, orderby, top, skip, compute); `$apply` ist auch innerhalb von `$expand` erlaubt (`Kunden?$expand=Umsaetze($apply=aggregate(Betrag with sum as S))`). Nicht unterstützt: eigene Aggregatfunktionen, `expand` als `$apply`-Transformation.
 
-**`$compute`** (4.01) wird vor dem Parsen in `$apply=…/compute(…)` umgeschrieben, weil Olingo 5 die Option nicht kennt; damit funktioniert es zusammen mit `$select`, `$expand`, `$filter` und `$apply` (nur auf Collections).
+**`$compute`** (4.01) wird vor dem Parsen in `$apply=…/compute(…)` umgeschrieben, weil Olingo 5 die Option nicht kennt; damit funktioniert es zusammen mit `$select`, `$expand`, `$filter` und `$apply`. Auf einzelnen Entitäten (`Kunden(1)?$compute=…`, auch nach Navigation) verbietet Olingo `$apply`; dort reicht das Servlet `$compute` und `$select` als interne Custom Options weiter, der Processor parst sie im Kontext des EntitySets und wendet sie auf die eine Entität an.
 
 **`$levels`** in `$expand` für Beziehungen einer Query auf sich selbst (`$levels=2`, `$levels=max` bis 8 Ebenen). Entitäten, die auf einer früheren Ebene schon vorkamen, werden nicht erneut aufgeklappt, damit Zyklen enden; insgesamt höchstens 200 000 expandierte Entitäten pro Request.
 
 **Weitere Ausdrücke:** `cast(expr, Edm.Typ)` (fehlgeschlagene Konvertierung = `null`), `isof(JdbcOdata.Typ)`, `isof(expr, Edm.Typ)`, `$it` (auch in Lambdas) und `$root/Set(key)/Property`.
 
-**`$ref`** liefert Referenzen statt Entitäten (`Kunden(1)/Umsaetze/$ref`, `Umsatz(1)/Kunde/$ref`, `Kunden/$ref`) mit den Collection-Optionen.
+**`$ref`** liefert Referenzen statt Entitäten (`Kunden(1)/Umsaetze/$ref`, `Umsatz(1)/Kunde/$ref`, `Kunden/$ref`) mit den Collection-Optionen, ebenso in `$expand` (`$expand=Umsaetze/$ref`, `$expand=*/$ref`). `$expand=Umsaetze/$count` (auch mit `($filter=…;$search=…)`) liefert nur `Umsaetze@odata.count`.
 
 **`$all`** liefert die Entitäten aller sichtbaren EntitySets mit `@odata.type` (typisch mit `$search`; Queries mit Pflichtparametern ohne Wert werden übersprungen). **`$crossjoin(A,B)`** liefert Kombinationen, gefiltert mit Pfaden wie `$filter=Umsatz/KundeId eq Kunden/KundeId`, mit `$orderby`, `$top`, `$skip`, `$count`, `$select` und `$expand=A` (Olingo erlaubt dort keine verschachtelten Optionen); höchstens 2 Mio. Kombinationen. Beide fängt das Servlet ab, weil Olingo sie zwar parst, aber nicht an Processoren weitergibt.
 
@@ -186,7 +186,11 @@ Fehlerfälle: DB-Login schlägt fehl → `401` mit `WWW-Authenticate: Basic`, da
 
 **Parametrisierte Queries als Funktionen.** Jede Query mit Parametern erscheint zusätzlich als komponierbare Funktion `Get<Query>` mit Function-Import auf ihr EntitySet: `GetUmsatz(p_jahr=2024)`, `GetUmsatz(p_jahr=@j)?@j=2024`, `GetUmsatz()` (Defaults). Überladungen gibt es für die Pflichtparameter plus jede Kombination optionaler Parameter (bis 4 optionale, darüber nur „keine“ und „alle“); `null` bedeutet „Default verwenden“. Typen: `INT` → `Edm.Int64`, `DECIMAL` → `Edm.Decimal`, `DATE` → `Edm.Date`, `TIMESTAMP` → `Edm.DateTimeOffset`, `BOOLEAN`, `STRING`. Das Ergebnis verhält sich wie das EntitySet: Schlüssel (`GetUmsatz(p_jahr=2024)(17)`), Navigationen, `/$count` und alle Query-Optionen. Funktionsargumente überschreiben gleichnamige Custom Query Options und gelten wie diese auch für verknüpfte Queries. Heißt eine andere Query bereits `Get<Query>`, entfällt die Funktion.
 
-**Format.** JSON nach OData V4 (`application/json;odata.metadata=minimal`). Excel „Daten abrufen → Aus OData-Feed“ und der PowerBI-OData-Connector verwenden V4/JSON und unterstützen Basic Auth nativ.
+**Annotationen.** Das `$metadata` referenziert die Vokabulare Core und Capabilities. Beschreibungen von Queries, Beziehungen und Parametern (mit Default) erscheinen als `Core.Description`. Jedes EntitySet trägt Capabilities: Insert/Update/Delete nicht erlaubt, zählbar, durchsuchbar, filter- und sortierbar, `$top`/`$skip`, Zugriff per Schlüssel, `ExpandRestrictions` (expandierbar, wenn Beziehungen bestehen, `MaxLevels` 8); der Container `BatchSupported`, `KeyAsSegmentSupported`, `CrossJoinSupported` und `AsynchronousRequestsSupported=false`. OData-Explorer und Codegeneratoren blenden damit Schreiboperationen aus.
+
+**Nicht unterstützte Optionen** enden mit 501 statt ignoriert zu werden: `$deltatoken` (keine Änderungsverfolgung; den Feed neu laden).
+
+**Format.** JSON nach OData V4 (`application/json;odata.metadata=minimal`; `full` und `none` sowie `IEEE754Compatible=true` – `Edm.Int64` und `Edm.Decimal` als Strings – gelten auch für Ergebnisse mit `$apply`, `$compute` und `$levels`, die JdbcOdata selbst schreibt). Excel „Daten abrufen → Aus OData-Feed“ und der PowerBI-OData-Connector verwenden V4/JSON und unterstützen Basic Auth nativ.
 
 ## 5. Identität und Berechtigungen
 

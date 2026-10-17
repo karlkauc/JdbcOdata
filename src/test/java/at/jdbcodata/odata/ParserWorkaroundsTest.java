@@ -114,7 +114,9 @@ class ParserWorkaroundsTest extends DemoProfileTest {
         assertThat(ok("Sales/3").toString()).isEqualTo(ok("Sales(3)").toString());
         assertThat(call("Sales/3/amount").body()).isEqualTo(call("Sales(3)/amount").body());
         assertThat(call("P4Customers/Beta%20AG/Sales/$count").body()).isEqualTo(call("P4Customers('Beta%20AG')/Sales/$count").body());
-        assertThat(ok("P4Customers/Beta%20AG/Sales/2?$select=customer").get("customer").asString()).isEqualTo("Beta AG");
+        int betaRow = sales.stream().filter(x -> x.get("customer").asString().equals("Beta AG")).findFirst().orElseThrow()
+                .get("RowId").asInt();
+        assertThat(ok("P4Customers/Beta%20AG/Sales/" + betaRow + "?$select=customer").get("customer").asString()).isEqualTo("Beta AG");
         assertThat(call("Sales/999").statusCode()).isEqualTo(404);
         assertThat(ok("Sales/$count?$filter=amount%20gt%200").isNumber()).isTrue();
     }

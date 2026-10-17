@@ -37,6 +37,14 @@ class ExpressionRewriterTest {
     }
 
     @Test
+    void expandKeepsItsCountPathAndRewritesNestedFilters() {
+        assertThat(ExpressionRewriter.rewriteExpand("Sales/$count($filter=amount gt 1)")).isEqualTo("Sales/$count($filter=amount gt 1)");
+        assertThat(ExpressionRewriter.rewriteExpand("Kunden($filter=Umsaetze/$count($filter=Betrag gt 1) gt 2;$select=Name),Produkt"))
+                .isEqualTo("Kunden($filter=cast(Umsaetze/any(jdbcodata_c1:jdbcodata_c1/Betrag gt 1),Edm.Int64) gt 2;$select=Name),Produkt");
+        assertThat(ExpressionRewriter.rewriteExpand("Umsaetze($filter=Pos/any(u: u/x))")).isEqualTo("Umsaetze($filter=Pos/any(u:u/x))");
+    }
+
+    @Test
     void catastrophicPatternsAreStopped() throws Exception {
         assertThat(EntityExpressionVisitor.matchesPattern("Linzer Bau AG", "^L.*AG$")).isTrue();
         long start = System.nanoTime();

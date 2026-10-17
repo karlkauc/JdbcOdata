@@ -39,12 +39,12 @@ final class EntityMapper {
             e.setType(DynamicEdmProvider.typeName(q.name()).getFullQualifiedNameAsString());
             long rowId = r + 1L;
             if (rowIdKey) {
-                e.addProperty(new Property(null, DynamicEdmProvider.ROW_ID, ValueType.PRIMITIVE, rowId));
+                e.addProperty(new Property("Edm.Int64", DynamicEdmProvider.ROW_ID, ValueType.PRIMITIVE, rowId));
             }
             StringBuilder key = new StringBuilder();
             for (Slot s : slots) {
                 Object value = s.resultIndex() < 0 ? null : convert(row[s.resultIndex()], s);
-                e.addProperty(new Property(null, s.column().propertyName(), ValueType.PRIMITIVE, value));
+                e.addProperty(new Property(s.column().edmType(), s.column().propertyName(), ValueType.PRIMITIVE, value));
                 if (!rowIdKey && s.column().key()) {
                     if (key.length() > 0) key.append(',');
                     key.append(s.column().propertyName()).append('=').append(keyLiteral(value));

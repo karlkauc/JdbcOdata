@@ -45,7 +45,8 @@ public class EdmRegistry {
                     return etag;
                 }
             };
-            return odata.createServiceMetadata(new DynamicEdmProvider(visibleQueries), List.of(), etagSupport);
+            return odata.createServiceMetadata(new DynamicEdmProvider(visibleQueries), DynamicEdmProvider.vocabularyReferences(),
+                    etagSupport);
         });
     }
 

@@ -157,13 +157,13 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
 
         String selectList = odata.createUriHelper()
-                .buildContextURLSelectList(entitySet.getEntityType(), uriInfo.getExpandOption(), uriInfo.getSelectOption());
+                .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
         ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList).build();
         EntityCollectionSerializerOptions options = EntityCollectionSerializerOptions.with()
                 .id(req.getRawBaseUri() + "/" + entitySet.getName())
                 .contextURL(contextUrl)
                 .select(uriInfo.getSelectOption())
-                .expand(uriInfo.getExpandOption())
+                .expand(serializerExpand(uriInfo.getExpandOption(), entitySet.getEntityType()))
                 .count(uriInfo.getCountOption())
                 .build();
         ODataSerializer serializer = odata.createSerializer(responseFormat);
@@ -223,9 +223,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
         String context = "$metadata#" + r.entitySet().getName() + "("
                 + DynamicResultWriter.contextSelectList(page.rows(), select, uriInfo.getExpandOption()) + ")";
+        DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
         byte[] body = DynamicResultWriter.collection(context, page.rows(), count ? filtered.getCount() : null,
-                page.nextLink(), select, uriInfo.getExpandOption(), null);
-        respond(req, response, new ByteArrayInputStream(body), "application/json;odata.metadata=minimal", r.root());
+                page.nextLink(), select, uriInfo.getExpandOption(), null, format);
+        respond(req, response, new ByteArrayInputStream(body), format.contentType(), r.root());
     }
 
     private static void requireJson(ContentType responseFormat) throws ODataApplicationException {
@@ -541,28 +542,66 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             response.setStatusCode(HttpStatusCode.NO_CONTENT.getStatusCode());
             return;
         }
+        EdmEntitySet entitySet = r.entitySet();
+        if (custom.containsKey(QueryRewriter.SINGLE_COMPUTE)) {
+            writeComputedEntity(req, response, uriInfo, r, custom, responseFormat);
+            return;
+        }
         if (uriInfo.getExpandOption() != null) {
             expand(List.of(r.single()), r.query(), uriInfo.getExpandOption(), custom, 1);
         }
-        EdmEntitySet entitySet = r.entitySet();
         if (hasNestedApply(uriInfo.getExpandOption())) {
             requireJson(responseFormat);
             java.util.Set<String> select = DynamicResultWriter.selected(uriInfo.getSelectOption());
             String context = "$metadata#" + entitySet.getName() + "("
                     + DynamicResultWriter.contextSelectList(List.of(r.single()), select, uriInfo.getExpandOption()) + ")/$entity";
-            byte[] body = DynamicResultWriter.entity(context, r.single(), select, uriInfo.getExpandOption());
-            respond(req, response, new ByteArrayInputStream(body), "application/json;odata.metadata=minimal", r.root());
+            DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
+            byte[] body = DynamicResultWriter.entity(context, r.single(), select, uriInfo.getExpandOption(), format);
+            respond(req, response, new ByteArrayInputStream(body), format.contentType(), r.root());
             return;
         }
         String selectList = odata.createUriHelper()
-                .buildContextURLSelectList(entitySet.getEntityType(), uriInfo.getExpandOption(), uriInfo.getSelectOption());
+                .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
         ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList)
                 .suffix(ContextURL.Suffix.ENTITY).build();
         EntitySerializerOptions options = EntitySerializerOptions.with().contextURL(contextUrl)
-                .select(uriInfo.getSelectOption()).expand(uriInfo.getExpandOption()).build();
+                .select(uriInfo.getSelectOption()).expand(serializerExpand(uriInfo.getExpandOption(), entitySet.getEntityType()))
+                .build();
         SerializerResult result = odata.createSerializer(responseFormat)
                 .entity(serviceMetadata, entitySet.getEntityType(), r.single(), options);
         respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
+    }
+
+    /**
+     * {@code Kunden(1)?$compute=…}: Olingo does not allow $apply on single entities, so the servlet passes $compute
+     * (and $select) as custom options; they are parsed here in the context of the entity set and applied to the one
+     * entity.
+     */
+    private void writeComputedEntity(ODataRequest req, ODataResponse response, UriInfo uriInfo, Resolved r,
+                                     Map<String, String> custom, ContentType responseFormat) throws ODataApplicationException {
+        requireJson(responseFormat);
+        EdmEntitySet entitySet = r.entitySet();
+        String query = "$apply=compute(" + QueryRewriter.encode(custom.get(QueryRewriter.SINGLE_COMPUTE)) + ")";
+        if (custom.containsKey(QueryRewriter.SINGLE_SELECT)) {
+            query += "&$select=" + QueryRewriter.encode(custom.get(QueryRewriter.SINGLE_SELECT));
+        }
+        UriInfo computed;
+        try {
+            computed = new org.apache.olingo.server.core.uri.parser.Parser(serviceMetadata.getEdm(), odata)
+                    .parseUri("/" + entitySet.getName(), QueryRewriter.rewrite(query), null, req.getRawBaseUri());
+        } catch (org.apache.olingo.server.core.uri.parser.UriParserException
+                 | org.apache.olingo.server.core.uri.validator.UriValidationException e) {
+            throw new ODataApplicationException("$compute/$select: " + e.getMessage(), HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        EvaluationContext navigation = navigationResolver(custom);
+        Entity entity = new ApplyEvaluator(navigation).apply(List.of(r.single()), computed.getApplyOption()).get(0);
+        if (uriInfo.getExpandOption() != null) expand(List.of(entity), r.query(), uriInfo.getExpandOption(), custom, 1);
+        java.util.Set<String> select = DynamicResultWriter.selected(computed.getSelectOption());
+        String context = "$metadata#" + entitySet.getName() + "("
+                + DynamicResultWriter.contextSelectList(List.of(entity), select, uriInfo.getExpandOption()) + ")/$entity";
+        DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
+        byte[] body = DynamicResultWriter.entity(context, entity, select, uriInfo.getExpandOption(), format);
+        respond(req, response, new ByteArrayInputStream(body), format.contentType(), r.root());
     }
 
     /** {@code Kunden(1)/Name}. */
@@ -682,7 +721,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
             set = targetSet;
             query = executions.get(set.getName()).query();
-            if (nav.isCollection()) {
+            // UriResourceNavigation.isCollection() is false once keys follow (Umsaetze(5)); the property decides.
+            if (nav.getProperty().isCollection()) {
                 if (nav.getKeyPredicates().isEmpty()) {
                     entities = targets;
                     single = null;
@@ -1052,8 +1092,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                         if (item.getApplyOption() != null) {
                             matches = new ApplyEvaluator(navigationResolver(custom)).apply(matches, item.getApplyOption());
                         }
-                        EntityCollection c = QueryOptionsEvaluator.apply(matches, item.getSearchOption(), item.getFilterOption(),
-                                item.getOrderByOption(), item.getSkipOption(), item.getTopOption(), navigationResolver(custom));
+                        EntityCollection c;
+                        if (item.hasCountPath()) {
+                            // $expand=Nav/$count($filter=…): only the number is written
+                            c = QueryOptionsEvaluator.apply(matches, item.getSearchOption(), item.getFilterOption(),
+                                    null, null, null, navigationResolver(custom));
+                            c.setCount(c.getEntities().size());
+                        } else {
+                            c = QueryOptionsEvaluator.apply(matches, item.getSearchOption(), item.getFilterOption(),
+                                    item.getOrderByOption(), item.getSkipOption(), item.getTopOption(), navigationResolver(custom));
+                        }
                         inlineSets.put(e, c);
                         c.getEntities().forEach(t -> distinct.put(t, Boolean.TRUE));
                     } else if (!matches.isEmpty()) {
@@ -1061,7 +1109,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                         distinct.put(matches.get(0), Boolean.TRUE);
                     }
                 }
-                if (item.getExpandOption() != null && !distinct.isEmpty()) {
+                if (item.getExpandOption() != null && !distinct.isEmpty() && !item.isRef() && !item.hasCountPath()) {
                     List<Entity> typed = distinct.keySet().stream().filter(t -> t.getType() != null).toList();
                     if (!typed.isEmpty()) expand(typed, target.query(), item.getExpandOption(), custom, depth + 1);
                 }
@@ -1163,20 +1211,56 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
     }
 
+    /** Expand items that appear in the context URL: {@code Nav/$count} does not (Olingo would write "Nav/null"). */
+    static ExpandOption contextExpand(ExpandOption expand) {
+        if (expand == null || expand.getExpandItems().stream().noneMatch(ExpandItem::hasCountPath)) return expand;
+        org.apache.olingo.server.core.uri.queryoption.ExpandOptionImpl out = new org.apache.olingo.server.core.uri.queryoption.ExpandOptionImpl();
+        for (ExpandItem item : expand.getExpandItems()) if (!item.hasCountPath()) out.addExpandItem(item);
+        return out.getExpandItems().isEmpty() ? null : out;
+    }
+
+    /**
+     * The expand option for Olingo's serializer: {@code $expand=*&#47;$ref} becomes one {@code Nav/$ref} item per
+     * navigation property, because the serializer only honours {@code $ref} on named items.
+     */
+    static ExpandOption serializerExpand(ExpandOption expand, EdmEntityType type) {
+        if (expand == null || expand.getExpandItems().stream().noneMatch(i -> i.isStar() && i.isRef())) return expand;
+        org.apache.olingo.server.core.uri.queryoption.ExpandOptionImpl out = new org.apache.olingo.server.core.uri.queryoption.ExpandOptionImpl();
+        java.util.Set<String> named = new java.util.HashSet<>();
+        for (ExpandItem item : expand.getExpandItems()) {
+            String n = DynamicResultWriter.navName(item);
+            if (n != null) named.add(n);
+        }
+        for (ExpandItem item : expand.getExpandItems()) {
+            if (!(item.isStar() && item.isRef())) {
+                out.addExpandItem(item);
+                continue;
+            }
+            for (String n : type.getNavigationPropertyNames()) {
+                if (named.contains(n)) continue;
+                org.apache.olingo.server.core.uri.UriInfoImpl path = new org.apache.olingo.server.core.uri.UriInfoImpl()
+                        .setKind(org.apache.olingo.server.api.uri.UriInfoKind.resource)
+                        .addResourcePart(new org.apache.olingo.server.core.uri.UriResourceNavigationPropertyImpl(type.getNavigationProperty(n)));
+                out.addExpandItem(new org.apache.olingo.server.core.uri.queryoption.ExpandItemImpl().setResourcePath(path).setIsRef(true));
+            }
+        }
+        return out;
+    }
+
     /** Navigation property names an expand item stands for ({@code *} = all of the source type). */
     private List<String> navigationNames(QueryDefinition source, ExpandItem item) throws ODataApplicationException {
         if (item.isStar()) {
-            if (item.isRef()) {
-                throw new ODataApplicationException("$expand=*/$ref is not supported",
-                        HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
-            }
             EdmEntityType type = serviceMetadata.getEdm().getEntityType(DynamicEdmProvider.typeName(source.name()));
             return type == null ? List.of() : type.getNavigationPropertyNames();
         }
-        List<UriResource> parts = item.getResourcePath() == null ? List.of() : item.getResourcePath().getUriResourceParts();
-        if (parts.size() != 1 || !(parts.get(0) instanceof UriResourceNavigation nav) || item.isRef() || item.hasCountPath()) {
-            throw new ODataApplicationException("Only $expand=<NavigationProperty> (optionally with nested options) is "
-                    + "supported", HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+        List<UriResource> parts = new ArrayList<>(item.getResourcePath() == null ? List.of() : item.getResourcePath().getUriResourceParts());
+        if (!parts.isEmpty() && (parts.get(parts.size() - 1) instanceof UriResourceRef
+                || parts.get(parts.size() - 1) instanceof UriResourceCount)) {
+            parts.remove(parts.size() - 1); // Nav/$ref, Nav/$count
+        }
+        if (parts.size() != 1 || !(parts.get(0) instanceof UriResourceNavigation nav)) {
+            throw new ODataApplicationException("Only $expand=<NavigationProperty>[/$ref|/$count] (optionally with nested "
+                    + "options) is supported", HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
         }
         return List.of(nav.getProperty().getName());
     }
@@ -1353,8 +1437,12 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         return CacheKey.canonical(masked);
     }
 
+    /** System query options Olingo parses but JdbcOdata does not implement: 501 instead of silently ignoring them. */
     private static void rejectUnsupportedOptions(UriInfo uriInfo) throws ODataApplicationException {
-
+        if (uriInfo.getDeltaTokenOption() != null) {
+            throw new ODataApplicationException("$deltatoken is not supported: the service does not track changes; "
+                    + "load the feed again", HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+        }
     }
 
     /**

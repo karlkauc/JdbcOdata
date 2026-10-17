@@ -58,7 +58,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
     public CsdlEntityType getEntityType(FullQualifiedName entityTypeName) {
         if (!NAMESPACE.equals(entityTypeName.getNamespace())) return null;
         QueryDefinition q = queries.get(entityTypeName.getName());
-        return q == null ? null : buildType(q).setNavigationProperties(navigationProperties(q));
+        return q == null ? null : annotatedType(q);
     }
 
     @Override
@@ -69,7 +69,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             bindings.add(new CsdlNavigationPropertyBinding().setPath(r.name()).setTarget(r.targetQuery()));
         }
         return new CsdlEntitySet().setName(entitySetName).setType(typeName(entitySetName))
-                .setNavigationPropertyBindings(bindings);
+                .setNavigationPropertyBindings(bindings).setAnnotations(entitySetCapabilities(queries.get(entitySetName)));
     }
 
     /** Relations whose target query is part of this model and whose name does not clash with a property. */
@@ -120,6 +120,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
                 }
                 nav.setReferentialConstraints(constraints);
             }
+            if (r.description() != null && !r.description().isBlank()) nav.setAnnotations(List.of(description(r.description())));
             navs.add(nav);
         }
         return navs;
@@ -134,7 +135,115 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             CsdlFunctionImport fi = getFunctionImport(CONTAINER, FUNCTION_PREFIX + name);
             if (fi != null) imports.add(fi);
         }
-        return new CsdlEntityContainer().setName(CONTAINER_NAME).setEntitySets(sets).setFunctionImports(imports);
+        return new CsdlEntityContainer().setName(CONTAINER_NAME).setEntitySets(sets).setFunctionImports(imports)
+                .setAnnotations(List.of(
+                        tag(CAPABILITIES, "BatchSupported", true),
+                        tag(CAPABILITIES, "KeyAsSegmentSupported", true),
+                        tag(CAPABILITIES, "CrossJoinSupported", true),
+                        tag(CAPABILITIES, "AsynchronousRequestsSupported", false)));
+    }
+
+    // --- vocabulary annotations ($metadata documentation and capabilities) -------------------------------------
+
+    public static final String CORE = "Org.OData.Core.V1";
+    public static final String CAPABILITIES = "Org.OData.Capabilities.V1";
+
+    /** Terms used here; Olingo writes an annotation only when its term resolves. */
+    private static final Map<String, String> TERMS = Map.ofEntries(
+            Map.entry(CORE + ".Description", "Edm.String"),
+            Map.entry(CAPABILITIES + ".BatchSupported", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".KeyAsSegmentSupported", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".CrossJoinSupported", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".AsynchronousRequestsSupported", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".TopSupported", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".SkipSupported", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".IndexableByKey", "Org.OData.Core.V1.Tag"),
+            Map.entry(CAPABILITIES + ".CountRestrictions", CAPABILITIES + ".CountRestrictionsType"),
+            Map.entry(CAPABILITIES + ".SearchRestrictions", CAPABILITIES + ".SearchRestrictionsType"),
+            Map.entry(CAPABILITIES + ".FilterRestrictions", CAPABILITIES + ".FilterRestrictionsType"),
+            Map.entry(CAPABILITIES + ".SortRestrictions", CAPABILITIES + ".SortRestrictionsType"),
+            Map.entry(CAPABILITIES + ".ExpandRestrictions", CAPABILITIES + ".ExpandRestrictionsType"),
+            Map.entry(CAPABILITIES + ".InsertRestrictions", CAPABILITIES + ".InsertRestrictionsType"),
+            Map.entry(CAPABILITIES + ".UpdateRestrictions", CAPABILITIES + ".UpdateRestrictionsType"),
+            Map.entry(CAPABILITIES + ".DeleteRestrictions", CAPABILITIES + ".DeleteRestrictionsType"));
+
+    @Override
+    public org.apache.olingo.commons.api.edm.provider.CsdlTerm getTerm(FullQualifiedName termName) {
+        String type = TERMS.get(termName.getFullQualifiedNameAsString());
+        return type == null ? null : new org.apache.olingo.commons.api.edm.provider.CsdlTerm()
+                .setName(termName.getName()).setType(type);
+    }
+
+    /** {@code $metadata} references to the vocabularies, with the usual aliases. */
+    public static List<org.apache.olingo.commons.api.edmx.EdmxReference> vocabularyReferences() {
+        List<org.apache.olingo.commons.api.edmx.EdmxReference> refs = new ArrayList<>();
+        for (String[] v : new String[][] {{CORE, "Core"}, {CAPABILITIES, "Capabilities"}}) {
+            org.apache.olingo.commons.api.edmx.EdmxReference ref = new org.apache.olingo.commons.api.edmx.EdmxReference(
+                    java.net.URI.create("https://oasis-tcs.github.io/odata-vocabularies/vocabularies/" + v[0] + ".xml"));
+            ref.addInclude(new org.apache.olingo.commons.api.edmx.EdmxReferenceInclude(v[0], v[1]));
+            refs.add(ref);
+        }
+        return refs;
+    }
+
+    private CsdlEntityType annotatedType(QueryDefinition q) {
+        CsdlEntityType type = buildType(q).setNavigationProperties(navigationProperties(q));
+        if (q.description() != null && !q.description().isBlank()) type.setAnnotations(List.of(description(q.description())));
+        return type;
+    }
+
+    static org.apache.olingo.commons.api.edm.provider.CsdlAnnotation description(String text) {
+        return new org.apache.olingo.commons.api.edm.provider.CsdlAnnotation().setTerm(CORE + ".Description")
+                .setExpression(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression(
+                        org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression.ConstantExpressionType.String, text));
+    }
+
+    private static org.apache.olingo.commons.api.edm.provider.CsdlAnnotation tag(String namespace, String term, boolean value) {
+        return new org.apache.olingo.commons.api.edm.provider.CsdlAnnotation().setTerm(namespace + "." + term)
+                .setExpression(bool(value));
+    }
+
+    private static org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression bool(boolean value) {
+        return new org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression(
+                org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression.ConstantExpressionType.Bool,
+                String.valueOf(value));
+    }
+
+    private static org.apache.olingo.commons.api.edm.provider.CsdlAnnotation record(String term, Object... nameValue) {
+        List<org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue> values = new ArrayList<>();
+        for (int i = 0; i < nameValue.length; i += 2) {
+            org.apache.olingo.commons.api.edm.provider.annotation.CsdlExpression v = nameValue[i + 1] instanceof Boolean b ? bool(b)
+                    : new org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression(
+                            org.apache.olingo.commons.api.edm.provider.annotation.CsdlConstantExpression.ConstantExpressionType.Int,
+                            String.valueOf(nameValue[i + 1]));
+            values.add(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlPropertyValue()
+                    .setProperty((String) nameValue[i]).setValue(v));
+        }
+        return new org.apache.olingo.commons.api.edm.provider.CsdlAnnotation().setTerm(CAPABILITIES + "." + term)
+                .setExpression(new org.apache.olingo.commons.api.edm.provider.annotation.CsdlRecord()
+                        .setType(CAPABILITIES + "." + term + "Type").setPropertyValues(values));
+    }
+
+    /**
+     * What a client may do with an entity set: read-only, countable, searchable, filterable, sortable, expandable
+     * (up to 3 levels, $levels up to 8), paging with $top/$skip. Lets OData explorers and code generators hide
+     * write operations and offer the supported options.
+     */
+    private List<org.apache.olingo.commons.api.edm.provider.CsdlAnnotation> entitySetCapabilities(QueryDefinition q) {
+        List<org.apache.olingo.commons.api.edm.provider.CsdlAnnotation> a = new ArrayList<>();
+        if (q != null && q.description() != null && !q.description().isBlank()) a.add(description(q.description()));
+        a.add(record("InsertRestrictions", "Insertable", false));
+        a.add(record("UpdateRestrictions", "Updatable", false));
+        a.add(record("DeleteRestrictions", "Deletable", false));
+        a.add(record("CountRestrictions", "Countable", true));
+        a.add(record("SearchRestrictions", "Searchable", true));
+        a.add(record("FilterRestrictions", "Filterable", true));
+        a.add(record("SortRestrictions", "Sortable", true));
+        a.add(record("ExpandRestrictions", "Expandable", q != null && !visibleRelations(q).isEmpty(), "MaxLevels", 8));
+        a.add(tag(CAPABILITIES, "TopSupported", true));
+        a.add(tag(CAPABILITIES, "SkipSupported", true));
+        a.add(tag(CAPABILITIES, "IndexableByKey", true));
+        return a;
     }
 
     // --- parametrised queries as functions ----------------------------------------------------------------------
@@ -179,7 +288,11 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             List<CsdlParameter> params = new ArrayList<>();
             for (QueryParameter p : q.parameters()) {
                 if (!variant.contains(p)) continue; // keep the declared order
-                params.add(new CsdlParameter().setName(p.name()).setType(parameterType(p.type())).setNullable(true));
+                CsdlParameter param = new CsdlParameter().setName(p.name()).setType(parameterType(p.type())).setNullable(true);
+                String text = (p.description() == null ? "" : p.description())
+                        + (p.defaultValue() == null || p.defaultValue().isBlank() ? "" : (p.description() == null || p.description().isBlank() ? "" : " ") + "(Default: " + p.defaultValue() + ")");
+                if (!text.isBlank()) param.setAnnotations(List.of(description(text.strip())));
+                params.add(param);
             }
             functions.add(new CsdlFunction().setName(functionName.getName()).setBound(false).setComposable(true)
                     .setParameters(params)
@@ -220,7 +333,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
     public List<CsdlSchema> getSchemas() {
         List<CsdlEntityType> types = new ArrayList<>();
         for (QueryDefinition q : queries.values()) {
-            types.add(buildType(q).setNavigationProperties(navigationProperties(q)));
+            types.add(annotatedType(q));
         }
         List<CsdlFunction> functions = new ArrayList<>();
         for (String name : queries.keySet()) {

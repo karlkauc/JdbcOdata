@@ -40,6 +40,62 @@ final class ExpressionRewriter {
         return s;
     }
 
+    /**
+     * For {@code $expand}: {@code Nav/$count(...)} is valid expand syntax there, so the count rewrite only applies
+     * inside nested expression options ({@code $filter=}, {@code $orderby=}, {@code $compute=}, {@code $apply=}).
+     */
+    static String rewriteExpand(String expand) {
+        if (expand == null || expand.isEmpty()) return expand;
+        ExpressionRewriter r = new ExpressionRewriter();
+        String s = r.matchesPattern(r.lambdaColons(expand));
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (i < s.length()) {
+            char c = s.charAt(i);
+            if (c == '\'') {
+                int end = stringEnd(s, i);
+                out.append(s, i, end);
+                i = end;
+                continue;
+            }
+            String option = null;
+            for (String o : new String[] {"$filter=", "$orderby=", "$compute=", "$apply="}) {
+                if (s.regionMatches(true, i, o, 0, o.length())) option = o;
+            }
+            if (option == null) {
+                out.append(c);
+                i++;
+                continue;
+            }
+            int start = i + option.length();
+            int end = optionEnd(s, start);
+            out.append(s, i, start).append(r.countWithOptions(s.substring(start, end)));
+            i = end;
+        }
+        return out.toString();
+    }
+
+    /** End of a nested option value: the next {@code ;} or unmatched {@code )} on its level. */
+    private static int optionEnd(String s, int start) {
+        int depth = 0;
+        int i = start;
+        while (i < s.length()) {
+            char c = s.charAt(i);
+            if (c == '\'') {
+                i = stringEnd(s, i);
+                continue;
+            }
+            if (c == '(') depth++;
+            if (c == ')') {
+                if (depth == 0) return i;
+                depth--;
+            }
+            if (c == ';' && depth == 0) return i;
+            i++;
+        }
+        return s.length();
+    }
+
     // --- lambda colon ---------------------------------------------------------------------------------------
 
     private String lambdaColons(String s) {

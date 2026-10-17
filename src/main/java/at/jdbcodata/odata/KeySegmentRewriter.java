@@ -82,4 +82,42 @@ final class KeySegmentRewriter {
         String literal = string ? "'" + value.replace("'", "''") + "'" : value;
         return QueryRewriter.encode(literal).replace("/", "%2F");
     }
+
+    /**
+     * Does the (already rewritten) path address one entity, e.g. {@code Kunden(1)}, {@code Umsatz(1)/Kunde} or
+     * {@code GetUmsatz(p_jahr=2024)(17)}? Used to treat {@code $compute} there, where Olingo forbids {@code $apply}.
+     */
+    static boolean addressesSingleEntity(String path, Edm edm) {
+        if (edm == null || path == null || path.length() < 2 || !path.startsWith("/")) return false;
+        EdmEntityContainer container = edm.getEntityContainer();
+        if (container == null) return false;
+        String[] segments = path.substring(1).split("/", -1);
+        String first = QueryRewriter.decode(segments[0]);
+        if (first == null) return false;
+        int paren = first.indexOf('(');
+        String name = paren < 0 ? first : first.substring(0, paren);
+        EdmEntityType type;
+        boolean single;
+        EdmEntitySet set = container.getEntitySet(name);
+        EdmFunctionImport fn = set == null ? container.getFunctionImport(name) : null;
+        if (set != null) {
+            type = set.getEntityType();
+            single = paren >= 0;
+        } else if (fn != null && fn.getReturnedEntitySet() != null && paren >= 0) {
+            type = fn.getReturnedEntitySet().getEntityType();
+            single = first.indexOf('(', first.indexOf(')')) >= 0;
+        } else {
+            return false;
+        }
+        for (int i = 1; i < segments.length; i++) {
+            String seg = QueryRewriter.decode(segments[i]);
+            if (seg == null || seg.isEmpty() || !single) return false;
+            int p = seg.indexOf('(');
+            EdmNavigationProperty nav = type.getNavigationProperty(p < 0 ? seg : seg.substring(0, p));
+            if (nav == null) return false; // property, $value, $ref, …
+            type = nav.getType();
+            single = !nav.isCollection() || p >= 0;
+        }
+        return single;
+    }
 }
