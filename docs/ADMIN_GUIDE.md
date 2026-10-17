@@ -58,6 +58,17 @@ wiederherstellen.
   Nicht freigegebene Aufrufer sehen die Query nicht.
 - PowerBI Service über Gateway: nur Service-User mit hinterlegten Zugangsdaten verwenden (PRD FR-32a).
 
+### Push-Down
+
+Im Query-Editor „Filter in der Datenbank auswerten (Push-Down)“ setzen. Dann laufen `$filter`, `$orderby`,
+`$top`, `$skip` und `$count` als gekapseltes SQL in der Datenbank, soweit sie sich mit gleicher Bedeutung
+übersetzen lassen; der Rest wird wie bisher im Speicher ausgewertet. Sinnvoll für große Ergebnisse, die
+Clients selten vollständig laden. Voraussetzung: Schlüsselmodus „Spalten“ mit Schlüsselspalte, Datenbank
+PostgreSQL, H2, Oracle oder MySQL/MariaDB. Gepushte Abrufe umgehen den Cache. Der Antwort-Header
+`X-Push-Down` zeigt, was in der Datenbank lief. In `seed.yml`: `pushDown: true`.
+
+Queries mit Parametern sind zusätzlich als OData-Funktion aufrufbar: `GetUmsatz(p_jahr=2024)`.
+
 ## 4. Cache
 
 Im Query-Editor „Cache aktiv“ und TTL setzen. Der Cache gilt pro DB-User und Parameterwerten, Nutzer sehen
@@ -81,4 +92,4 @@ Datenquellen und Queries lassen sich versioniert als YAML pflegen (`contrib/seed
 Schema-Snapshot beim Start erzeugt; die Zugangsdaten werden nicht gespeichert. `keyColumns` markiert
 Snapshot-Spalten als Schlüssel, `relations` deklariert Beziehungen (`name`, `target`, `columns`
 als `eigene: ziel`, `toMany`, `partner`); fehlt `relations` in der Datei, bleiben vorhandene Beziehungen
-erhalten.
+erhalten. `pushDown: true` schaltet den Push-Down ein.

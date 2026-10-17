@@ -138,6 +138,7 @@ public class QueryForm {
     private Integer maxRows;
     private KeyMode keyMode = KeyMode.ROWID;
     private boolean enabled = true;
+    private boolean pushDown;
 
     public static QueryForm from(QueryDefinition q) {
         QueryForm f = new QueryForm();
@@ -155,6 +156,7 @@ public class QueryForm {
         f.maxRows = q.maxRows();
         f.keyMode = q.keyMode();
         f.enabled = q.enabled();
+        f.pushDown = q.pushDown();
         return f;
     }
 
@@ -166,7 +168,7 @@ public class QueryForm {
                 : relations.stream().filter(r -> r != null && r.name != null && !r.name.isBlank())
                         .map(RelationForm::toRecord).toList();
         return new QuerySpec(name, blankToNull(description), datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled,
-                cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params, rels);
+                cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params, rels, pushDown);
     }
 
     private static String blankToNull(String s) {
@@ -200,5 +202,7 @@ public class QueryForm {
     public KeyMode getKeyMode() { return keyMode; }
     public void setKeyMode(KeyMode keyMode) { this.keyMode = keyMode; }
     public boolean isEnabled() { return enabled; }
+    public boolean isPushDown() { return pushDown; }
+    public void setPushDown(boolean pushDown) { this.pushDown = pushDown; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

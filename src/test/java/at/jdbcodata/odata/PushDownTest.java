@@ -1,0 +1,174 @@
+package at.jdbcodata.odata;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import at.jdbcodata.testutil.DemoProfileTest;
+import java.net.URLEncoder;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Push-down of $filter/$orderby/$top/$skip/$count: the same query once with push-down ("PdSales") and once without
+ * ("MemSales") must answer every request identically. The region column contains nulls to check null semantics.
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class PushDownTest extends DemoProfileTest {
+
+    private static final String SQL = "SELECT id, customer, CASE WHEN MOD(id, 4) = 0 THEN NULL ELSE region END AS region, "
+            + "sale_month, amount, sold_at, CAST(sold_at AS DATE) AS sold_on, delivered FROM sales WHERE sale_year = 2025";
+
+    private final JsonMapper json = JsonMapper.builder().build();
+    private UUID pushId;
+    private UUID memId;
+
+    private static String enc(String s) {
+        return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
+    private UUID create(String name, boolean pushDown, String datasourceId) throws Exception {
+        HttpResponse<String> created = send("POST", "/api/v1/queries", """
+                {"name":"%s","datasourceId":"%s","keyMode":"COLUMNS","pushDown":%s,"sql":"%s"}
+                """.formatted(name, datasourceId, pushDown, SQL), ADMIN, ADMIN_PASSWORD);
+        assertThat(created.statusCode()).as(created.body()).isIn(200, 201);
+        UUID id = UUID.fromString(json.readTree(created.body()).get("id").asString());
+        assertThat(json.readTree(created.body()).get("pushDown").asBoolean()).isEqualTo(pushDown);
+        assertThat(send("POST", "/api/v1/queries/" + id + "/snapshot", "{\"username\":\"demo\",\"password\":\"demo\"}",
+                ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(200);
+        HttpResponse<String> cols = send("PUT", "/api/v1/queries/" + id + "/columns",
+                "{\"columns\":[{\"propertyName\":\"id\",\"key\":true,\"visible\":true}]}", ADMIN, ADMIN_PASSWORD);
+        assertThat(cols.statusCode()).as(cols.body()).isEqualTo(200);
+        return id;
+    }
+
+    @BeforeAll
+    void defineQueries() throws Exception {
+        String datasourceId = null;
+        for (JsonNode n : json.readTree(get("/api/v1/queries", ADMIN, ADMIN_PASSWORD).body())) {
+            if ("Sales".equals(n.get("name").asString())) datasourceId = n.get("datasourceId").asString();
+        }
+        pushId = create("PdSales", true, datasourceId);
+        memId = create("MemSales", false, datasourceId);
+    }
+
+    @AfterAll
+    void removeQueries() throws Exception {
+        send("DELETE", "/api/v1/queries/" + pushId, null, ADMIN, ADMIN_PASSWORD);
+        send("DELETE", "/api/v1/queries/" + memId, null, ADMIN, ADMIN_PASSWORD);
+    }
+
+    private HttpResponse<String> both(String set, String query) throws Exception {
+        return get("/odata/" + set + query, "demo", "demo");
+    }
+
+    /** Body without the context URL (which names the entity set). */
+    private JsonNode body(HttpResponse<String> r) throws Exception {
+        JsonNode n = json.readTree(r.body());
+        if (n.isObject()) ((tools.jackson.databind.node.ObjectNode) n).remove("@odata.context");
+        if (n.has("@odata.nextLink")) ((tools.jackson.databind.node.ObjectNode) n).remove("@odata.nextLink");
+        if (n.has("value")) {
+            for (JsonNode row : n.get("value")) ((tools.jackson.databind.node.ObjectNode) row).remove("@odata.id");
+        }
+        return n;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "region eq 'Nord'",
+            "region eq null",
+            "region ne 'Nord'",
+            "region ne null and amount gt 3000",
+            "not (region eq 'Nord')",
+            "amount ge 2000 and amount lt 6000.5",
+            "sale_month in (1, 3, 5) or delivered",
+            "contains(customer, 'eta') and not delivered",
+            "startswith(tolower(customer), 'alpha')",
+            "endswith(customer, '_%')",
+            "length(customer) eq 7",
+            "sale_month add 1 gt 10",
+            "-amount lt -5000",
+            "year(sold_on) eq 2025 and month(sold_on) le 6",
+            "sold_on ge 2025-06-01",
+            "region gt 'M'",
+            "year(sold_at) eq 2025",
+            "amount div 2 gt 2000",
+            "region lt 'Z' and amount gt 1000",
+            "true",
+            "region eq @r",
+    })
+    void filtersAnswerLikeInMemory(String filter) throws Exception {
+        String q = "?$filter=" + enc(filter) + "&$orderby=id&@r='Süd'";
+        HttpResponse<String> pushed = both("PdSales", q);
+        HttpResponse<String> memory = both("MemSales", q);
+        assertThat(pushed.statusCode()).as(pushed.body()).isEqualTo(200);
+        assertThat(body(pushed)).as(filter).isEqualTo(body(memory));
+        assertThat(memory.headers().firstValue("X-Push-Down")).isEmpty();
+    }
+
+    @Test
+    void translatableFiltersGoToTheDatabaseOthersStayInMemory() throws Exception {
+        assertThat(both("PdSales", "?$filter=" + enc("region eq 'Nord'")).headers().firstValue("X-Push-Down")).hasValue("filter");
+        assertThat(both("PdSales", "?$filter=" + enc("region eq 'Nord' and region gt 'M'")).headers().firstValue("X-Push-Down"))
+                .hasValue("filter(partial)");
+        assertThat(both("PdSales", "?$filter=" + enc("region gt 'M'")).headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$top=3").headers().firstValue("X-Push-Down")).hasValue("top");
+        assertThat(both("PdSales", "?$apply=" + enc("filter(amount gt 0)")).headers().firstValue("X-Push-Down")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "?$orderby=region,amount%20desc&$top=5&$skip=2&$count=true",
+            "?$orderby=region%20desc&$top=7",
+            "?$filter=" + "amount%20gt%203000" + "&$orderby=sale_month%20desc&$skip=3&$count=true",
+            "?$filter=region%20gt%20'M'&$orderby=amount&$top=3&$count=true",
+            "?$search=Beta&$orderby=amount&$top=3&$count=true",
+            "?$top=4&$select=id,amount",
+            "?$skip=10",
+            "?$orderby=amount&$top=2&$expand=*",
+    })
+    void pagingAnswersLikeInMemory(String q) throws Exception {
+        HttpResponse<String> pushed = both("PdSales", q);
+        assertThat(pushed.statusCode()).as(pushed.body()).isEqualTo(200);
+        assertThat(body(pushed)).as(q).isEqualTo(body(both("MemSales", q)));
+    }
+
+    @Test
+    void pagingIsPushedOnlyWhenTheFilterIsComplete() throws Exception {
+        assertThat(both("PdSales", "?$filter=amount%20gt%203000&$orderby=id&$top=2&$count=true").headers().firstValue("X-Push-Down"))
+                .hasValue("filter,orderby,top,count");
+        assertThat(both("PdSales", "?$filter=region%20gt%20'M'&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$search=Beta&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "?$filter=region%20eq%20null", "?$filter=region%20gt%20'M'%20and%20amount%20gt%202000",
+            "?$search=Alpha", "?$filter=delivered&$search=Beta"})
+    void countAnswersLikeInMemory(String q) throws Exception {
+        HttpResponse<String> pushed = both("PdSales/$count", q);
+        assertThat(pushed.statusCode()).as(pushed.body()).isEqualTo(200);
+        assertThat(pushed.body()).as(q).isEqualTo(both("MemSales/$count", q).body());
+    }
+
+    @Test
+    void countOnlyQueryWhenTheFilterIsComplete() throws Exception {
+        HttpResponse<String> r = both("PdSales/$count", "?$filter=region%20eq%20null");
+        assertThat(r.headers().firstValue("X-Push-Down")).hasValue("filter,count");
+        assertThat(r.body()).isEqualTo("6");
+    }
+
+    @Test
+    void singleEntitiesAndNavigationKeepTheNormalPath() throws Exception {
+        HttpResponse<String> r = both("PdSales(13)", "");
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+        assertThat(r.headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(json.readTree(r.body()).get("id").asInt()).isEqualTo(13);
+    }
+}

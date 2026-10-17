@@ -2,7 +2,9 @@ package at.jdbcodata.odata;
 
 import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.QueryColumn;
+import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.QueryDefinition;
+import at.jdbcodata.query.QueryParameter;
 import at.jdbcodata.query.QueryRelation;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -14,6 +16,10 @@ import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
 import org.apache.olingo.commons.api.edm.FullQualifiedName;
 import org.apache.olingo.commons.api.edm.provider.CsdlAbstractEdmProvider;
 import org.apache.olingo.commons.api.edm.provider.CsdlEntityContainer;
+import org.apache.olingo.commons.api.edm.provider.CsdlFunction;
+import org.apache.olingo.commons.api.edm.provider.CsdlFunctionImport;
+import org.apache.olingo.commons.api.edm.provider.CsdlParameter;
+import org.apache.olingo.commons.api.edm.provider.CsdlReturnType;
 import org.apache.olingo.commons.api.edm.provider.CsdlEntityContainerInfo;
 import org.apache.olingo.commons.api.edm.provider.CsdlEntitySet;
 import org.apache.olingo.commons.api.edm.provider.CsdlEntityType;
@@ -122,10 +128,84 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
     @Override
     public CsdlEntityContainer getEntityContainer() {
         List<CsdlEntitySet> sets = new ArrayList<>();
+        List<CsdlFunctionImport> imports = new ArrayList<>();
         for (String name : queries.keySet()) {
             sets.add(getEntitySet(CONTAINER, name));
+            CsdlFunctionImport fi = getFunctionImport(CONTAINER, FUNCTION_PREFIX + name);
+            if (fi != null) imports.add(fi);
         }
-        return new CsdlEntityContainer().setName(CONTAINER_NAME).setEntitySets(sets);
+        return new CsdlEntityContainer().setName(CONTAINER_NAME).setEntitySets(sets).setFunctionImports(imports);
+    }
+
+    // --- parametrised queries as functions ----------------------------------------------------------------------
+
+    /** {@code GetUmsatz(p_jahr=2025)}: a query with parameters is also published as composable function. */
+    public static final String FUNCTION_PREFIX = "Get";
+    private static final java.util.regex.Pattern IDENTIFIER = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,127}");
+    /** Up to this many optional parameters every combination becomes an overload; above only none and all. */
+    private static final int MAX_OPTIONAL_COMBINATIONS = 4;
+
+    /** The query behind a function name, or {@code null} when the name is no published function. */
+    public QueryDefinition functionQuery(String functionName) {
+        if (functionName == null || !functionName.startsWith(FUNCTION_PREFIX)) return null;
+        QueryDefinition q = queries.get(functionName.substring(FUNCTION_PREFIX.length()));
+        if (q == null || q.parameters().isEmpty() || queries.containsKey(functionName)) return null;
+        for (QueryParameter p : q.parameters()) {
+            if (!IDENTIFIER.matcher(p.name()).matches()) return null;
+        }
+        return q;
+    }
+
+    @Override
+    public List<CsdlFunction> getFunctions(FullQualifiedName functionName) {
+        if (!NAMESPACE.equals(functionName.getNamespace())) return null;
+        QueryDefinition q = functionQuery(functionName.getName());
+        if (q == null) return null;
+        List<QueryParameter> required = q.parameters().stream().filter(QueryParameter::required).toList();
+        List<QueryParameter> optional = q.parameters().stream().filter(p -> !p.required()).toList();
+        List<List<QueryParameter>> variants = new ArrayList<>();
+        if (optional.size() <= MAX_OPTIONAL_COMBINATIONS) {
+            for (int mask = 0; mask < (1 << optional.size()); mask++) {
+                List<QueryParameter> v = new ArrayList<>(required);
+                for (int i = 0; i < optional.size(); i++) if ((mask & (1 << i)) != 0) v.add(optional.get(i));
+                variants.add(v);
+            }
+        } else {
+            variants.add(required);
+            variants.add(q.parameters());
+        }
+        List<CsdlFunction> functions = new ArrayList<>();
+        for (List<QueryParameter> variant : variants) {
+            List<CsdlParameter> params = new ArrayList<>();
+            for (QueryParameter p : q.parameters()) {
+                if (!variant.contains(p)) continue; // keep the declared order
+                params.add(new CsdlParameter().setName(p.name()).setType(parameterType(p.type())).setNullable(true));
+            }
+            functions.add(new CsdlFunction().setName(functionName.getName()).setBound(false).setComposable(true)
+                    .setParameters(params)
+                    .setReturnType(new CsdlReturnType().setType(typeName(q.name())).setCollection(true)));
+        }
+        return functions;
+    }
+
+    @Override
+    public CsdlFunctionImport getFunctionImport(FullQualifiedName entityContainer, String functionImportName) {
+        if (!CONTAINER.equals(entityContainer) || functionQuery(functionImportName) == null) return null;
+        QueryDefinition q = functionQuery(functionImportName);
+        return new CsdlFunctionImport().setName(functionImportName)
+                .setFunction(new FullQualifiedName(NAMESPACE, functionImportName))
+                .setEntitySet(q.name()).setIncludeInServiceDocument(true);
+    }
+
+    static FullQualifiedName parameterType(ParameterType type) {
+        return switch (type) {
+            case STRING -> EdmPrimitiveTypeKind.String.getFullQualifiedName();
+            case INT -> EdmPrimitiveTypeKind.Int64.getFullQualifiedName();
+            case DECIMAL -> EdmPrimitiveTypeKind.Decimal.getFullQualifiedName();
+            case DATE -> EdmPrimitiveTypeKind.Date.getFullQualifiedName();
+            case TIMESTAMP -> EdmPrimitiveTypeKind.DateTimeOffset.getFullQualifiedName();
+            case BOOLEAN -> EdmPrimitiveTypeKind.Boolean.getFullQualifiedName();
+        };
     }
 
     @Override
@@ -142,7 +222,12 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         for (QueryDefinition q : queries.values()) {
             types.add(buildType(q).setNavigationProperties(navigationProperties(q)));
         }
-        CsdlSchema schema = new CsdlSchema().setNamespace(NAMESPACE).setEntityTypes(types)
+        List<CsdlFunction> functions = new ArrayList<>();
+        for (String name : queries.keySet()) {
+            List<CsdlFunction> f = getFunctions(new FullQualifiedName(NAMESPACE, FUNCTION_PREFIX + name));
+            if (f != null) functions.addAll(f);
+        }
+        CsdlSchema schema = new CsdlSchema().setNamespace(NAMESPACE).setEntityTypes(types).setFunctions(functions)
                 .setEntityContainer(getEntityContainer());
         return List.of(schema);
     }

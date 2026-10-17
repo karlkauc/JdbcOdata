@@ -298,7 +298,8 @@ public class QueryService {
                 Boolean.TRUE.equals(spec.cacheEnabled()), spec.cacheTtlSec() == null ? 3600 : spec.cacheTtlSec(),
                 spec.timeoutSec(), spec.maxRows(), spec.keyMode() == null ? KeyMode.ROWID : spec.keyMode(), 0,
                 spec.enabled() == null || spec.enabled(), spec.parameters() == null ? List.of() : spec.parameters(),
-                List.of(), null, null, spec.relations() == null ? List.of() : spec.relations());
+                List.of(), null, null, spec.relations() == null ? List.of() : spec.relations(),
+                Boolean.TRUE.equals(spec.pushDown()));
     }
 
     public void validate(QuerySpec spec) {
@@ -418,6 +419,7 @@ public class QueryService {
         e.setMaxRows(s.maxRows());
         if (s.keyMode() != null) e.setKeyMode(s.keyMode());
         if (s.enabled() != null) e.setEnabled(s.enabled());
+        if (s.pushDown() != null) e.setPushDown(s.pushDown());
         e.replaceParameters(s.parameters() == null ? List.of() : s.parameters());
         if (s.relations() != null) {
             e.replaceRelations(s.relations());

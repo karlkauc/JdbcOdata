@@ -97,6 +97,22 @@ final class QueryOptionsEvaluator {
         return collection;
     }
 
+    /** Rows for which {@code expr} is true (one conjunct of a $filter that was not pushed to the database). */
+    static List<Entity> filterBy(List<Entity> entities, Expression expr, EvaluationContext navigation)
+            throws ODataApplicationException {
+        List<Entity> out = new ArrayList<>();
+        for (Entity e : entities) {
+            Object v = evaluate(expr, e, navigation);
+            if (v instanceof Boolean b) {
+                if (b) out.add(e);
+            } else if (v != null) {
+                throw new ODataApplicationException("$filter must evaluate to a boolean",
+                        HttpStatusCode.BAD_REQUEST.getStatusCode(), Locale.ENGLISH);
+            }
+        }
+        return out;
+    }
+
     private static Object evaluate(Expression expr, Entity e, EvaluationContext navigation) throws ODataApplicationException {
         try {
             return new EntityExpressionVisitor(e, navigation).evaluate(expr);

@@ -122,7 +122,8 @@ public class SeedLoader implements ApplicationRunner {
                 ExecutionMode.valueOf(str(q, "executionMode", "CALLER").toUpperCase()), null,
                 bool(q, "cacheEnabled", false), integer(q, "cacheTtlSec"), integer(q, "timeoutSec"),
                 integer(q, "maxRows"), KeyMode.valueOf(str(q, "keyMode", "ROWID").toUpperCase()),
-                bool(q, "enabled", true), params, q.containsKey("relations") ? relations : null);
+                bool(q, "enabled", true), params, q.containsKey("relations") ? relations : null,
+                q.containsKey("pushDown") ? bool(q, "pushDown", false) : null);
         QueryDefinition saved = queryService.upsertByName(spec);
 
         Map<String, Object> creds = map(q, "snapshotCredentials");

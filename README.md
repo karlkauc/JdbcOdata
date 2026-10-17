@@ -76,6 +76,10 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 - **Suche und Aggregation:** `$search`, `$apply` (`groupby` mit `rollup`, `aggregate` mit `from` und Inline-Aggregaten,
   `topcount`, …) und `$compute` werden in-memory ausgewertet; dazu `$levels`, `$ref`, `$all`, `$crossjoin`,
   `cast`/`isof`/`$it`/`$root`.
+- **Push-Down (pro Query):** `$filter`, `$orderby`, `$top`, `$skip` und `$count` laufen auf Wunsch als SQL in der
+  Datenbank (PostgreSQL, H2, Oracle, MySQL/MariaDB), Nicht-Übersetzbares weiter in-memory; Header `X-Push-Down`.
+- **Parameter als Funktion:** Queries mit Parametern sind auch als `GetUmsatz(p_jahr=2024)` aufrufbar, komponierbar
+  mit Schlüssel, Navigation, `$count` und allen Optionen.
 - **Anonym (optional):** Mit `jdbcodata.odata.anonymous-user` laufen Anfragen ohne Login als ein Service-User, z. B. für
   einen öffentlichen Demo-Feed, den Excel oder der [OData Online Viewer](https://www.odata-viewer.online) ohne
   Passwortabfrage öffnen.

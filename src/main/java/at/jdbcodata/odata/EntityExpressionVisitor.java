@@ -255,10 +255,11 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
             case OR -> bool(left) || bool(right);
             case EQ -> FilterValues.equal(left, right);
             case NE -> !FilterValues.equal(left, right);
-            case GT -> ordered(left, right) > 0;
-            case GE -> ordered(left, right) >= 0;
-            case LT -> ordered(left, right) < 0;
-            case LE -> ordered(left, right) <= 0;
+            // Ordering comparisons with null are false (as in SQL), in every direction.
+            case GT -> left != null && right != null && ordered(left, right) > 0;
+            case GE -> left != null && right != null && ordered(left, right) >= 0;
+            case LT -> left != null && right != null && ordered(left, right) < 0;
+            case LE -> left != null && right != null && ordered(left, right) <= 0;
             case ADD -> arithmetic(left, right, op);
             case SUB -> arithmetic(left, right, op);
             case MUL -> arithmetic(left, right, op);

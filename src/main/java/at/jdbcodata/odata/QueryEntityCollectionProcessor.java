@@ -13,11 +13,15 @@ import at.jdbcodata.identity.ExecutionIdentity;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.identity.QueryNotVisibleException;
 import at.jdbcodata.query.ParameterBinder;
+import at.jdbcodata.query.KeyMode;
+import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
 import at.jdbcodata.query.QueryRelation;
 import at.jdbcodata.query.ResultTable;
 import at.jdbcodata.query.ResultTooLargeException;
+import at.jdbcodata.query.SqlDialect;
+import at.jdbcodata.query.SqlWrapper;
 import at.jdbcodata.query.SchemaSnapshotMissingException;
 import at.jdbcodata.stats.ClientKind;
 import at.jdbcodata.stats.ExecutionRecord;
@@ -82,11 +86,13 @@ import org.apache.olingo.server.api.uri.UriResourceKind;
 import org.apache.olingo.server.api.uri.UriResourcePrimitiveProperty;
 import org.apache.olingo.server.api.uri.UriResourceRef;
 import org.apache.olingo.server.api.uri.UriResourceEntitySet;
+import org.apache.olingo.server.api.uri.UriResourceFunction;
 import org.apache.olingo.server.api.uri.UriResourceNavigation;
 import org.apache.olingo.server.api.uri.queryoption.AliasQueryOption;
 import org.apache.olingo.server.api.uri.queryoption.CustomQueryOption;
 import org.apache.olingo.server.api.uri.queryoption.ExpandItem;
 import org.apache.olingo.server.api.uri.queryoption.ExpandOption;
+import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,7 +133,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         rejectUnsupportedOptions(uriInfo);
         begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
-        Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
+        Resolved r = resolvePushDown(uriInfo, custom, req, false);
+        if (r == null) r = resolve(uriInfo.getUriResourceParts(), custom, req);
         if (r.entities() == null) {
             throw new ODataApplicationException("The path does not address a collection",
                     HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
@@ -137,7 +144,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             writeDynamicResult(req, response, uriInfo, r, custom, responseFormat);
             return;
         }
-        EntityCollection collection = QueryOptionsEvaluator.apply(r.entities(), uriInfo, navigationResolver(custom));
+        EntityCollection collection = r.pushDown() != null ? afterPushDown(r, uriInfo, navigationResolver(custom), response)
+                : QueryOptionsEvaluator.apply(r.entities(), uriInfo, navigationResolver(custom));
         Page page = page(req, uriInfo, collection.getEntities());
         collection.getEntities().clear();
         collection.getEntities().addAll(page.rows());
@@ -169,6 +177,19 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         rejectUnsupportedOptions(uriInfo);
         begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
+        Resolved pushed = resolvePushDown(uriInfo, custom, req, true);
+        if (pushed != null) {
+            long n;
+            if (pushed.pushDown().countOnly()) {
+                response.setHeader("X-Push-Down", pushed.pushDown().summary());
+                n = pushed.root().pushedCount();
+            } else {
+                n = afterPushDown(pushed, uriInfo, navigationResolver(custom), response).getCount();
+            }
+            respond(req, response, new ByteArrayInputStream(String.valueOf(n).getBytes(StandardCharsets.UTF_8)),
+                    ContentType.TEXT_PLAIN.toContentTypeString(), pushed.root());
+            return;
+        }
         Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
         if (r.entities() == null) {
             throw new ODataApplicationException("$count needs a collection", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
@@ -237,6 +258,125 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
         }
         return false;
+    }
+
+    // --- push-down --------------------------------------------------------------------------------------------
+
+    /**
+     * What went to the database: the wrapper, the $filter conjuncts that stay in memory, and a summary for the
+     * {@code X-Push-Down} header.
+     */
+    private record PushDown(SqlWrapper wrapper, List<Expression> residual, boolean countOnly, String summary) {
+    }
+
+    /**
+     * Plans and runs a push-down for {@code GET EntitySet} or {@code EntitySet/$count} of a query with push-down
+     * switched on and real key columns. Returns {@code null} when nothing can be pushed; the caller then takes the
+     * in-memory path. $filter is split at top-level {@code and}: translatable conjuncts become the WHERE clause, the
+     * rest stays in memory. $orderby, $skip and $top go to the database only when the whole filter did and there is
+     * no $search, because otherwise the database would slice before the in-memory part filters.
+     */
+    private Resolved resolvePushDown(UriInfo uriInfo, Map<String, String> custom, ODataRequest req, boolean countEndpoint)
+            throws ODataApplicationException {
+        List<UriResource> parts = new ArrayList<>(uriInfo.getUriResourceParts());
+        if (!parts.isEmpty() && parts.get(parts.size() - 1) instanceof UriResourceCount) parts.remove(parts.size() - 1);
+        if (parts.size() != 1) return null;
+        EdmEntitySet rootSet = rootSet(parts.get(0));
+        boolean keyed = parts.get(0) instanceof UriResourceEntitySet es ? !es.getKeyPredicates().isEmpty()
+                : parts.get(0) instanceof UriResourceFunction fn && !fn.getKeyPredicates().isEmpty();
+        if (rootSet == null || keyed) return null;
+        if (uriInfo.getApplyOption() != null || hasNestedApply(uriInfo.getExpandOption())) return null;
+        QueryDefinition query = support.queryService().findEnabledByName(rootSet.getName()).orElse(null);
+        if (query == null || !query.pushDown() || query.keyMode() != KeyMode.COLUMNS) return null;
+        List<String> keys = query.columns().stream().filter(c -> c.visible() && c.key()).map(QueryColumn::propertyName).toList();
+        if (keys.isEmpty()) return null;
+        Datasource ds = support.datasourceService().findById(query.datasourceId()).orElse(null);
+        SqlDialect dialect = ds == null ? null : SqlDialect.of(ds.jdbcUrl());
+        if (dialect == null) return null;
+
+        SqlFilterTranslator translator = new SqlFilterTranslator(query, dialect, navigationResolver(custom));
+        List<String> where = new ArrayList<>();
+        List<Object> binds = new ArrayList<>();
+        List<Expression> residual = new ArrayList<>();
+        if (uriInfo.getFilterOption() != null) {
+            for (Expression conjunct : conjuncts(uriInfo.getFilterOption().getExpression())) {
+                try {
+                    SqlFilterTranslator.Sql sql = translator.predicate(conjunct);
+                    where.add(sql.text());
+                    binds.addAll(sql.binds());
+                } catch (SqlFilterTranslator.Untranslatable e) {
+                    residual.add(conjunct);
+                }
+            }
+        }
+        boolean complete = residual.isEmpty() && uriInfo.getSearchOption() == null;
+        boolean paging = !countEndpoint && complete && (uriInfo.getTopOption() != null || uriInfo.getSkipOption() != null);
+        SqlFilterTranslator.Sql order = null;
+        if (paging) {
+            try {
+                order = translator.orderBy(uriInfo.getOrderByOption(), keys);
+                binds.addAll(order.binds());
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                paging = false;
+            }
+        }
+        boolean countOnly = countEndpoint && complete;
+        if (where.isEmpty() && !paging && !countOnly) return null;
+        SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where),
+                paging ? binds : binds.subList(0, binds.size() - (order == null ? 0 : order.binds().size())),
+                paging ? order.text() : null,
+                paging ? (uriInfo.getSkipOption() == null ? 0 : uriInfo.getSkipOption().getValue()) : null,
+                paging && uriInfo.getTopOption() != null ? uriInfo.getTopOption().getValue() : null);
+        boolean withCount = paging && uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
+        Execution root;
+        try {
+            root = execute(query.name(), custom, req.getRawQueryPath(), wrapper, countOnly, withCount);
+        } catch (ODataApplicationException e) {
+            if (e.getStatusCode() != HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode()) throw e;
+            // e.g. a type mismatch the database rejects: answer from the full result instead
+            log.warn("Push-down for '{}' failed, evaluating in memory: {}", query.name(), e.getMessage());
+            return null;
+        }
+        executions.put(query.name(), root);
+        List<String> summary = new ArrayList<>();
+        if (!where.isEmpty()) summary.add(residual.isEmpty() ? "filter" : "filter(partial)");
+        if (paging) {
+            if (uriInfo.getOrderByOption() != null) summary.add("orderby");
+            if (uriInfo.getSkipOption() != null) summary.add("skip");
+            if (uriInfo.getTopOption() != null) summary.add("top");
+        }
+        if (countOnly || withCount) summary.add("count");
+        List<Entity> entities = countOnly ? List.of() : EntityMapper.toEntities(query, root.table());
+        return new Resolved(root, query, rootSet, entities, null,
+                new PushDown(wrapper, residual, countOnly, String.join(",", summary)));
+    }
+
+    /** Top-level {@code and} operands of a filter expression. */
+    static List<Expression> conjuncts(Expression e) {
+        List<Expression> out = new ArrayList<>();
+        if (e instanceof org.apache.olingo.server.api.uri.queryoption.expression.Binary b
+                && b.getOperator() == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.AND) {
+            out.addAll(conjuncts(b.getLeftOperand()));
+            out.addAll(conjuncts(b.getRightOperand()));
+        } else {
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** The in-memory rest after a push-down: remaining conjuncts, $search and whatever was not sliced in SQL. */
+    private EntityCollection afterPushDown(Resolved r, UriInfo uriInfo, EvaluationContext context, ODataResponse response)
+            throws ODataApplicationException {
+        PushDown pd = r.pushDown();
+        response.setHeader("X-Push-Down", pd.summary());
+        List<Entity> rows = r.entities();
+        for (Expression e : pd.residual()) rows = QueryOptionsEvaluator.filterBy(rows, e, context);
+        boolean sliced = pd.wrapper().pagingPushed();
+        EntityCollection c = QueryOptionsEvaluator.apply(rows, uriInfo.getSearchOption(), null,
+                sliced ? null : uriInfo.getOrderByOption(), sliced ? null : uriInfo.getSkipOption(),
+                sliced ? null : uriInfo.getTopOption(), context);
+        if (sliced && r.root().pushedCount() != null) c.setCount(r.root().pushedCount().intValue());
+        return c;
     }
 
     // --- request state, paging, ETags -------------------------------------------------------------------------
@@ -490,7 +630,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      * neither (a single-valued navigation without a related row).
      */
     private record Resolved(Execution root, QueryDefinition query, EdmEntitySet entitySet, List<Entity> entities,
-                            Entity single) {
+                            Entity single, PushDown pushDown) {
+        Resolved(Execution root, QueryDefinition query, EdmEntitySet entitySet, List<Entity> entities, Entity single) {
+            this(root, query, entitySet, entities, single, null);
+        }
     }
 
     /**
@@ -504,18 +647,20 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 || parts.get(parts.size() - 1) instanceof UriResourceRef)) {
             parts.remove(parts.size() - 1);
         }
-        if (parts.isEmpty() || !(parts.get(0) instanceof UriResourceEntitySet first)) {
+        EdmEntitySet set = parts.isEmpty() ? null : rootSet(parts.get(0));
+        if (set == null) {
             throw new ODataApplicationException("Only entity set requests are supported",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
         }
-        Execution root = execute(first.getEntitySet().getName(), custom, req.getRawQueryPath());
+        List<UriParameter> rootKeys = parts.get(0) instanceof UriResourceEntitySet es ? es.getKeyPredicates()
+                : ((UriResourceFunction) parts.get(0)).getKeyPredicates();
+        Execution root = execute(set.getName(), custom, req.getRawQueryPath());
         executions.put(root.query().name(), root);
-        EdmEntitySet set = first.getEntitySet();
         QueryDefinition query = root.query();
         List<Entity> entities = EntityMapper.toEntities(query, root.table());
         Entity single = null;
-        if (!first.getKeyPredicates().isEmpty()) {
-            single = byKey(entities, first.getKeyPredicates(), set.getName());
+        if (!rootKeys.isEmpty()) {
+            single = byKey(entities, rootKeys, set.getName());
             entities = null;
         }
         EvaluationContext navigation = navigationResolver(custom);
@@ -551,6 +696,15 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
         }
         return new Resolved(root, query, set, entities, single);
+    }
+
+    /** Entity set addressed by the first path segment: {@code Umsatz} or {@code GetUmsatz(...)}; else {@code null}. */
+    private static EdmEntitySet rootSet(UriResource first) {
+        if (first instanceof UriResourceEntitySet es) return es.getEntitySet();
+        if (first instanceof UriResourceFunction fn && fn.getFunctionImport() != null) {
+            return fn.getFunctionImport().getReturnedEntitySet();
+        }
+        return null;
     }
 
     /** The entity whose key properties equal the key predicates; 404 if there is none. */
@@ -810,7 +964,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         response.setHeader("X-Query-Version", String.valueOf(exec.query().version()));
     }
 
-    private record Execution(QueryDefinition query, ResultTable table, CacheStatus cacheStatus, Long cacheAgeSeconds) {
+    /** One query run: rows, cache outcome and, for push-down, the database's {@code COUNT(*)}. */
+    private record Execution(QueryDefinition query, ResultTable table, CacheStatus cacheStatus, Long cacheAgeSeconds,
+                             Long pushedCount) {
     }
 
     // --- $expand ------------------------------------------------------------------------------------------------
@@ -1027,6 +1183,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     private Execution execute(String queryName, Map<String, String> custom, String optionsForLog)
             throws ODataApplicationException {
+        return execute(queryName, custom, optionsForLog, null, false, false);
+    }
+
+    /**
+     * @param wrapper    push-down SQL around the query (bypasses the result cache), or {@code null}
+     * @param countOnly  only run {@code SELECT COUNT(*)} (for /$count with a fully pushed filter)
+     * @param withCount  additionally run {@code COUNT(*)} (for $count=true when paging was pushed)
+     */
+    private Execution execute(String queryName, Map<String, String> custom, String optionsForLog, SqlWrapper wrapper,
+                              boolean countOnly, boolean withCount) throws ODataApplicationException {
         Instant started = Instant.now();
         long t0 = System.nanoTime();
         QueryDefinition query = support.queryService().findEnabledByName(queryName)
@@ -1061,15 +1227,26 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             };
 
             Execution exec;
-            if (!query.cacheEnabled()) {
-                exec = new Execution(query, run.get(), CacheStatus.DISABLED, null);
+            if (wrapper != null) {
+                long s = System.nanoTime();
+                ResultTable table = countOnly ? new ResultTable(List.of(), List.of(), false)
+                        : support.executor().execute(query, ds, identity, params,
+                                support.executor().effectiveMaxRows(query, ds), support.executor().effectiveTimeoutSec(query, ds),
+                                wrapper);
+                Long count = countOnly || withCount
+                        ? support.executor().count(query, ds, identity, params, support.executor().effectiveTimeoutSec(query, ds), wrapper)
+                        : null;
+                dbNanos.set(System.nanoTime() - s);
+                exec = new Execution(query, table, CacheStatus.DISABLED, null, count);
+            } else if (!query.cacheEnabled()) {
+                exec = new Execution(query, run.get(), CacheStatus.DISABLED, null, null);
             } else {
                 CacheKey key = CacheKey.of(query.id(), query.version(), identity.dbUsername(), params);
                 Duration ttl = Duration.ofSeconds(Math.max(1, query.cacheTtlSec()));
                 if (refresh) {
                     ResultTable table = run.get();
                     support.cache().put(key, params, table, ttl);
-                    exec = new Execution(query, table, CacheStatus.BYPASS, null);
+                    exec = new Execution(query, table, CacheStatus.BYPASS, null, null);
                 } else {
                     ResultCache.CachedResult r = support.cache().getOrLoad(key, params, ttl, run);
                     if (r.status() == CacheStatus.HIT
@@ -1079,7 +1256,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                         support.identityResolver().verifyLogin(ds, identity.dbUsername(), identity.dbPassword());
                     }
                     exec = new Execution(query, r.cached().table(), r.status(),
-                            r.status() == CacheStatus.HIT ? r.cached().ageSeconds() : null);
+                            r.status() == CacheStatus.HIT ? r.cached().ageSeconds() : null, null);
                 }
             }
             draft.cacheStatus = exec.cacheStatus();
@@ -1180,11 +1357,34 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     }
 
+    /**
+     * Query parameters of the request: custom query options ({@code ?p_jahr=2025}) and, for
+     * {@code GetUmsatz(p_jahr=2025)}, the function parameters, which win over a custom option of the same name.
+     * {@code null} as function argument means "use the default", like an omitted option.
+     */
     private static Map<String, String> customOptions(UriInfo uriInfo) {
         Map<String, String> options = new HashMap<>();
         for (CustomQueryOption o : uriInfo.getCustomQueryOptions()) {
             options.put(o.getName(), o.getText());
         }
+        List<UriResource> parts = uriInfo.getUriResourceParts();
+        if (parts != null && !parts.isEmpty() && parts.get(0) instanceof UriResourceFunction fn) {
+            for (UriParameter p : fn.getParameters()) {
+                String text = p.getAlias() != null ? uriInfo.getValueForAlias(p.getAlias()) : p.getText();
+                String value = functionArgument(text);
+                if (value == null) options.remove(p.getName());
+                else options.put(p.getName(), value);
+            }
+        }
         return options;
+    }
+
+    /** OData literal → raw parameter text: quotes removed from strings, {@code null} stays {@code null}. */
+    static String functionArgument(String literal) {
+        if (literal == null) return null;
+        String t = literal.strip();
+        if (t.equals("null")) return null;
+        if (t.length() >= 2 && t.startsWith("'") && t.endsWith("'")) return t.substring(1, t.length() - 1).replace("''", "'");
+        return t;
     }
 }

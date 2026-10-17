@@ -135,6 +135,7 @@
     <div class="check-list" style="margin-top:8px">
       <label class="check"><input type="checkbox" th:field="*{enabled}"> Query aktiv</label>
       <label class="check"><input type="checkbox" th:field="*{cacheEnabled}"> Ergebnis-Cache aktiv</label>
+      <label class="check" title="Nur mit Schlüssel 'Spalten'. Für große Tabellen: $filter, $orderby, $top und $skip werden als SQL an die Datenbank gegeben."><input type="checkbox" th:field="*{pushDown}"> Filter in der Datenbank auswerten (Push-Down)</label>
     </div>
 
     <h2>Testen mit eigenen Zugangsdaten</h2>

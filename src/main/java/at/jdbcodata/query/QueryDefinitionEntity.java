@@ -70,6 +70,9 @@ public class QueryDefinitionEntity {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @Column(name = "push_down", nullable = false)
+    private boolean pushDown = false;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -98,7 +101,7 @@ public class QueryDefinitionEntity {
                 parameters.stream().map(QueryParameterEntity::toRecord).toList(),
                 columns.stream().map(QueryColumnEntity::toRecord).toList(),
                 createdAt, updatedAt,
-                relations.stream().map(QueryRelationEntity::toRecord).toList());
+                relations.stream().map(QueryRelationEntity::toRecord).toList(), pushDown);
     }
 
     public void replaceRelations(List<QueryRelation> rels) {
@@ -150,6 +153,8 @@ public class QueryDefinitionEntity {
     public int getVersion() { return version; }
     public void setVersion(int version) { this.version = version; }
     public boolean isEnabled() { return enabled; }
+    public boolean isPushDown() { return pushDown; }
+    public void setPushDown(boolean pushDown) { this.pushDown = pushDown; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

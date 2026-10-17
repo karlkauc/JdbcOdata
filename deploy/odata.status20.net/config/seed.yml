@@ -75,6 +75,7 @@ queries:
         description: Geschäftsjahr
     keyMode: COLUMNS
     keyColumns: [PositionId]
+    pushDown: true
     relations:
       - name: Kunde
         target: Kunden

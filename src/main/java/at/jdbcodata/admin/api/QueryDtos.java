@@ -75,7 +75,8 @@ final class QueryDtos {
             @Min(1) @Max(3600) Integer timeoutSec,
             @Min(1) Integer maxRows,
             KeyMode keyMode,
-            Boolean enabled) {
+            Boolean enabled,
+            Boolean pushDown) {
 
         QuerySpec toSpec() {
             List<QueryParameter> params = parameters == null ? List.of()
@@ -83,7 +84,7 @@ final class QueryDtos {
             // relations == null keeps the stored relations (PUT without the field), an empty list removes them.
             List<QueryRelation> rels = relations == null ? null : relations.stream().map(RelationRequest::toRecord).toList();
             return new QuerySpec(name, description, datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled, cacheTtlSec,
-                    timeoutSec, maxRows, keyMode, enabled, params, rels);
+                    timeoutSec, maxRows, keyMode, enabled, params, rels, pushDown);
         }
     }
 
@@ -104,6 +105,7 @@ final class QueryDtos {
             KeyMode keyMode,
             int version,
             boolean enabled,
+            boolean pushDown,
             boolean hasSnapshot,
             List<QueryParameter> parameters,
             List<QueryColumn> columns,
@@ -115,7 +117,7 @@ final class QueryDtos {
         static QueryResponse from(QueryDefinition q) {
             return new QueryResponse(q.id(), q.name(), q.description(), q.datasourceId(), q.datasourceName(),
                     q.sqlText(), q.executionMode(), q.fixedCredentialId(), q.fixedCredentialName(), q.cacheEnabled(), q.cacheTtlSec(), q.timeoutSec(), q.maxRows(),
-                    q.keyMode(), q.version(), q.enabled(), q.hasSnapshot(), q.parameters(), q.columns(), q.relations(),
+                    q.keyMode(), q.version(), q.enabled(), q.pushDown(), q.hasSnapshot(), q.parameters(), q.columns(), q.relations(),
                     ODataConfig.BASE_PATH + "/" + q.name(), q.createdAt(), q.updatedAt());
         }
     }

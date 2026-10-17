@@ -26,10 +26,22 @@ public record QueryDefinition(
         List<QueryColumn> columns,
         Instant createdAt,
         Instant updatedAt,
-        List<QueryRelation> relations) {
+        List<QueryRelation> relations,
+        boolean pushDown) {
 
     public QueryDefinition {
         relations = relations == null ? List.of() : List.copyOf(relations);
+    }
+
+    /** Without the push-down flag (off). */
+    public QueryDefinition(UUID id, String name, String description, UUID datasourceId, String datasourceName,
+                           String sqlText, ExecutionMode executionMode, UUID fixedCredentialId, String fixedCredentialName,
+                           boolean cacheEnabled, int cacheTtlSec, Integer timeoutSec, Integer maxRows, KeyMode keyMode,
+                           int version, boolean enabled, List<QueryParameter> parameters, List<QueryColumn> columns,
+                           Instant createdAt, Instant updatedAt, List<QueryRelation> relations) {
+        this(id, name, description, datasourceId, datasourceName, sqlText, executionMode, fixedCredentialId,
+                fixedCredentialName, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled, parameters,
+                columns, createdAt, updatedAt, relations, false);
     }
 
     /** Without relations (kept for the many call sites that predate them). */
@@ -40,7 +52,7 @@ public record QueryDefinition(
                            Instant createdAt, Instant updatedAt) {
         this(id, name, description, datasourceId, datasourceName, sqlText, executionMode, fixedCredentialId,
                 fixedCredentialName, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled, parameters,
-                columns, createdAt, updatedAt, List.of());
+                columns, createdAt, updatedAt, List.of(), false);
     }
 
     public boolean hasSnapshot() {

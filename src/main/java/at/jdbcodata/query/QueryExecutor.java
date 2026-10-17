@@ -57,25 +57,42 @@ public class QueryExecutor {
      */
     public ResultTable execute(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
                                Map<String, Object> params, int maxRows, int timeoutSec) {
-        return run(query, ds, identity, params, maxRows, timeoutSec, true);
+        return run(query, ds, identity, params, maxRows, timeoutSec, true, null, false);
+    }
+
+    /** Like {@link #execute} with the query wrapped for push-down (WHERE / ORDER BY / paging in the database). */
+    public ResultTable execute(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
+                               Map<String, Object> params, int maxRows, int timeoutSec, SqlWrapper wrapper) {
+        return run(query, ds, identity, params, maxRows, timeoutSec, true, wrapper, false);
+    }
+
+    /** {@code SELECT COUNT(*)} of the wrapped query (push-down of $count). */
+    public long count(QueryDefinition query, Datasource ds, ExecutionIdentity identity, Map<String, Object> params,
+                      int timeoutSec, SqlWrapper wrapper) {
+        ResultTable t = run(query, ds, identity, params, 1, timeoutSec, false, wrapper, true);
+        Object v = t.rows().isEmpty() ? null : t.rows().get(0)[0];
+        return v instanceof Number n ? n.longValue() : Long.parseLong(String.valueOf(v));
     }
 
     /** Runs the query for a preview: returns at most {@code maxRows} rows and only flags truncation. */
     public ResultTable preview(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
                                Map<String, Object> params, int maxRows, int timeoutSec) {
-        return run(query, ds, identity, params, maxRows, timeoutSec, false);
+        return run(query, ds, identity, params, maxRows, timeoutSec, false, null, false);
     }
 
     /** Fetches at most one row to read the result metadata; never fails because of the row count. */
     public ResultTable probe(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
                              Map<String, Object> params, int timeoutSec) {
-        return run(query, ds, identity, params, 1, timeoutSec, false);
+        return run(query, ds, identity, params, 1, timeoutSec, false, null, false);
     }
 
     private ResultTable run(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
-                            Map<String, Object> params, int maxRows, int timeoutSec, boolean failOnTruncation) {
+                            Map<String, Object> params, int maxRows, int timeoutSec, boolean failOnTruncation,
+                            SqlWrapper wrapper, boolean countOnly) {
         NamedParameterSql parsed = NamedParameterSql.parse(query.sqlText());
         List<ParameterBinder.BoundValue> bound = ParameterBinder.order(parsed, query, params);
+        String sql = wrapper == null ? parsed.jdbcSql() : countOnly ? wrapper.count(parsed.jdbcSql()) : wrapper.rows(parsed.jdbcSql());
+        List<Object> extra = wrapper == null ? List.of() : countOnly ? wrapper.whereBinds() : wrapper.rowBinds();
         long start = System.nanoTime();
         try (ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
              Connection c = pools.connect(ds, identity.dbUsername(), identity.dbPassword())) {
@@ -84,11 +101,12 @@ public class QueryExecutor {
             } catch (SQLException ignored) {
                 // some drivers do not support read-only connections; the SQL is a SELECT anyway
             }
-            try (PreparedStatement ps = c.prepareStatement(parsed.jdbcSql())) {
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
                 if (timeoutSec > 0) ps.setQueryTimeout(timeoutSec);
                 ps.setMaxRows(maxRows + 1);
                 ps.setFetchSize(Math.min(1000, maxRows + 1));
                 ParameterBinder.bind(ps, bound);
+                bindExtra(ps, bound.size(), extra);
                 try (ResultSet rs = ps.executeQuery()) {
                     ResultTable table = read(rs, maxRows);
                     if (failOnTruncation && table.truncated()) {
@@ -107,6 +125,31 @@ public class QueryExecutor {
             }
         } catch (SQLException e) {
             throw DbErrorClassifier.translate(e, ds.name());
+        }
+    }
+
+    /** Push-down values after the query's own parameters; canonical OData values become JDBC types. */
+    static void bindExtra(PreparedStatement ps, int offset, List<Object> values) throws SQLException {
+        int i = offset;
+        for (Object v : values) {
+            i++;
+            if (v == null) {
+                ps.setNull(i, java.sql.Types.NULL);
+            } else if (v instanceof java.time.LocalDate d) {
+                ps.setDate(i, java.sql.Date.valueOf(d));
+            } else if (v instanceof java.time.Instant t) {
+                ps.setTimestamp(i, java.sql.Timestamp.from(t));
+            } else if (v instanceof java.time.LocalTime t) {
+                ps.setTime(i, java.sql.Time.valueOf(t));
+            } else if (v instanceof BigDecimal bd) {
+                ps.setBigDecimal(i, bd);
+            } else if (v instanceof Long l) {
+                ps.setLong(i, l);
+            } else if (v instanceof Boolean b) {
+                ps.setBoolean(i, b);
+            } else {
+                ps.setString(i, v.toString());
+            }
         }
     }
 
