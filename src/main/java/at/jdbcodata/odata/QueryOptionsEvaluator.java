@@ -14,12 +14,13 @@ import org.apache.olingo.server.api.uri.UriInfo;
 import org.apache.olingo.server.api.uri.queryoption.FilterOption;
 import org.apache.olingo.server.api.uri.queryoption.OrderByItem;
 import org.apache.olingo.server.api.uri.queryoption.OrderByOption;
+import org.apache.olingo.server.api.uri.queryoption.SearchOption;
 import org.apache.olingo.server.api.uri.queryoption.SkipOption;
 import org.apache.olingo.server.api.uri.queryoption.TopOption;
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
 import org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitException;
 
-/** Applies {@code $filter}, {@code $orderby}, {@code $skip} and {@code $top} in memory; count = after filter. */
+/** Applies {@code $search}, {@code $filter}, {@code $orderby}, {@code $skip} and {@code $top} in memory; count = after filter. */
 final class QueryOptionsEvaluator {
 
     private QueryOptionsEvaluator() {
@@ -32,18 +33,24 @@ final class QueryOptionsEvaluator {
     /** With {@code navigation}, member paths in $filter/$orderby may follow navigation properties. */
     static EntityCollection apply(List<Entity> entities, UriInfo uriInfo, NavigationResolver navigation)
             throws ODataApplicationException {
-        return apply(entities, uriInfo.getFilterOption(), uriInfo.getOrderByOption(), uriInfo.getSkipOption(),
-                uriInfo.getTopOption(), navigation);
+        return apply(entities, uriInfo.getSearchOption(), uriInfo.getFilterOption(), uriInfo.getOrderByOption(),
+                uriInfo.getSkipOption(), uriInfo.getTopOption(), navigation);
     }
 
-    /** Same evaluation for the nested options of an {@code $expand} item. */
     static EntityCollection apply(List<Entity> entities, FilterOption filter, OrderByOption orderBy, SkipOption skipOption,
                                   TopOption topOption, NavigationResolver navigation) throws ODataApplicationException {
-        List<Entity> result = entities;
+        return apply(entities, null, filter, orderBy, skipOption, topOption, navigation);
+    }
+
+    /** Same evaluation for the nested options of an {@code $expand} item; {@code $search} restricts first. */
+    static EntityCollection apply(List<Entity> entities, SearchOption search, FilterOption filter, OrderByOption orderBy,
+                                  SkipOption skipOption, TopOption topOption, NavigationResolver navigation)
+            throws ODataApplicationException {
+        List<Entity> result = SearchEvaluator.filter(entities, search);
         if (filter != null) {
             Expression expr = filter.getExpression();
             List<Entity> filtered = new ArrayList<>();
-            for (Entity e : entities) {
+            for (Entity e : result) {
                 Object v = evaluate(expr, e, navigation);
                 if (v instanceof Boolean b) {
                     if (b) filtered.add(e);

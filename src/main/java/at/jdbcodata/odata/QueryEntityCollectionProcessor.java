@@ -40,8 +40,12 @@ import org.apache.olingo.commons.api.data.ContextURL;
 import org.apache.olingo.commons.api.data.Entity;
 import org.apache.olingo.commons.api.data.EntityCollection;
 import org.apache.olingo.commons.api.data.Link;
+import org.apache.olingo.commons.api.data.Property;
 import org.apache.olingo.commons.api.edm.EdmEntitySet;
+import org.apache.olingo.commons.api.edm.EdmBindingTarget;
 import org.apache.olingo.commons.api.edm.EdmEntityType;
+import org.apache.olingo.commons.api.edm.EdmPrimitiveType;
+import org.apache.olingo.commons.api.edm.EdmProperty;
 import org.apache.olingo.commons.api.format.ContentType;
 import org.apache.olingo.commons.api.http.HttpHeader;
 import org.apache.olingo.commons.api.http.HttpStatusCode;
@@ -52,11 +56,19 @@ import org.apache.olingo.server.api.ODataRequest;
 import org.apache.olingo.server.api.ODataResponse;
 import org.apache.olingo.server.api.ServiceMetadata;
 import org.apache.olingo.server.api.processor.CountEntityCollectionProcessor;
+import org.apache.olingo.server.api.processor.EntityProcessor;
+import org.apache.olingo.server.api.processor.PrimitiveValueProcessor;
 import org.apache.olingo.server.api.serializer.EntityCollectionSerializerOptions;
+import org.apache.olingo.server.api.serializer.EntitySerializerOptions;
+import org.apache.olingo.server.api.serializer.PrimitiveSerializerOptions;
 import org.apache.olingo.server.api.serializer.ODataSerializer;
 import org.apache.olingo.server.api.serializer.SerializerResult;
 import org.apache.olingo.server.api.uri.UriInfo;
+import org.apache.olingo.server.api.uri.UriParameter;
 import org.apache.olingo.server.api.uri.UriResource;
+import org.apache.olingo.server.api.uri.UriResourceCount;
+import org.apache.olingo.server.api.uri.UriResourceKind;
+import org.apache.olingo.server.api.uri.UriResourcePrimitiveProperty;
 import org.apache.olingo.server.api.uri.UriResourceEntitySet;
 import org.apache.olingo.server.api.uri.UriResourceNavigation;
 import org.apache.olingo.server.api.uri.queryoption.CustomQueryOption;
@@ -66,12 +78,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Serves {@code GET /odata/{Query}} and {@code GET /odata/{Query}/$count}: resolves the identity, serves from the
+ * Serves {@code GET /odata/{Query}}, {@code /$count}, single entities ({@code Query(key)}), navigation paths
+ * ({@code Umsatz(1)/Kunde}, {@code Kunden(1)/Umsaetze}) and properties ({@code Kunden(1)/Name[/$value]}): resolves the identity, serves from the
  * per-user cache or runs the query, applies the OData options in memory (including {@code $expand} along declared
  * relations) and writes an execution log record per executed query.
  * One instance per request, because it carries the caller's identity.
  */
-public class QueryEntityCollectionProcessor implements CountEntityCollectionProcessor {
+public class QueryEntityCollectionProcessor implements CountEntityCollectionProcessor, EntityProcessor,
+        PrimitiveValueProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryEntityCollectionProcessor.class);
     private static final Locale LOCALE = Locale.ENGLISH;
@@ -97,16 +111,22 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     @Override
     public void readEntityCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo,
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
-        EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
-        Execution exec = execute(entitySet.getName(), custom, req.getRawQueryPath());
-        executions.put(exec.query().name(), exec);
-        EntityCollection collection = QueryOptionsEvaluator.apply(
-                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo, navigationResolver(custom));
+        Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
+        if (r.entities() == null) {
+            throw new ODataApplicationException("The path does not address a collection",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        EdmEntitySet entitySet = r.entitySet();
+        if (uriInfo.getApplyOption() != null) {
+            writeApplyResult(response, uriInfo, r, custom, responseFormat);
+            return;
+        }
+        EntityCollection collection = QueryOptionsEvaluator.apply(r.entities(), uriInfo, navigationResolver(custom));
         // Only the requested page is expanded, after $filter/$orderby/$skip/$top of the outer collection.
         if (uriInfo.getExpandOption() != null) {
-            expand(collection.getEntities(), exec.query(), uriInfo.getExpandOption(), custom, 1);
+            expand(collection.getEntities(), r.query(), uriInfo.getExpandOption(), custom, 1);
         }
 
         String selectList = odata.createUriHelper()
@@ -125,24 +145,295 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         response.setContent(result.getContent());
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
         response.setHeader(HttpHeader.CONTENT_TYPE, responseFormat.toContentTypeString());
-        setCacheHeaders(response, exec);
+        setCacheHeaders(response, r.root());
     }
 
     @Override
     public void countEntityCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo)
             throws ODataApplicationException, ODataLibraryException {
-        EdmEntitySet entitySet = entitySet(uriInfo);
         rejectUnsupportedOptions(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
-        Execution exec = execute(entitySet.getName(), custom, req.getRawQueryPath());
-        executions.put(exec.query().name(), exec);
-        EntityCollection collection = QueryOptionsEvaluator.apply(
-                EntityMapper.toEntities(exec.query(), exec.table()), uriInfo, navigationResolver(custom));
+        Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
+        if (r.entities() == null) {
+            throw new ODataApplicationException("$count needs a collection", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        List<Entity> input = uriInfo.getApplyOption() == null ? r.entities()
+                : new ApplyEvaluator(navigationResolver(custom)).apply(r.entities(), uriInfo.getApplyOption());
+        EntityCollection collection = QueryOptionsEvaluator.apply(input, uriInfo, navigationResolver(custom));
         byte[] body = String.valueOf(collection.getCount()).getBytes(StandardCharsets.UTF_8);
         response.setContent(new ByteArrayInputStream(body));
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
         response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.TEXT_PLAIN.toContentTypeString());
-        setCacheHeaders(response, exec);
+        setCacheHeaders(response, r.root());
+    }
+
+    /**
+     * {@code $apply} first, then $search/$filter/$orderby/$skip/$top/$count on the transformed rows (which may refer
+     * to aliases), then $select. Written by {@link ApplyResultWriter} because the rows are dynamic structures.
+     */
+    private void writeApplyResult(ODataResponse response, UriInfo uriInfo, Resolved r, Map<String, String> custom,
+                                  ContentType responseFormat) throws ODataApplicationException {
+        if (!responseFormat.isCompatible(ContentType.APPLICATION_JSON)) {
+            throw new ODataApplicationException("$apply results are available as JSON only",
+                    HttpStatusCode.NOT_ACCEPTABLE.getStatusCode(), LOCALE);
+        }
+        NavigationResolver navigation = navigationResolver(custom);
+        List<Entity> applied = new ApplyEvaluator(navigation).apply(r.entities(), uriInfo.getApplyOption());
+        EntityCollection page = QueryOptionsEvaluator.apply(applied, uriInfo, navigation);
+        java.util.Set<String> select = new java.util.HashSet<>();
+        if (uriInfo.getSelectOption() != null) {
+            for (org.apache.olingo.server.api.uri.queryoption.SelectItem item : uriInfo.getSelectOption().getSelectItems()) {
+                if (item.isStar()) {
+                    select.clear();
+                    break;
+                }
+                if (item.getResourcePath() != null && !item.getResourcePath().getUriResourceParts().isEmpty()) {
+                    select.add(item.getResourcePath().getUriResourceParts().get(0).getSegmentValue());
+                }
+            }
+        }
+        boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
+        byte[] body = ApplyResultWriter.write(r.entitySet().getName(), page.getEntities(), count ? page.getCount() : null, select);
+        response.setContent(new ByteArrayInputStream(body));
+        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+        response.setHeader(HttpHeader.CONTENT_TYPE, "application/json;odata.metadata=minimal");
+        setCacheHeaders(response, r.root());
+    }
+
+    // --- single entities, navigation paths, properties --------------------------------------------------------
+
+    /** {@code Umsatz(1)}, {@code Umsatz(1)/Kunde}, {@code Kunden(1)/Umsaetze(5)/Produkt}. */
+    @Override
+    public void readEntity(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
+            throws ODataApplicationException, ODataLibraryException {
+        rejectUnsupportedOptions(uriInfo);
+        Map<String, String> custom = customOptions(uriInfo);
+        Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
+        setCacheHeaders(response, r.root());
+        if (r.single() == null) {
+            // Single-valued navigation without a related row (Umsatz(1)/Kunde with no matching customer).
+            response.setStatusCode(HttpStatusCode.NO_CONTENT.getStatusCode());
+            return;
+        }
+        if (uriInfo.getExpandOption() != null) {
+            expand(List.of(r.single()), r.query(), uriInfo.getExpandOption(), custom, 1);
+        }
+        EdmEntitySet entitySet = r.entitySet();
+        String selectList = odata.createUriHelper()
+                .buildContextURLSelectList(entitySet.getEntityType(), uriInfo.getExpandOption(), uriInfo.getSelectOption());
+        ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList)
+                .suffix(ContextURL.Suffix.ENTITY).build();
+        EntitySerializerOptions options = EntitySerializerOptions.with().contextURL(contextUrl)
+                .select(uriInfo.getSelectOption()).expand(uriInfo.getExpandOption()).build();
+        SerializerResult result = odata.createSerializer(responseFormat)
+                .entity(serviceMetadata, entitySet.getEntityType(), r.single(), options);
+        response.setContent(result.getContent());
+        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+        response.setHeader(HttpHeader.CONTENT_TYPE, responseFormat.toContentTypeString());
+    }
+
+    /** {@code Kunden(1)/Name}. */
+    @Override
+    public void readPrimitive(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
+            throws ODataApplicationException, ODataLibraryException {
+        PropertyRead p = readProperty(uriInfo, req, response);
+        if (p == null) return;
+        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
+                .navOrPropertyPath(p.edmProperty().getName()).build();
+        SerializerResult result = odata.createSerializer(responseFormat).primitive(serviceMetadata,
+                (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
+                PrimitiveSerializerOptions.with().contextURL(contextUrl).build());
+        response.setContent(result.getContent());
+        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+        response.setHeader(HttpHeader.CONTENT_TYPE, responseFormat.toContentTypeString());
+    }
+
+    /** {@code Kunden(1)/Name/$value}: the raw value as text. */
+    @Override
+    public void readPrimitiveValue(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
+            throws ODataApplicationException, ODataLibraryException {
+        PropertyRead p = readProperty(uriInfo, req, response);
+        if (p == null) return;
+        EdmPrimitiveType type = (EdmPrimitiveType) p.edmProperty().getType();
+        String text;
+        try {
+            text = type.valueToString(p.property().getValue(), p.edmProperty().isNullable(), p.edmProperty().getMaxLength(),
+                    p.edmProperty().getPrecision(), p.edmProperty().getScale(), p.edmProperty().isUnicode());
+        } catch (org.apache.olingo.commons.api.edm.EdmPrimitiveTypeException e) {
+            text = String.valueOf(p.property().getValue());
+        }
+        response.setContent(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
+        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+        response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.TEXT_PLAIN.toContentTypeString());
+    }
+
+    private record PropertyRead(EdmEntitySet entitySet, String keyPath, EdmProperty edmProperty, Property property) {
+    }
+
+    /** Resolves the entity in front of a property segment; answers 204 itself when entity or value is null. */
+    private PropertyRead readProperty(UriInfo uriInfo, ODataRequest req, ODataResponse response)
+            throws ODataApplicationException {
+        List<UriResource> parts = new ArrayList<>(uriInfo.getUriResourceParts());
+        if (!parts.isEmpty() && parts.get(parts.size() - 1).getKind() == UriResourceKind.value) {
+            parts.remove(parts.size() - 1);
+        }
+        if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof UriResourcePrimitiveProperty propPart)) {
+            throw new ODataApplicationException("Only primitive properties can be read",
+                    HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+        }
+        Resolved r = resolve(parts.subList(0, parts.size() - 1), customOptions(uriInfo), req);
+        setCacheHeaders(response, r.root());
+        Property property = r.single() == null ? null : r.single().getProperty(propPart.getProperty().getName());
+        if (property == null || property.getValue() == null) {
+            response.setStatusCode(HttpStatusCode.NO_CONTENT.getStatusCode());
+            return null;
+        }
+        String id = r.single().getId() == null ? "" : r.single().getId().toString();
+        int open = id.indexOf('(');
+        String keyPath = open >= 0 && id.endsWith(")") ? id.substring(open + 1, id.length() - 1) : id;
+        return new PropertyRead(r.entitySet(), keyPath, propPart.getProperty(), property);
+    }
+
+    /**
+     * Result of walking a resource path: either a collection ({@code entities}), a single entity ({@code single}) or
+     * neither (a single-valued navigation without a related row).
+     */
+    private record Resolved(Execution root, QueryDefinition query, EdmEntitySet entitySet, List<Entity> entities,
+                            Entity single) {
+    }
+
+    /**
+     * Walks {@code EntitySet[(key)] [/Navigation[(key)]]* [/$count]}. Key lookups and navigations work on the
+     * in-memory results; each query on the path runs at most once per request.
+     */
+    private Resolved resolve(List<UriResource> path, Map<String, String> custom, ODataRequest req)
+            throws ODataApplicationException {
+        List<UriResource> parts = new ArrayList<>(path);
+        if (!parts.isEmpty() && parts.get(parts.size() - 1) instanceof UriResourceCount) {
+            parts.remove(parts.size() - 1);
+        }
+        if (parts.isEmpty() || !(parts.get(0) instanceof UriResourceEntitySet first)) {
+            throw new ODataApplicationException("Only entity set requests are supported",
+                    HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+        }
+        Execution root = execute(first.getEntitySet().getName(), custom, req.getRawQueryPath());
+        executions.put(root.query().name(), root);
+        EdmEntitySet set = first.getEntitySet();
+        QueryDefinition query = root.query();
+        List<Entity> entities = EntityMapper.toEntities(query, root.table());
+        Entity single = null;
+        if (!first.getKeyPredicates().isEmpty()) {
+            single = byKey(entities, first.getKeyPredicates(), set.getName());
+            entities = null;
+        }
+        NavigationResolver navigation = navigationResolver(custom);
+        for (int i = 1; i < parts.size(); i++) {
+            if (!(parts.get(i) instanceof UriResourceNavigation nav)) {
+                throw new ODataApplicationException("Path segment '" + parts.get(i).getSegmentValue() + "' is not supported",
+                        HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+            }
+            if (single == null) {
+                // Olingo only lets navigations follow a single entity; null = a to-one navigation found nothing.
+                return new Resolved(root, query, set, null, null);
+            }
+            String navName = nav.getProperty().getName();
+            List<Entity> targets = navigation.navigate(single, navName);
+            EdmBindingTarget target = set.getRelatedBindingTarget(navName);
+            if (!(target instanceof EdmEntitySet targetSet)) {
+                throw new ODataApplicationException("Navigation property '" + navName + "' has no target entity set",
+                        HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+            }
+            set = targetSet;
+            query = executions.get(set.getName()).query();
+            if (nav.isCollection()) {
+                if (nav.getKeyPredicates().isEmpty()) {
+                    entities = targets;
+                    single = null;
+                } else {
+                    single = byKey(targets, nav.getKeyPredicates(), set.getName());
+                    entities = null;
+                }
+            } else {
+                single = targets.isEmpty() ? null : targets.get(0);
+                entities = null;
+            }
+        }
+        return new Resolved(root, query, set, entities, single);
+    }
+
+    /** The entity whose key properties equal the key predicates; 404 if there is none. */
+    private static Entity byKey(List<Entity> entities, List<UriParameter> keys, String setName)
+            throws ODataApplicationException {
+        List<Object> wanted = new ArrayList<>();
+        for (UriParameter k : keys) wanted.add(keyLiteral(k.getText()));
+        for (Entity e : entities) {
+            boolean match = true;
+            for (int i = 0; i < keys.size() && match; i++) {
+                Property p = e.getProperty(keys.get(i).getName());
+                match = p != null && p.getValue() != null && RelationJoin.normalize(p.getValue()).equals(wanted.get(i));
+            }
+            if (match) return e;
+        }
+        throw new ODataApplicationException("No entity in '" + setName + "' with this key",
+                HttpStatusCode.NOT_FOUND.getStatusCode(), LOCALE);
+    }
+
+    /** Key literal from the URL in the form {@link RelationJoin#normalize} produces for entity values. */
+    static Object keyLiteral(String text) {
+        if (text == null) return null;
+        if (text.length() >= 2 && text.startsWith("'") && text.endsWith("'")) {
+            return text.substring(1, text.length() - 1).replace("''", "'");
+        }
+        try {
+            return RelationJoin.normalize(new java.math.BigDecimal(text));
+        } catch (NumberFormatException e) {
+            return text;
+        }
+    }
+
+    // --- read-only feed ------------------------------------------------------------------------------------------
+
+    private static ODataApplicationException readOnly() {
+        return new ODataApplicationException("The feed is read-only", HttpStatusCode.METHOD_NOT_ALLOWED.getStatusCode(), LOCALE);
+    }
+
+    @Override
+    public void createEntity(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                             ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void updateEntity(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                             ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void deleteEntity(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void updatePrimitive(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                                ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void deletePrimitive(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void updatePrimitiveValue(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                                     ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void deletePrimitiveValue(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        throw readOnly();
     }
 
     private static void setCacheHeaders(ODataResponse response, Execution exec) {
@@ -178,8 +469,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
         }
         for (ExpandItem item : expandOption.getExpandItems()) {
-            if (item.getLevelsOption() != null || item.getSearchOption() != null || item.getApplyOption() != null) {
-                throw new ODataApplicationException("$levels, $search and $apply are not supported inside $expand",
+            if (item.getLevelsOption() != null || item.getApplyOption() != null) {
+                throw new ODataApplicationException("$levels and $apply are not supported inside $expand",
                         HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
             }
             for (String navName : navigationNames(source, item)) {
@@ -201,7 +492,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 for (Entity e : entities) {
                     List<Entity> matches = join.matches(e);
                     if (relation.toMany()) {
-                        EntityCollection c = QueryOptionsEvaluator.apply(matches, item.getFilterOption(),
+                        EntityCollection c = QueryOptionsEvaluator.apply(matches, item.getSearchOption(), item.getFilterOption(),
                                 item.getOrderByOption(), item.getSkipOption(), item.getTopOption(), navigationResolver(custom));
                         inlineSets.put(e, c);
                         c.getEntities().forEach(t -> distinct.put(t, Boolean.TRUE));
@@ -443,19 +734,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         return CacheKey.canonical(masked);
     }
 
-    private static EdmEntitySet entitySet(UriInfo uriInfo) throws ODataApplicationException {
-        List<UriResource> parts = uriInfo.getUriResourceParts();
-        if (parts.isEmpty() || !(parts.get(0) instanceof UriResourceEntitySet es)) {
-            throw new ODataApplicationException("Only entity set requests are supported",
-                    HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
-        }
-        return es.getEntitySet();
-    }
-
     private static void rejectUnsupportedOptions(UriInfo uriInfo) throws ODataApplicationException {
-        if (uriInfo.getSearchOption() != null || uriInfo.getApplyOption() != null) {
-            throw new ODataApplicationException(
-                    "$search and $apply are not supported; use $filter, $orderby, $top, $skip, $select, $count, $expand",
+        if (uriInfo.getApplyOption() != null && uriInfo.getExpandOption() != null) {
+            throw new ODataApplicationException("$expand together with $apply is not supported",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
         }
     }

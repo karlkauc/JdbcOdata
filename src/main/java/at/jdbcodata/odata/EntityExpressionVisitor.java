@@ -101,7 +101,11 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
     }
 
     private Object member(Member member) throws ExpressionVisitException, ODataApplicationException {
-        List<UriResource> parts = member.getResourcePath().getUriResourceParts();
+        return path(member.getResourcePath().getUriResourceParts());
+    }
+
+    /** Value of a member path (also used for $apply aggregate and groupby paths). */
+    Object path(List<UriResource> parts) throws ExpressionVisitException, ODataApplicationException {
         Entity current = entity;
         for (int i = 0; i < parts.size(); i++) {
             UriResource part = parts.get(i);

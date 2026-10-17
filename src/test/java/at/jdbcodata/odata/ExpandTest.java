@@ -204,6 +204,80 @@ class ExpandTest extends DemoProfileTest {
         assertThat(get("/odata/ExpCustomers?$filter=" + enc("Sales eq null"), "demo", "demo").statusCode()).isIn(400, 501);
     }
 
+    // --- resource paths: Sales(1), Sales(1)/Customer, ExpCustomers('Beta AG')/Sales ---------------------------
+
+    @Test
+    void entityByKeyNavigationPathsAndProperties() throws Exception {
+        JsonNode one = odata("/odata/Sales(1)");
+        assertThat(one.get("@odata.context").asString()).isEqualTo("$metadata#Sales/$entity");
+        assertThat(one.get("RowId").asInt()).isEqualTo(1);
+        assertThat(get("/odata/Sales(9999)", "demo", "demo").statusCode()).isEqualTo(404);
+
+        JsonNode rows = odata("/odata/Sales?$select=RowId,customer&$orderby=RowId");
+        int withCustomer = -1;
+        int alphaRow = -1;
+        String customer = null;
+        for (JsonNode r : rows.get("value")) {
+            if ("Alpha GmbH".equals(r.get("customer").asString())) {
+                if (alphaRow < 0) alphaRow = r.get("RowId").asInt();
+            } else if (withCustomer < 0) {
+                withCustomer = r.get("RowId").asInt();
+                customer = r.get("customer").asString();
+            }
+        }
+        JsonNode c = odata("/odata/Sales(" + withCustomer + ")/Customer");
+        assertThat(c.get("@odata.context").asString()).isEqualTo("$metadata#ExpCustomers/$entity");
+        assertThat(c.get("customer").asString()).isEqualTo(customer);
+        assertThat(get("/odata/Sales(" + alphaRow + ")/Customer", "demo", "demo").statusCode()).as("no related row").isEqualTo(204);
+
+        String key = "('" + enc(customer.replace("'", "''")) + "')";
+        int expected = 0;
+        for (JsonNode r : rows.get("value")) if (customer.equals(r.get("customer").asString())) expected++;
+        JsonNode sales = odata("/odata/ExpCustomers" + key + "/Sales?$count=true&$top=1&$orderby=amount%20desc");
+        assertThat(sales.get("@odata.context").asString()).startsWith("$metadata#Sales");
+        assertThat(sales.get("@odata.count").asInt()).isEqualTo(expected);
+        assertThat(sales.get("value").size()).isEqualTo(1);
+        assertThat(get("/odata/ExpCustomers" + key + "/Sales/$count", "demo", "demo").body()).isEqualTo(String.valueOf(expected));
+
+        // Chains, keys after a collection navigation, $expand on a single entity.
+        JsonNode chain = odata("/odata/Sales(" + withCustomer + ")/Customer/Sales(" + withCustomer + ")/Customer");
+        assertThat(chain.get("customer").asString()).isEqualTo(customer);
+        JsonNode expanded = odata("/odata/Sales(" + withCustomer + ")?$select=RowId&$expand=Customer($select=region)");
+        assertThat(expanded.get("Customer").has("region")).isTrue();
+
+        // Properties and raw values.
+        JsonNode region = odata("/odata/ExpCustomers" + key + "/region");
+        assertThat(region.get("value").asString()).isEqualTo(c.get("region").asString());
+        HttpResponse<String> raw = get("/odata/ExpCustomers" + key + "/region/$value", "demo", "demo");
+        assertThat(raw.statusCode()).isEqualTo(200);
+        assertThat(raw.body()).isEqualTo(c.get("region").asString());
+
+        // Read-only.
+        assertThat(send("POST", "/odata/Sales", "{}", "demo", "demo").statusCode()).isIn(405, 501);
+        assertThat(send("DELETE", "/odata/Sales(1)", null, "demo", "demo").statusCode()).isIn(405, 501);
+    }
+
+    @Test
+    void searchInsideExpandAndGroupByAlongNavigation() throws Exception {
+        JsonNode customers = odata("/odata/ExpCustomers?$expand=Sales");
+        JsonNode first = customers.get("value").get(0);
+        String term = first.get("customer").asString().split(" ")[0];
+        JsonNode searched = odata("/odata/ExpCustomers?$expand=Sales($search=" + enc(term) + ")");
+        for (JsonNode c : searched.get("value")) {
+            for (JsonNode s : c.get("Sales")) {
+                assertThat(s.get("customer").asString().toLowerCase()).contains(term.toLowerCase());
+            }
+        }
+        // groupby a property reached through a to-one navigation (emitted under its own name).
+        JsonNode grouped = odata("/odata/Sales?$apply=" + enc("groupby((Customer/region),aggregate($count as N))"));
+        int total = 0;
+        for (JsonNode g : grouped.get("value")) {
+            assertThat(g.has("region")).isTrue();
+            total += g.get("N").asInt();
+        }
+        assertThat(total).isEqualTo(24);
+    }
+
     @Test
     void nestedExpandStarAndLimits() throws Exception {
         JsonNode nested = odata("/odata/Sales?$top=3&$filter=customer%20ne%20'Alpha%20GmbH'&$expand=Customer($expand=Sales($top=1))");

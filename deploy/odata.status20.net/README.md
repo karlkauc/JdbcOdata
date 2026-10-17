@@ -61,7 +61,9 @@ Beziehungen im `$metadata` (NavigationProperties): `Umsatz.Kunde → Kunden` und
 (je über `KundeId` bzw. `ProduktId`), Gegenrichtung `Kunden.Umsaetze` und `Produkte.Umsaetze`. Schlüssel sind
 `KundeId`, `ProduktId` und `PositionId`. Beispiel: `/odata/Umsatz?$top=3&$expand=Kunde,Produkt` oder
 `/odata/Kunden?$expand=Umsaetze($top=2;$orderby=Betrag desc)`; Filter über Beziehungen:
-`/odata/Umsatz?$filter=Kunde/Region eq 'Nord'` oder `/odata/Kunden?$filter=Umsaetze/any(u:u/Betrag gt 30000)`.
+`/odata/Umsatz?$filter=Kunde/Region eq 'Nord'` oder `/odata/Kunden?$filter=Umsaetze/any(u:u/Betrag gt 30000)`;
+Pfade: `/odata/Umsatz(1)/Kunde`, `/odata/Kunden(1)/Umsaetze?$top=3`; Suche und Aggregation:
+`/odata/Kunden?$search=Wien`, `/odata/Umsatz?$apply=groupby((Region),aggregate(Betrag with sum as Summe))`.
 
 ## Anonymer Lesezugriff (Service-User `demo`)
 

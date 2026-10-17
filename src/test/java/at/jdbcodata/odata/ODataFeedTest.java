@@ -116,13 +116,18 @@ class ODataFeedTest extends DemoProfileTest {
     }
 
     @Test
-    void unsupportedOptionYields501() throws Exception {
+    void unknownNavigationYields400() throws Exception {
         HttpResponse<String> r = get("/odata/Sales?$expand=foo", "demo", "demo");
         assertThat(r.statusCode()).isIn(400, 501);
-        r = get("/odata/Sales?$search=foo", "demo", "demo");
-        assertThat(r.statusCode()).isEqualTo(501);
-        r = get("/odata/Sales(1)", "demo", "demo");
-        assertThat(r.statusCode()).isEqualTo(501);
+        r = get("/odata/Sales(1)/foo", "demo", "demo");
+        assertThat(r.statusCode()).isIn(400, 404);
+    }
+
+    @Test
+    void singleEntityByKey() throws Exception {
+        HttpResponse<String> r = get("/odata/Sales(1)", "demo", "demo");
+        assertThat(r.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(r.body()).get("RowId").asLong()).isEqualTo(1);
     }
 
     @Test

@@ -87,9 +87,10 @@ class QueryRelationsTest extends DemoProfileTest {
                 .containsPattern("<NavigationProperty Name=\"Sales\" Type=\"Collection\\(JdbcOdata.Sales\\)\"[^>]*Partner=\"Customer\"")
                 .containsPattern("<NavigationPropertyBinding Path=\"Customer\" Target=\"SalesCustomers\"\\s*/?>")
                 .containsPattern("<NavigationPropertyBinding Path=\"Sales\" Target=\"Sales\"\\s*/?>");
-        // Data access over the navigation path is not implemented; the answer says so instead of failing oddly.
+        // The navigation path resolves to the related customer.
         HttpResponse<String> nav = get("/odata/Sales(1)/Customer", "demo", "demo");
-        assertThat(nav.statusCode()).isIn(400, 501);
+        assertThat(nav.statusCode()).isEqualTo(200);
+        assertThat(nav.body()).contains("\"@odata.context\":\"$metadata#SalesCustomers/$entity\"");
     }
 
     @Test

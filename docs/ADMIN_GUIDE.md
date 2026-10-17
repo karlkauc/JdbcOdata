@@ -32,6 +32,10 @@ Queries → Neue Query:
    `/odata/Kunden?$expand=Umsaetze($top=5;$orderby=Betrag desc)`. Auch in `$filter`/`$orderby` lassen sich
    Beziehungen nutzen: `/odata/Umsatz?$filter=Kunde/Region eq 'Nord'`,
    `/odata/Kunden?$filter=Umsaetze/any(u:u/Betrag gt 10000)` oder `$filter=Umsaetze/$count gt 50`.
+   Navigationspfade gehen direkt in der URL: `/odata/Umsatz(1)/Kunde`, `/odata/Kunden(1)/Umsaetze?$top=5`.
+
+Volltextsuche und Aggregation laufen auf jedem Feed: `/odata/Kunden?$search=Wien` oder
+`/odata/Umsatz?$apply=groupby((Region),aggregate(Betrag with sum as Summe))&$orderby=Summe desc`.
 
 Jede Änderung an SQL, Parametern oder Datenquelle erzeugt eine Version; ältere Versionen lassen sich
 wiederherstellen.
