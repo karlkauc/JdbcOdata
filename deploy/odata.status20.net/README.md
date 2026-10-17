@@ -57,6 +57,10 @@ Queries im Feed (alle im Modus CALLER, Cache 5 Minuten pro User):
 | `Umsatz` | Umsatz auf Positionsebene | `p_jahr` (Standard 2025) |
 | `UmsatzProMonat` | Summe je Monat, Region, Kategorie | `p_jahr` (Standard 2025) |
 
+Beziehungen im `$metadata` (NavigationProperties): `Umsatz.Kunde → Kunden` und `Umsatz.Produkt → Produkte`
+(je über `KundeId` bzw. `ProduktId`), Gegenrichtung `Kunden.Umsaetze` und `Produkte.Umsaetze`. Schlüssel sind
+`KundeId`, `ProduktId` und `PositionId`.
+
 ## Anonymer Lesezugriff (Service-User `demo`)
 
 Der Feed ist zusätzlich **ohne Login** lesbar, damit OData-Werkzeuge wie der

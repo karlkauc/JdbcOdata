@@ -10,6 +10,7 @@ import at.jdbcodata.query.QueryService;
 import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
+import at.jdbcodata.query.QueryRelation;
 import at.jdbcodata.query.QuerySpec;
 import at.jdbcodata.query.QueryTestService;
 import at.jdbcodata.query.QueryVersion;
@@ -44,12 +45,29 @@ final class QueryDtos {
         }
     }
 
+    /** A relation to another query; {@code localColumns} and {@code targetColumns} are matched by position. */
+    record RelationRequest(
+            @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*") String name,
+            @NotBlank @Size(max = 100) String targetQuery,
+            @NotNull List<@NotBlank String> localColumns,
+            @NotNull List<@NotBlank String> targetColumns,
+            Boolean toMany,
+            @Size(max = 100) String partner,
+            @Size(max = 1000) String description) {
+
+        QueryRelation toRecord() {
+            return new QueryRelation(name, targetQuery, localColumns, targetColumns, Boolean.TRUE.equals(toMany),
+                    blankToNull(partner), blankToNull(description));
+        }
+    }
+
     record QueryRequest(
             @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*") String name,
             @Size(max = 1000) String description,
             @NotNull UUID datasourceId,
             @NotBlank String sql,
             List<@Valid ParameterRequest> parameters,
+            List<@Valid RelationRequest> relations,
             ExecutionMode executionMode,
             UUID fixedCredentialId,
             Boolean cacheEnabled,
@@ -62,8 +80,10 @@ final class QueryDtos {
         QuerySpec toSpec() {
             List<QueryParameter> params = parameters == null ? List.of()
                     : parameters.stream().map(ParameterRequest::toRecord).toList();
+            // relations == null keeps the stored relations (PUT without the field), an empty list removes them.
+            List<QueryRelation> rels = relations == null ? null : relations.stream().map(RelationRequest::toRecord).toList();
             return new QuerySpec(name, description, datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled, cacheTtlSec,
-                    timeoutSec, maxRows, keyMode, enabled, params);
+                    timeoutSec, maxRows, keyMode, enabled, params, rels);
         }
     }
 
@@ -87,6 +107,7 @@ final class QueryDtos {
             boolean hasSnapshot,
             List<QueryParameter> parameters,
             List<QueryColumn> columns,
+            List<QueryRelation> relations,
             String feedPath,
             Instant createdAt,
             Instant updatedAt) {
@@ -94,7 +115,7 @@ final class QueryDtos {
         static QueryResponse from(QueryDefinition q) {
             return new QueryResponse(q.id(), q.name(), q.description(), q.datasourceId(), q.datasourceName(),
                     q.sqlText(), q.executionMode(), q.fixedCredentialId(), q.fixedCredentialName(), q.cacheEnabled(), q.cacheTtlSec(), q.timeoutSec(), q.maxRows(),
-                    q.keyMode(), q.version(), q.enabled(), q.hasSnapshot(), q.parameters(), q.columns(),
+                    q.keyMode(), q.version(), q.enabled(), q.hasSnapshot(), q.parameters(), q.columns(), q.relations(),
                     ODataConfig.BASE_PATH + "/" + q.name(), q.createdAt(), q.updatedAt());
         }
     }

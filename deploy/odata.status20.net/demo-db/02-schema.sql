@@ -52,7 +52,8 @@ SELECT p.id                                   AS "PositionId",
        pr.kategorie                           AS "Kategorie",
        p.menge                                AS "Menge",
        p.einzelpreis                          AS "Einzelpreis",
-       (p.menge * p.einzelpreis)::numeric(12,2) AS "Betrag"
+       (p.menge * p.einzelpreis)::numeric(12,2) AS "Betrag",
+       pr.id                                  AS "ProduktId"
 FROM verkauf.bestellpositionen p
 JOIN verkauf.bestellungen b ON b.id = p.bestellung_id
 JOIN verkauf.kunden       k ON k.id = b.kunde_id

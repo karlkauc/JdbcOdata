@@ -24,6 +24,11 @@ Queries → Neue Query:
    SQL-Änderung muss der Snapshot erneuert werden.
 5. **Spalten**: Spalten ausblenden oder als Schlüssel markieren (Schlüsselmodus „Spalten“); sonst liefert der
    Feed einen synthetischen `RowId`.
+6. **Beziehungen** (optional): Verknüpfung zu einer anderen Query, z. B. `Umsatz.Kunde → Kunden` über
+   `KundeId = KundeId`. Die Gegenrichtung (`Kunden.Umsaetze`, Häkchen „Viele“) wird bei der Ziel-Query
+   eingetragen; mit **Partner** verweisen beide aufeinander. Beziehungen erscheinen im `$metadata` als
+   NavigationProperties und machen die Zusammenhänge in OData-Werkzeugen, Excel und Power BI sichtbar;
+   Daten werden weiterhin pro Feed gelesen (kein `$expand`).
 
 Jede Änderung an SQL, Parametern oder Datenquelle erzeugt eine Version; ältere Versionen lassen sich
 wiederherstellen.
@@ -63,4 +68,7 @@ immer bestehen; das eigene Konto kann nicht gelöscht werden.
 
 Datenquellen und Queries lassen sich versioniert als YAML pflegen (`contrib/seed-example.yml`) und mit
 `jdbcodata.seed.file` beim Start einspielen (Upsert nach Name). Mit `snapshotCredentials` wird der
-Schema-Snapshot beim Start erzeugt; die Zugangsdaten werden nicht gespeichert.
+Schema-Snapshot beim Start erzeugt; die Zugangsdaten werden nicht gespeichert. `keyColumns` markiert
+Snapshot-Spalten als Schlüssel, `relations` deklariert Beziehungen (`name`, `target`, `columns`
+als `eigene: ziel`, `toMany`, `partner`); fehlt `relations` in der Datei, bleiben vorhandene Beziehungen
+erhalten.

@@ -202,6 +202,7 @@ public class QueryUiController {
         model.addAttribute("query", query);
         model.addAttribute("datasources", datasourceService.findAll());
         model.addAttribute("parameterTypes", ParameterType.values());
+        model.addAttribute("queryNames", queryService.findAll().stream().map(QueryDefinition::name).toList());
         model.addAttribute("executionModes", ExecutionMode.values());
         model.addAttribute("versions", query == null ? List.of() : queryService.versions(query.id()));
         model.addAttribute("feedUrl", ServletUriComponentsBuilder.fromCurrentContextPath().path("/odata/").toUriString());

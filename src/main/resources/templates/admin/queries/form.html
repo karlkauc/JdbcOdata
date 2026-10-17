@@ -75,6 +75,40 @@
       </tr>
     </template>
 
+    <h2>Beziehungen <small>Navigation zu anderen Queries im <code>$metadata</code></small></h2>
+    <table class="list rows" id="relations" data-prefix="relations">
+      <thead><tr><th>Name</th><th>Ziel-Query</th><th>Eigene Spalten</th><th>Zielspalten</th><th>Viele</th><th>Partner</th><th>Beschreibung</th><th></th></tr></thead>
+      <tbody>
+      <tr th:each="r, st : *{relations}" class="data-row">
+        <td><input type="text" th:field="*{relations[__${st.index}__].name}" class="mono row-name" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="Kunde">
+          <span class="field-error" th:errors="*{relations[__${st.index}__].name}"></span></td>
+        <td><input type="text" th:field="*{relations[__${st.index}__].targetQuery}" class="mono" list="query-names" placeholder="Kunden"></td>
+        <td><input type="text" th:field="*{relations[__${st.index}__].localColumns}" class="mono" placeholder="KundeId"></td>
+        <td><input type="text" th:field="*{relations[__${st.index}__].targetColumns}" class="mono" placeholder="KundeId"></td>
+        <td><input type="checkbox" th:field="*{relations[__${st.index}__].toMany}" title="Zielseite ist eine Sammlung (1 → n)"></td>
+        <td><input type="text" th:field="*{relations[__${st.index}__].partner}" class="mono" placeholder="Umsaetze"></td>
+        <td><input type="text" th:field="*{relations[__${st.index}__].description}"></td>
+        <td><button type="button" class="small remove-row" title="Beziehung entfernen">✕</button></td>
+      </tr>
+      <tr class="row-empty"><td colspan="8" class="empty">Keine Beziehungen. Eine Beziehung erscheint als <code>NavigationProperty</code> im <code>$metadata</code>
+        (mit <code>ReferentialConstraint</code> bei 1-zu-1); Daten werden weiterhin per <code>$filter</code> auf die Spalten gelesen.</td></tr>
+      </tbody>
+    </table>
+    <button type="button" class="small add-row" data-table="relations">Beziehung hinzufügen</button>
+    <datalist id="query-names"><option th:each="n : ${queryNames}" th:value="${n}"></option></datalist>
+    <template id="relations-template">
+      <tr class="data-row">
+        <td><input type="text" name="relations[__IDX__].name" class="mono row-name" pattern="[A-Za-z][A-Za-z0-9_]*" placeholder="Kunde"></td>
+        <td><input type="text" name="relations[__IDX__].targetQuery" class="mono" list="query-names" placeholder="Kunden"></td>
+        <td><input type="text" name="relations[__IDX__].localColumns" class="mono" placeholder="KundeId"></td>
+        <td><input type="text" name="relations[__IDX__].targetColumns" class="mono" placeholder="KundeId"></td>
+        <td><input type="checkbox" name="relations[__IDX__].toMany" value="true" title="Zielseite ist eine Sammlung (1 → n)"></td>
+        <td><input type="text" name="relations[__IDX__].partner" class="mono" placeholder="Umsaetze"></td>
+        <td><input type="text" name="relations[__IDX__].description"></td>
+        <td><button type="button" class="small remove-row" title="Beziehung entfernen">✕</button></td>
+      </tr>
+    </template>
+
     <h2>Ausführung und Cache</h2>
     <div class="grid3">
       <label>Modus

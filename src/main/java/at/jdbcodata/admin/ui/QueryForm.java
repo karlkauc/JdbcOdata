@@ -5,6 +5,7 @@ import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
+import at.jdbcodata.query.QueryRelation;
 import at.jdbcodata.query.QuerySpec;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -60,6 +61,60 @@ public class QueryForm {
         public void setSensitive(boolean sensitive) { this.sensitive = sensitive; }
     }
 
+    /** One row of the relations table; column lists are entered comma-separated. */
+    public static class RelationForm {
+        @Size(max = 100) @Pattern(regexp = "|[A-Za-z][A-Za-z0-9_]*", message = "Buchstabe, dann Buchstaben/Ziffern/_")
+        private String name;
+        @Size(max = 100)
+        private String targetQuery;
+        @Size(max = 1000)
+        private String localColumns;
+        @Size(max = 1000)
+        private String targetColumns;
+        private boolean toMany;
+        @Size(max = 100)
+        private String partner;
+        @Size(max = 1000)
+        private String description;
+
+        static RelationForm from(QueryRelation r) {
+            RelationForm f = new RelationForm();
+            f.name = r.name();
+            f.targetQuery = r.targetQuery();
+            f.localColumns = String.join(", ", r.localColumns());
+            f.targetColumns = String.join(", ", r.targetColumns());
+            f.toMany = r.toMany();
+            f.partner = r.partner();
+            f.description = r.description();
+            return f;
+        }
+
+        QueryRelation toRecord() {
+            return new QueryRelation(name, blankToNull(targetQuery), splitColumns(localColumns), splitColumns(targetColumns),
+                    toMany, blankToNull(partner), blankToNull(description));
+        }
+
+        private static List<String> splitColumns(String s) {
+            if (s == null || s.isBlank()) return List.of();
+            return java.util.Arrays.stream(s.split("[,;\\s]+")).filter(c -> !c.isBlank()).toList();
+        }
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getTargetQuery() { return targetQuery; }
+        public void setTargetQuery(String targetQuery) { this.targetQuery = targetQuery; }
+        public String getLocalColumns() { return localColumns; }
+        public void setLocalColumns(String localColumns) { this.localColumns = localColumns; }
+        public String getTargetColumns() { return targetColumns; }
+        public void setTargetColumns(String targetColumns) { this.targetColumns = targetColumns; }
+        public boolean isToMany() { return toMany; }
+        public void setToMany(boolean toMany) { this.toMany = toMany; }
+        public String getPartner() { return partner; }
+        public void setPartner(String partner) { this.partner = partner; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+    }
+
     @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*", message = "Buchstabe, dann Buchstaben/Ziffern/_")
     private String name;
     @Size(max = 1000)
@@ -70,6 +125,8 @@ public class QueryForm {
     private String sql;
     @Valid
     private List<ParameterForm> parameters = new ArrayList<>();
+    @Valid
+    private List<RelationForm> relations = new ArrayList<>();
     private ExecutionMode executionMode = ExecutionMode.CALLER;
     private UUID fixedCredentialId;
     private boolean cacheEnabled;
@@ -89,6 +146,7 @@ public class QueryForm {
         f.datasourceId = q.datasourceId();
         f.sql = q.sqlText();
         f.parameters = new ArrayList<>(q.parameters().stream().map(ParameterForm::from).toList());
+        f.relations = new ArrayList<>(q.relations().stream().map(RelationForm::from).toList());
         f.executionMode = q.executionMode();
         f.fixedCredentialId = q.fixedCredentialId();
         f.cacheEnabled = q.cacheEnabled();
@@ -104,8 +162,11 @@ public class QueryForm {
         List<QueryParameter> params = parameters == null ? List.of()
                 : parameters.stream().filter(p -> p != null && p.name != null && !p.name.isBlank())
                         .map(ParameterForm::toRecord).toList();
+        List<QueryRelation> rels = relations == null ? List.of()
+                : relations.stream().filter(r -> r != null && r.name != null && !r.name.isBlank())
+                        .map(RelationForm::toRecord).toList();
         return new QuerySpec(name, blankToNull(description), datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled,
-                cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params);
+                cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params, rels);
     }
 
     private static String blankToNull(String s) {
@@ -122,6 +183,8 @@ public class QueryForm {
     public void setSql(String sql) { this.sql = sql; }
     public List<ParameterForm> getParameters() { return parameters; }
     public void setParameters(List<ParameterForm> parameters) { this.parameters = parameters; }
+    public List<RelationForm> getRelations() { return relations; }
+    public void setRelations(List<RelationForm> relations) { this.relations = relations; }
     public ExecutionMode getExecutionMode() { return executionMode; }
     public UUID getFixedCredentialId() { return fixedCredentialId; }
     public void setFixedCredentialId(UUID fixedCredentialId) { this.fixedCredentialId = fixedCredentialId; }

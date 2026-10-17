@@ -9,7 +9,10 @@ import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.QueryDefinition;
+import at.jdbcodata.query.ColumnSetting;
+import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryParameter;
+import at.jdbcodata.query.QueryRelation;
 import at.jdbcodata.query.QueryService;
 import at.jdbcodata.query.QuerySpec;
 import at.jdbcodata.query.SchemaSnapshotService;
@@ -100,11 +103,26 @@ public class SeedLoader implements ApplicationRunner {
             params.add(new QueryParameter(str(p, "name"), ParameterType.valueOf(str(p, "type", "STRING").toUpperCase()),
                     bool(p, "required", false), str(p, "default"), str(p, "description"), bool(p, "sensitive", false)));
         }
+        // relations: [{name, target, columns: {local: target, …}, toMany, partner, description}]
+        List<QueryRelation> relations = new ArrayList<>();
+        for (Map<String, Object> r : list(q, "relations")) {
+            Map<String, Object> columns = map(r, "columns");
+            List<String> local = new ArrayList<>();
+            List<String> target = new ArrayList<>();
+            if (columns != null) {
+                columns.forEach((k, v) -> {
+                    local.add(k);
+                    target.add(String.valueOf(v));
+                });
+            }
+            relations.add(new QueryRelation(str(r, "name"), str(r, "target"), local, target, bool(r, "toMany", false),
+                    str(r, "partner"), str(r, "description")));
+        }
         QuerySpec spec = new QuerySpec(str(q, "name"), str(q, "description"), ds.id(), str(q, "sql"),
                 ExecutionMode.valueOf(str(q, "executionMode", "CALLER").toUpperCase()), null,
                 bool(q, "cacheEnabled", false), integer(q, "cacheTtlSec"), integer(q, "timeoutSec"),
                 integer(q, "maxRows"), KeyMode.valueOf(str(q, "keyMode", "ROWID").toUpperCase()),
-                bool(q, "enabled", true), params);
+                bool(q, "enabled", true), params, q.containsKey("relations") ? relations : null);
         QueryDefinition saved = queryService.upsertByName(spec);
 
         Map<String, Object> creds = map(q, "snapshotCredentials");
@@ -113,13 +131,23 @@ public class SeedLoader implements ApplicationRunner {
                 String user = str(creds, "username");
                 ExecutionIdentity identity = new ExecutionIdentity(user, user, str(creds, "password", ""),
                         ExecutionMode.CALLER);
-                snapshotService.snapshot(saved, identity, Map.of());
+                saved = snapshotService.snapshot(saved, identity, Map.of());
             } catch (RuntimeException e) {
                 log.error("Schema snapshot for seed query '{}' failed: {}", saved.name(), e.getMessage());
             }
         } else if (!saved.hasSnapshot()) {
             log.warn("Seed query '{}' has no schema snapshot and no snapshotCredentials; run POST /api/v1/queries/{}/snapshot",
                     saved.name(), saved.id());
+        }
+        // keyColumns: [KundeId] marks snapshot columns as key (requires keyMode COLUMNS and a snapshot).
+        List<String> keyColumns = strings(q, "keyColumns");
+        if (!keyColumns.isEmpty() && saved.hasSnapshot()) {
+            List<ColumnSetting> settings = new ArrayList<>();
+            for (QueryColumn c : saved.columns()) {
+                boolean key = keyColumns.contains(c.propertyName());
+                settings.add(new ColumnSetting(c.propertyName(), key, c.visible() || key));
+            }
+            queryService.updateColumnSettings(saved.id(), settings);
         }
     }
 
@@ -130,6 +158,12 @@ public class SeedLoader implements ApplicationRunner {
     }
 
     @SuppressWarnings("unchecked")
+    private static List<String> strings(Map<String, Object> m, String key) {
+        Object v = m == null ? null : m.get(key);
+        if (!(v instanceof List<?> l)) return List.of();
+        return l.stream().map(String::valueOf).toList();
+    }
+
     private static List<Map<String, Object>> list(Map<String, Object> m, String key) {
         Object v = m.get(key);
         return v instanceof List<?> l ? (List<Map<String, Object>>) l : List.of();

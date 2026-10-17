@@ -182,6 +182,17 @@ public class QueryService {
             throw new ConflictException("Query name '" + spec.name() + "' already exists");
         });
         List<QueryParameter> newParams = spec.parameters() == null ? List.of() : spec.parameters();
+        // Against the current snapshot only if it survives this update (unchanged SQL and datasource).
+        boolean snapshotKept = normalize(e.getSqlText()).equals(normalize(spec.sqlText()))
+                && e.getDatasource().getId().equals(spec.datasourceId());
+        if (spec.relations() != null && snapshotKept) {
+            for (QueryRelation r : spec.relations()) {
+                boolean clash = e.getColumns().stream().anyMatch(c -> c.toRecord().visible() && c.getPropertyName().equals(r.name()));
+                if (clash || "RowId".equals(r.name())) {
+                    throw new InvalidRequestException("Relation '" + r.name() + "' is named like a column of the query");
+                }
+            }
+        }
         boolean sqlChanged = !normalize(e.getSqlText()).equals(normalize(spec.sqlText()));
         boolean datasourceChanged = !e.getDatasource().getId().equals(spec.datasourceId());
         boolean paramsChanged = !e.getParameters().stream().map(QueryParameterEntity::toRecord).toList().equals(newParams);
@@ -193,6 +204,9 @@ public class QueryService {
         // Remove children first and flush, otherwise Hibernate inserts the replacements before deleting the
         // old rows and violates the unique constraints on (query_id, name).
         e.getParameters().clear();
+        if (spec.relations() != null) {
+            e.getRelations().clear();
+        }
         if (sqlChanged || datasourceChanged) {
             e.getColumns().clear();
         }
@@ -284,7 +298,7 @@ public class QueryService {
                 Boolean.TRUE.equals(spec.cacheEnabled()), spec.cacheTtlSec() == null ? 3600 : spec.cacheTtlSec(),
                 spec.timeoutSec(), spec.maxRows(), spec.keyMode() == null ? KeyMode.ROWID : spec.keyMode(), 0,
                 spec.enabled() == null || spec.enabled(), spec.parameters() == null ? List.of() : spec.parameters(),
-                List.of(), null, null);
+                List.of(), null, null, spec.relations() == null ? List.of() : spec.relations());
     }
 
     public void validate(QuerySpec spec) {
@@ -330,6 +344,38 @@ public class QueryService {
             }
         }
         SqlValidator.validateReadOnly(spec.sqlText());
+        validateRelations(spec);
+    }
+
+    /**
+     * Relations are checked for shape only; whether the target query and the columns exist is decided when the
+     * model is built, because targets may be created later or be invisible to a caller.
+     */
+    private void validateRelations(QuerySpec spec) {
+        if (spec.relations() == null) return;
+        for (QueryRelation r : spec.relations()) {
+            if (r.name() == null || !NAME_PATTERN.matcher(r.name()).matches()) {
+                throw new InvalidRequestException("Relation name '" + r.name() + "' is invalid");
+            }
+            if (r.targetQuery() == null || !NAME_PATTERN.matcher(r.targetQuery()).matches()) {
+                throw new InvalidRequestException("Relation '" + r.name() + "' has no valid target query");
+            }
+            if (r.name().equals(spec.name()) && r.targetQuery().equals(spec.name())) {
+                throw new InvalidRequestException("Relation '" + r.name() + "' must not be named like its own query");
+            }
+            if (r.localColumns().size() != r.targetColumns().size()) {
+                throw new InvalidRequestException("Relation '" + r.name() + "': local and target columns must pair up");
+            }
+            if (!r.toMany() && r.localColumns().isEmpty()) {
+                throw new InvalidRequestException("Relation '" + r.name() + "': a to-one relation needs at least one column pair");
+            }
+            if (spec.relations().stream().filter(o -> r.name().equals(o.name())).count() > 1) {
+                throw new InvalidRequestException("Relation '" + r.name() + "' is declared twice");
+            }
+            if (spec.parameters() != null && spec.parameters().stream().anyMatch(p -> r.name().equals(p.name()))) {
+                throw new InvalidRequestException("Relation '" + r.name() + "' is named like a parameter");
+            }
+        }
     }
 
     // --- helpers -----------------------------------------------------------------------------------------------
@@ -373,6 +419,9 @@ public class QueryService {
         if (s.keyMode() != null) e.setKeyMode(s.keyMode());
         if (s.enabled() != null) e.setEnabled(s.enabled());
         e.replaceParameters(s.parameters() == null ? List.of() : s.parameters());
+        if (s.relations() != null) {
+            e.replaceRelations(s.relations());
+        }
         e.setUpdatedAt(Instant.now());
     }
 

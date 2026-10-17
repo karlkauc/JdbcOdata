@@ -24,6 +24,12 @@ Hinweise:
 
 ## PowerBI Desktop
 
+Deklarierte Beziehungen zwischen Queries (Admin-UI → Query → Beziehungen) stehen im `$metadata` als
+Navigationseigenschaften. Der OData-Connector zeigt sie als zusätzliche Spalten (`Kunde`, `Umsaetze`);
+diese **nicht** aufklappen (kein `$expand`), sondern die Tabellen einzeln laden und die Beziehung in
+Power BI über die Schlüsselspalten (z. B. `KundeId`) anlegen.
+
+
 1. **Daten abrufen → OData-Feed**, URL wie oben, Anmeldung **Standard**.
 2. Tabelle wählen, laden. Query Folding reicht `$filter`, `$select`, `$top` an den Service weiter.
 

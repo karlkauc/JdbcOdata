@@ -18,6 +18,36 @@
     });
   });
 
+  // Generic repeatable rows: <table id="X" data-prefix="X" class="rows">, <template id="X-template">,
+  // <button class="add-row" data-table="X">. Field names are renumbered as X[i].field.
+  document.querySelectorAll('table.rows[data-prefix]').forEach(function (rows) {
+    var prefix = rows.getAttribute('data-prefix');
+    var rowsTemplate = document.getElementById(prefix + '-template');
+    var rowsBody = rows.querySelector('tbody');
+    var add = document.querySelector('.add-row[data-table="' + prefix + '"]');
+    if (!rowsTemplate || !rowsBody || !add) return;
+    function renumberRows() {
+      var list = rowsBody.querySelectorAll('tr.data-row');
+      var re = new RegExp(prefix + '\\[(\\d+|__IDX__)\\]');
+      list.forEach(function (row, i) {
+        row.querySelectorAll('[name]').forEach(function (el) { el.name = el.name.replace(re, prefix + '[' + i + ']'); });
+      });
+      var emptyRow = rows.querySelector('tr.row-empty');
+      if (emptyRow) emptyRow.style.display = list.length ? 'none' : '';
+    }
+    rowsBody.addEventListener('click', function (e) {
+      if (e.target.classList.contains('remove-row')) { e.target.closest('tr').remove(); renumberRows(); }
+    });
+    add.addEventListener('click', function () {
+      var count = rowsBody.querySelectorAll('tr.data-row').length;
+      rowsBody.insertAdjacentHTML('beforeend', rowsTemplate.innerHTML.replace(/__IDX__/g, String(count)));
+      renumberRows();
+      var last = rowsBody.querySelector('tr.data-row:last-child .row-name');
+      if (last) last.focus();
+    });
+    renumberRows();
+  });
+
   var table = document.getElementById('params');
   var template = document.getElementById('param-template');
   var addButton = document.getElementById('add-param');

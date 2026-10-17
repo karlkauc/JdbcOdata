@@ -24,3 +24,12 @@ queries:
         description: Geschaeftsjahr
     # optional: credentials used once for the schema snapshot at start (not stored)
     # snapshotCredentials: {username: report_ro, password: secret}
+    # optional: key columns (sets keyMode COLUMNS semantics after the snapshot) and relations to other
+    # queries, published as navigation properties in $metadata (metadata only, no $expand)
+    # keyColumns: [PositionId]
+    # relations:
+    #   - name: Kunde            # navigation property name
+    #     target: Kunden         # other query / entity set
+    #     columns: {KundeId: KundeId}   # own column: target column
+    #     toMany: false          # true = Collection(...) on the target side
+    #     partner: Umsaetze      # inverse navigation on the target query, optional

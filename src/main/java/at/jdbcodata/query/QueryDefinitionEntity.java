@@ -84,6 +84,10 @@ public class QueryDefinitionEntity {
     @OrderBy("ordinal")
     private List<QueryColumnEntity> columns = new ArrayList<>();
 
+    @OneToMany(mappedBy = "query", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("ordinal")
+    private List<QueryRelationEntity> relations = new ArrayList<>();
+
     public QueryDefinition toRecord() {
         return toRecord(null);
     }
@@ -93,7 +97,16 @@ public class QueryDefinitionEntity {
                 executionMode, fixedCredentialId, fixedCredentialName, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled,
                 parameters.stream().map(QueryParameterEntity::toRecord).toList(),
                 columns.stream().map(QueryColumnEntity::toRecord).toList(),
-                createdAt, updatedAt);
+                createdAt, updatedAt,
+                relations.stream().map(QueryRelationEntity::toRecord).toList());
+    }
+
+    public void replaceRelations(List<QueryRelation> rels) {
+        relations.clear();
+        int i = 0;
+        for (QueryRelation r : rels) {
+            relations.add(QueryRelationEntity.of(this, i++, r));
+        }
     }
 
     public void replaceParameters(List<QueryParameter> params) {
@@ -144,4 +157,5 @@ public class QueryDefinitionEntity {
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
     public List<QueryParameterEntity> getParameters() { return parameters; }
     public List<QueryColumnEntity> getColumns() { return columns; }
+    public List<QueryRelationEntity> getRelations() { return relations; }
 }
