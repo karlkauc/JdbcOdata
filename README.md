@@ -67,6 +67,9 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 ### Identität in Kürze
 
 - **Pass-Through:** Excel sendet DB-User und DB-Passwort, der Service verbindet sich damit. Nichts wird gespeichert.
+- **Anonym (optional):** Mit `jdbcodata.odata.anonymous-user` laufen Anfragen ohne Login als ein Service-User, z. B. für
+  einen öffentlichen Demo-Feed, den Excel oder der [OData Online Viewer](https://www.odata-viewer.online) ohne
+  Passwortabfrage öffnen.
 - **Service-User:** Konto im Service (empfohlen mit Präfix `svc_`), pro Datenquelle hinterlegte DB-Zugangsdaten,
   verschlüsselt mit dem Master-Key (`JDBCODATA_MASTER_KEY`, sonst automatisch `data/master.key`).
 - **FIXED-Modus:** Query läuft unter einem technischen Account; sichtbar nur für freigegebene Service-User,

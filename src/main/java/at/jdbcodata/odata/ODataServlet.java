@@ -1,5 +1,6 @@
 package at.jdbcodata.odata;
 
+import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.identity.BasicCredentials;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.identity.IdentityContext;
@@ -34,27 +35,39 @@ public class ODataServlet extends HttpServlet {
     private final transient ExecutionIdentityResolver identityResolver;
     private final transient ProcessorSupport support;
     private final transient OData odata = OData.newInstance();
+    /** Service user for requests without credentials; empty = Basic Auth is mandatory. */
+    private final String anonymousUser;
 
-    public ODataServlet(EdmRegistry edmRegistry, ExecutionIdentityResolver identityResolver, ProcessorSupport support) {
+    public ODataServlet(EdmRegistry edmRegistry, ExecutionIdentityResolver identityResolver, ProcessorSupport support,
+                        JdbcOdataProperties properties) {
         this.edmRegistry = edmRegistry;
         this.identityResolver = identityResolver;
         this.support = support;
+        this.anonymousUser = properties.odata().anonymousUser() == null ? "" : properties.odata().anonymousUser().trim();
     }
 
     @Override
     protected void service(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         Optional<BasicCredentials> credentials = BasicCredentials.fromHeader(req.getHeader("Authorization"));
-        if (credentials.isEmpty()) {
+        if (credentials.isEmpty() && anonymousUser.isEmpty()) {
             unauthorized(resp, "Authentication required. Send HTTP Basic credentials for the target database.");
             return;
         }
         try {
             IdentityContext context;
             try {
-                context = identityResolver.authenticate(credentials.get());
+                context = credentials.isPresent()
+                        ? identityResolver.authenticate(credentials.get())
+                        : identityResolver.anonymous(anonymousUser);
             } catch (ServiceAuthenticationException e) {
-                support.rateLimiter().recordFailure(clientIp(req), credentials.get().username());
-                unauthorized(resp, e.getMessage());
+                if (credentials.isPresent()) {
+                    support.rateLimiter().recordFailure(clientIp(req), credentials.get().username());
+                    unauthorized(resp, e.getMessage());
+                } else {
+                    log.warn("Anonymous OData access is configured for service user '{}' but the user is missing, "
+                            + "disabled or flagged force-passthrough", anonymousUser);
+                    unauthorized(resp, "Authentication required. Send HTTP Basic credentials for the target database.");
+                }
                 return;
             }
             List<QueryDefinition> visible = identityResolver.visibleQueries(context);

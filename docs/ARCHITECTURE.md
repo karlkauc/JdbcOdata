@@ -155,7 +155,7 @@ Fehlerfälle: DB-Login schlägt fehl → `401` mit `WWW-Authenticate: Basic`, da
 
 ## 5. Identität und Berechtigungen
 
-Jeder OData-Aufruf trägt Basic-Auth-Credentials (daher HTTPS-Pflicht). Die **Ausführungsidentität** ist der DB-User, unter dem die Abfrage tatsächlich läuft. Sie wird in dieser Reihenfolge aufgelöst:
+Jeder OData-Aufruf trägt Basic-Auth-Credentials (daher HTTPS-Pflicht). Einzige Ausnahme: ist `jdbcodata.odata.anonymous-user` gesetzt, laufen Anfragen **ohne** `Authorization`-Header als dieser Service-User (ohne Passwortprüfung, nur mit hinterlegten Credentials bzw. FIXED-Queries; fehlen beide, antwortet der Service mit 401). Die **Ausführungsidentität** ist der DB-User, unter dem die Abfrage tatsächlich läuft. Sie wird in dieser Reihenfolge aufgelöst:
 
 ```mermaid
 flowchart TD
@@ -386,3 +386,4 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 | 6 | H2 embedded Default, PostgreSQL optional | Immer PostgreSQL | Lokaler Betrieb ohne Zusatzinstallation; Docker nutzt PostgreSQL |
 | 7 | Cache in Metadaten-DB + Caffeine | Redis; nur In-Memory | Persistenz über Neustart, Mehrinstanz ohne weitere Komponente |
 | 8 | Thymeleaf + htmx | React/Vue-SPA | Kein Node-Build, ein Artefakt, geringe Komplexität für Admin-Oberfläche |
+| 9 | Anonymer Zugang als konfigurierter Service-User (`jdbcodata.odata.anonymous-user`) | Eigener „öffentlich“-Schalter pro Query; CORS + Anonymous nur für `$metadata` | Nutzt Freigaben, hinterlegte Credentials und Protokollierung der Service-User unverändert; standardmäßig aus, für öffentliche Demo-Feeds und OData-Explorer ohne Login-Dialog |

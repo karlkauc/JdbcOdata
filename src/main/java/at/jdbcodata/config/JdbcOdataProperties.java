@@ -17,8 +17,14 @@ public record JdbcOdataProperties(
     public record Admin(@DefaultValue("admin") String user, @DefaultValue("") String password) {
     }
 
+    /**
+     * {@code anonymousUser}: name of a service user whose identity is used for requests without an
+     * {@code Authorization} header (public demo feeds, OData explorers without a login dialog). Empty = every
+     * request needs Basic credentials. The user must be enabled, must not be flagged force-passthrough and needs
+     * stored credentials or FIXED queries; requests with a header are authenticated as before.
+     */
     public record OData(@DefaultValue("500000") int maxRows, @DefaultValue("60") int defaultTimeoutSec,
-                        @DefaultValue("2000") long concurrencyWaitMs) {
+                        @DefaultValue("2000") long concurrencyWaitMs, @DefaultValue("") String anonymousUser) {
     }
 
     public record Seed(@DefaultValue("") String file) {

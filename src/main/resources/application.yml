@@ -38,6 +38,7 @@ jdbcodata:
     max-rows: 500000       # hard upper bound per result
     default-timeout-sec: 60
     concurrency-wait-ms: 2000   # wait for a free execution slot of a datasource before answering 503
+    anonymous-user: ""          # service user for requests without Basic credentials (public demo); empty = off
   seed:
     file: ""               # YAML file with datasources and queries, e.g. config/seed.yml
   master-key: ""           # Base64, 32 bytes (AES-256). Empty: a key file is created in <data-dir>/master.key

@@ -19,13 +19,17 @@ class ODataServletTest {
         return new ProcessorSupport(null, null, null, null, null, null, new LoginRateLimiter(TestData.props(10, 10, "")));
     }
 
+    private static at.jdbcodata.config.JdbcOdataProperties props() {
+        return at.jdbcodata.testutil.TestData.props(1000, 60, "");
+    }
+
     private static String basic(String user, String password) {
         return "Basic " + java.util.Base64.getEncoder().encodeToString((user + ":" + password).getBytes());
     }
 
     @Test
     void missingCredentialsYield401WithChallenge() throws Exception {
-        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), mock(ExecutionIdentityResolver.class), support());
+        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), mock(ExecutionIdentityResolver.class), support(), props());
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/odata/");
         MockHttpServletResponse resp = new MockHttpServletResponse();
         servlet.service(req, resp);
@@ -38,7 +42,7 @@ class ODataServletTest {
     void wrongServicePasswordYields401() throws Exception {
         ExecutionIdentityResolver resolver = mock(ExecutionIdentityResolver.class);
         when(resolver.authenticate(any())).thenThrow(new ServiceAuthenticationException("svc_x"));
-        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), resolver, support());
+        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), resolver, support(), props());
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/odata/");
         req.addHeader("Authorization", basic("svc_x", "bad"));
         MockHttpServletResponse resp = new MockHttpServletResponse();
@@ -51,7 +55,7 @@ class ODataServletTest {
     void failuresOutsideOlingoYield500Json() throws Exception {
         ExecutionIdentityResolver resolver = mock(ExecutionIdentityResolver.class);
         when(resolver.authenticate(any())).thenThrow(new IllegalStateException("boom"));
-        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), resolver, support());
+        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), resolver, support(), props());
         MockHttpServletRequest req = new MockHttpServletRequest("GET", "/odata/");
         req.addHeader("Authorization", basic("a", "b"));
         MockHttpServletResponse resp = new MockHttpServletResponse();

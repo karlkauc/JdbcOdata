@@ -125,6 +125,10 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 - Alle DB-Verbindungen sind read-only, SQL ist auf `SELECT` beschränkt, Parameter werden gebunden.
 - Pro Datenquelle gelten Timeout, Zeilenlimit und maximale parallele Ausführungen; darüber 503 mit `Retry-After`.
 - Konfigurationsänderungen stehen im Audit-Log (Admin-UI → Audit, `GET /api/v1/audit`).
+- `jdbcodata.odata.anonymous-user` öffnet den Feed ohne Login unter einem Service-User. Nur für öffentliche
+  Demo-Daten verwenden: der Service-User sieht alle Queries, für die er freigegeben ist, und läuft mit seinen
+  hinterlegten DB-Credentials; Rate-Limit und Datenquellen-Limits gelten weiterhin, eine Login-Sperre greift
+  naturgemäß nicht.
 
 ## Fehlersuche
 

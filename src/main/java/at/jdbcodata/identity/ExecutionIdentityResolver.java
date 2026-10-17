@@ -50,6 +50,20 @@ public class ExecutionIdentityResolver {
         return new IdentityContext(credentials, user.orElse(null));
     }
 
+    /**
+     * Identity for a request without credentials: the configured anonymous service user. No password is involved,
+     * so the user must be enabled and must not depend on pass-through credentials.
+     *
+     * @throws ServiceAuthenticationException the user does not exist, is disabled or is flagged force-passthrough
+     */
+    public IdentityContext anonymous(String username) {
+        ServiceUser user = serviceUsers.findByUsername(username)
+                .filter(ServiceUser::enabled)
+                .filter(u -> !u.forcePassthrough())
+                .orElseThrow(() -> new ServiceAuthenticationException(username));
+        return IdentityContext.anonymous(user);
+    }
+
     /** Enabled queries with a snapshot that the caller may see (personalised service document, FR-35). */
     public List<QueryDefinition> visibleQueries(IdentityContext context) {
         return queryService.findAllEnabled().stream()
@@ -60,6 +74,7 @@ public class ExecutionIdentityResolver {
 
     public ExecutionIdentity resolve(QueryDefinition query, IdentityContext context) {
         BasicCredentials creds = context.credentials();
+        String caller = context.caller();
         if (query.executionMode() == ExecutionMode.FIXED) {
             if (!queryService.isVisible(query, context.serviceUser())) {
                 throw new QueryNotVisibleException(query.name());
@@ -71,17 +86,22 @@ public class ExecutionIdentityResolver {
                 verifyPassThroughLogin(query, creds);
             }
             ServiceUserService.DbLogin login = fixedCredentials.resolveLogin(query.fixedCredentialId());
-            return new ExecutionIdentity(creds.username(), login.username(), login.password(), ExecutionMode.FIXED);
+            return new ExecutionIdentity(caller, login.username(), login.password(), ExecutionMode.FIXED);
         }
         ServiceUser user = context.serviceUser();
         if (user != null && !user.forcePassthrough()) {
             Optional<ServiceUserService.DbLogin> stored = serviceUsers.resolveStoredLogin(user.id(), query.datasourceId());
             if (stored.isPresent()) {
-                return new ExecutionIdentity(creds.username(), stored.get().username(), stored.get().password(),
+                return new ExecutionIdentity(caller, stored.get().username(), stored.get().password(),
                         ExecutionMode.CALLER);
             }
         }
-        return new ExecutionIdentity(creds.username(), creds.username(), creds.password(), ExecutionMode.CALLER);
+        if (context.isAnonymous()) {
+            // No stored credentials for this datasource and nothing to pass through: the anonymous user may not
+            // run this query. Surfaces as 401 so clients know that credentials would help.
+            throw new ServiceAuthenticationException(IdentityContext.ANONYMOUS);
+        }
+        return new ExecutionIdentity(caller, creds.username(), creds.password(), ExecutionMode.CALLER);
     }
 
     /** Pass-through callers of FIXED queries are authenticated by opening a connection with their own login. */

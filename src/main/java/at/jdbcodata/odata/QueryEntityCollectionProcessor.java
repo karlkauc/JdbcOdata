@@ -6,6 +6,7 @@ import at.jdbcodata.cache.ResultCache;
 import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbAuthenticationException;
+import at.jdbcodata.identity.ServiceAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
 import at.jdbcodata.datasource.TooManyExecutionsException;
 import at.jdbcodata.identity.ExecutionIdentity;
@@ -210,6 +211,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             draft.fail(ExecutionStatus.AUTH_FAILED, e.getMessage());
             support.rateLimiter().recordFailure(request.clientIp(), request.identity().caller());
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.UNAUTHORIZED.getStatusCode(), LOCALE, e);
+        } catch (ServiceAuthenticationException e) {
+            // Anonymous caller without stored credentials for this datasource: credentials are required.
+            draft.fail(ExecutionStatus.AUTH_FAILED, e.getMessage());
+            throw new ODataApplicationException("Authentication required for this query. Send HTTP Basic credentials.",
+                    HttpStatusCode.UNAUTHORIZED.getStatusCode(), LOCALE, e);
         } catch (TooManyExecutionsException e) {
             draft.fail(ExecutionStatus.BUSY, e.getMessage());
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);

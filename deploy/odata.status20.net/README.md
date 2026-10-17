@@ -57,6 +57,32 @@ Queries im Feed (alle im Modus CALLER, Cache 5 Minuten pro User):
 | `Umsatz` | Umsatz auf Positionsebene | `p_jahr` (Standard 2025) |
 | `UmsatzProMonat` | Summe je Monat, Region, Kategorie | `p_jahr` (Standard 2025) |
 
+## Anonymer Lesezugriff (Service-User `demo`)
+
+Der Feed ist zusätzlich **ohne Login** lesbar, damit OData-Werkzeuge wie der
+[OData Online Viewer](https://www.odata-viewer.online) ihn als Live-Beispiel öffnen können. Technisch läuft
+jede Anfrage ohne `Authorization`-Header als Service-User `demo`
+(`JDBCODATA_ODATA_ANONYMOUS_USER: demo` in `docker-compose.yml`, siehe `docs/CONFIG.md`). Anfragen mit
+Login verhalten sich unverändert; im Ausführungsprotokoll steht der Aufrufer `anonymous`.
+
+Der Service-User wird **einmalig** angelegt (Admin-UI → Service-User, oder per API). Er bekommt die
+hinterlegten DB-Credentials von `excel_demo`, sieht also genau das, was `excel_demo` sieht:
+
+```bash
+set -a; . .env; set +a
+API=https://odata.status20.net/api/v1; AUTH="$JDBCODATA_ADMIN_USER:$JDBCODATA_ADMIN_PASSWORD"
+USER_ID=$(curl -s -u "$AUTH" -H 'Content-Type: application/json' -X POST "$API/users" \
+  -d '{"username":"demo","displayName":"Anonymer Demo-Zugang (OData Viewer)","password":"'"$(openssl rand -base64 24)"'"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+DS_ID=$(curl -s -u "$AUTH" "$API/datasources" | python3 -c 'import json,sys; print([d["id"] for d in json.load(sys.stdin) if d["name"]=="demo_postgres"][0])')
+curl -s -u "$AUTH" -H 'Content-Type: application/json' -X PUT "$API/users/$USER_ID/credentials/$DS_ID" \
+  -d '{"dbUsername":"excel_demo","dbPassword":"'"$DEMO_READER_PASSWORD"'"}'
+curl -s "https://odata.status20.net/odata/Kunden?\$top=1"     # ohne Login → 200
+```
+
+Das Service-Passwort wird nie gebraucht (anonyme Anfragen prüfen keines); ein Zufallswert genügt.
+Abschalten: Zeile `JDBCODATA_ODATA_ANONYMOUS_USER` entfernen und `docker compose up -d`.
+
 ## In Excel einbinden
 
 1. **Daten → Daten abrufen → Aus anderen Quellen → Aus OData-Feed**.

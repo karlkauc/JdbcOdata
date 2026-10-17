@@ -22,6 +22,7 @@ services:
       JDBCODATA_META_PASSWORD: ${META_DB_PASSWORD:?META_DB_PASSWORD in .env setzen}
       JDBCODATA_SEED_FILE: /app/config/seed.yml
       JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP: "true"   # TLS endet am Host-Apache
+      JDBCODATA_ODATA_ANONYMOUS_USER: demo          # Anfragen ohne Login laufen als Service-User "demo" (siehe README)
       SERVER_FORWARD_HEADERS_STRATEGY: framework    # X-Forwarded-* vom Apache auswerten
       DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:?DEMO_READER_PASSWORD in .env setzen}   # für den Schema-Snapshot im Seed
       TZ: Europe/Vienna
