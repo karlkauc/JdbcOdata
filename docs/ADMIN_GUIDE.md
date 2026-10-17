@@ -36,6 +36,9 @@ Queries → Neue Query:
 
 Volltextsuche und Aggregation laufen auf jedem Feed: `/odata/Kunden?$search=Wien` oder
 `/odata/Umsatz?$apply=groupby((Region),aggregate(Betrag with sum as Summe))&$orderby=Summe desc`.
+Weitere Möglichkeiten: `$compute=Betrag mul 1.2 as Brutto`, `$apply=groupby((rollup(Region,Land)),aggregate($count as N))`,
+`/odata/Kunden(1)/Umsaetze/$ref`, `/odata/$all?$search=Wien` und
+`/odata/$crossjoin(Umsatz,Kunden)?$filter=Umsatz/KundeId eq Kunden/KundeId`.
 
 Jede Änderung an SQL, Parametern oder Datenquelle erzeugt eine Version; ältere Versionen lassen sich
 wiederherstellen.

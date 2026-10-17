@@ -22,6 +22,9 @@ import org.apache.olingo.commons.api.http.HttpStatusCode;
 import org.apache.olingo.server.api.ODataApplicationException;
 import org.apache.olingo.server.api.uri.UriResource;
 import org.apache.olingo.server.api.uri.UriResourceCount;
+import org.apache.olingo.server.api.uri.UriResourceEntitySet;
+import org.apache.olingo.server.api.uri.UriResourceIt;
+import org.apache.olingo.server.api.uri.UriResourceRoot;
 import org.apache.olingo.server.api.uri.UriResourceLambdaAll;
 import org.apache.olingo.server.api.uri.UriResourceLambdaAny;
 import org.apache.olingo.server.api.uri.UriResourceLambdaVariable;
@@ -36,6 +39,7 @@ import org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitor
 import org.apache.olingo.server.api.uri.queryoption.expression.Literal;
 import org.apache.olingo.server.api.uri.queryoption.expression.Member;
 import org.apache.olingo.server.api.uri.queryoption.expression.Method;
+import org.apache.olingo.server.api.uri.queryoption.expression.TypeLiteral;
 import org.apache.olingo.server.api.uri.queryoption.expression.MethodKind;
 import org.apache.olingo.server.api.uri.queryoption.expression.Unary;
 import org.apache.olingo.server.api.uri.queryoption.expression.UnaryOperatorKind;
@@ -93,6 +97,9 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
         if (expr instanceof Unary u) {
             return visitUnaryOperator(u.getOperator(), evaluate(u.getOperand()));
         }
+        if (expr instanceof Method m && (m.getMethod() == MethodKind.CAST || m.getMethod() == MethodKind.ISOF)) {
+            return castOrIsOf(m);
+        }
         if (expr instanceof Method m) {
             List<Object> params = new ArrayList<>();
             for (Expression e : m.getParameters()) params.add(evaluate(e));
@@ -115,6 +122,29 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                 current = lambdaVariables.get(v.getVariableName());
                 if (current == null) throw bad("Unknown lambda variable '" + v.getVariableName() + "'");
                 if (last) throw unsupported("Comparing whole entities");
+                continue;
+            }
+            if (part instanceof UriResourceIt && i == 0) {
+                // $it: the entity the expression is evaluated for (also inside lambdas).
+                if (last) throw unsupported("Comparing whole entities");
+                current = entity;
+                continue;
+            }
+            if (part instanceof UriResourceEntitySet es && i == 0 && entity.getType() == null
+                    && entity.getNavigationLink(es.getEntitySet().getName()) != null) {
+                // $crossjoin row: the first segment names the entity set of the combination.
+                current = entity.getNavigationLink(es.getEntitySet().getName()).getInlineEntity();
+                if (last) throw unsupported("Comparing whole entities");
+                continue;
+            }
+            if (part instanceof UriResourceRoot && i == 0) {
+                if (navigation == null || i + 1 >= parts.size() || !(parts.get(i + 1) instanceof UriResourceEntitySet es)
+                        || es.getKeyPredicates().isEmpty()) {
+                    throw unsupported("$root without EntitySet(key)");
+                }
+                current = navigation.lookup(es.getEntitySet().getName(), es.getKeyPredicates());
+                i++;
+                if (i == parts.size() - 1) throw unsupported("Comparing whole entities");
                 continue;
             }
             if (part instanceof UriResourcePrimitiveProperty prop) {
@@ -147,6 +177,60 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
             throw unsupported("Path segment " + part.getSegmentValue() + " in $filter and $orderby");
         }
         throw bad("Empty member path");
+    }
+
+    /**
+     * {@code isof(Type)} tests the entity type, {@code isof(expr, Type)} and {@code cast(expr, Type)} convert a
+     * primitive value; a failed cast yields null, as the specification requires.
+     */
+    private Object castOrIsOf(Method m) throws ExpressionVisitException, ODataApplicationException {
+        List<Expression> params = m.getParameters();
+        if (params.isEmpty() || !(params.get(params.size() - 1) instanceof TypeLiteral typeLiteral)) {
+            throw bad(m.getMethod().name().toLowerCase(LOCALE) + " needs a type argument");
+        }
+        EdmType type = typeLiteral.getType();
+        String fqn = type.getFullQualifiedName().getFullQualifiedNameAsString();
+        if (params.size() == 1) {
+            if (m.getMethod() == MethodKind.ISOF) return fqn.equals(entity.getType());
+            throw unsupported("cast of whole entities");
+        }
+        Object value = evaluate(params.get(0));
+        Object converted = convert(value, type);
+        if (m.getMethod() == MethodKind.CAST) return converted;
+        return value != null && converted != null;
+    }
+
+    /** Converts a canonical value to the given primitive type; null if not possible. */
+    static Object convert(Object value, EdmType type) throws ODataApplicationException {
+        if (value == null) return null;
+        EdmPrimitiveTypeKind kind;
+        try {
+            kind = EdmPrimitiveTypeKind.valueOfFQN(type.getFullQualifiedName());
+        } catch (IllegalArgumentException e) {
+            return null; // not a primitive type
+        }
+        String text = value instanceof BigDecimal bd ? bd.stripTrailingZeros().toPlainString() : value.toString();
+        try {
+            return switch (kind) {
+                case String -> text;
+                case Boolean -> value instanceof Boolean ? value
+                        : "true".equalsIgnoreCase(text) ? Boolean.TRUE : "false".equalsIgnoreCase(text) ? Boolean.FALSE : null;
+                case Byte, SByte, Int16, Int32, Int64 -> {
+                    BigDecimal n = value instanceof BigDecimal bd ? bd : new BigDecimal(text.strip());
+                    yield n.setScale(0, RoundingMode.DOWN);
+                }
+                case Decimal, Double, Single -> value instanceof BigDecimal ? value : new BigDecimal(text.strip());
+                case Date -> value instanceof LocalDate ? value
+                        : value instanceof Instant i ? LocalDate.ofInstant(i, java.time.ZoneOffset.UTC) : LocalDate.parse(text.strip());
+                case DateTimeOffset -> value instanceof Instant ? value
+                        : value instanceof LocalDate d ? d.atStartOfDay(java.time.ZoneOffset.UTC).toInstant()
+                        : OffsetDateTime.parse(text.strip()).toInstant();
+                case TimeOfDay -> value instanceof LocalTime ? value : LocalTime.parse(text.strip());
+                default -> null;
+            };
+        } catch (NumberFormatException | DateTimeParseException e) {
+            return null;
+        }
     }
 
     /** {@code any}: true if one element matches (false for an empty collection); {@code all}: true if none fails. */

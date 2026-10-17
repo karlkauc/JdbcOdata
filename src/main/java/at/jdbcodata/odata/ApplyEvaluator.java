@@ -18,6 +18,7 @@ import org.apache.olingo.commons.api.http.HttpStatusCode;
 import org.apache.olingo.server.api.ODataApplicationException;
 import org.apache.olingo.server.api.uri.UriResource;
 import org.apache.olingo.server.api.uri.UriResourceCount;
+import org.apache.olingo.server.api.uri.UriResourceNavigation;
 import org.apache.olingo.server.api.uri.UriResourcePrimitiveProperty;
 import org.apache.olingo.server.api.uri.queryoption.ApplyItem;
 import org.apache.olingo.server.api.uri.queryoption.ApplyOption;
@@ -124,33 +125,98 @@ final class ApplyEvaluator {
     private Entity aggregate(List<Entity> in, Aggregate aggregate) throws ODataApplicationException {
         Entity result = new Entity();
         for (AggregateExpression a : aggregate.getExpressions()) {
-            if (a.getInlineAggregateExpression() != null || (a.getFrom() != null && !a.getFrom().isEmpty())
-                    || a.getCustomMethod() != null) {
-                throw unsupported("Inline, 'from' and custom aggregates");
-            }
-            String alias = a.getAlias();
-            if (isCount(a)) {
-                set(result, alias == null ? "$count" : alias, BigDecimal.valueOf(in.size()));
+            if (a.getCustomMethod() != null) throw unsupported("Custom aggregation methods");
+            AggregateExpression inline = a.getInlineAggregateExpression();
+            if (inline != null) {
+                // Umsaetze(Betrag with sum as S): aggregate over the related rows of all input rows.
+                String alias = inline.getAlias() != null ? inline.getAlias() : a.getAlias();
+                if (alias == null) throw bad("Inline aggregates need an alias ('as Name')");
+                set(result, alias, aggregateValue(inline, related(in, a.getPath())));
                 continue;
             }
-            if (a.getStandardMethod() == null) throw unsupported("Aggregation without 'with <method>'");
+            String alias = a.getAlias();
+            if (alias == null && isCount(a)) alias = "$count";
             if (alias == null) throw bad("Aggregate expressions need an alias ('as Name')");
-            List<Object> values = new ArrayList<>(in.size());
-            for (Entity e : in) values.add(value(a, e));
-            set(result, alias, reduce(a.getStandardMethod(), values));
+            set(result, alias, aggregateValue(a, in));
         }
         return result;
     }
 
+    /** One aggregate over {@code rows}: {@code $count}, a standard method, optionally with {@code from}. */
+    private Object aggregateValue(AggregateExpression a, List<Entity> rows) throws ODataApplicationException {
+        if (isCount(a)) return BigDecimal.valueOf(rows.size());
+        List<UriResource> path = a.getPath();
+        boolean navigationCount = a.getExpression() == null && path != null && !path.isEmpty()
+                && path.get(path.size() - 1) instanceof UriResourceCount;
+        AggregateExpression.StandardMethod method = a.getStandardMethod();
+        if (method == null) {
+            if (!navigationCount) throw unsupported("Aggregation without 'with <method>'");
+            method = AggregateExpression.StandardMethod.SUM; // Umsaetze/$count as N: related rows in total
+        }
+        if (a.getFrom() != null && !a.getFrom().isEmpty()) {
+            return fromAggregate(a, method, rows);
+        }
+        List<Object> values = new ArrayList<>(rows.size());
+        for (Entity e : rows) values.add(value(a, e));
+        return reduce(method, values);
+    }
+
+    /**
+     * {@code Betrag with sum from Kunde with max from Monat with average as X}: aggregate per combination of the
+     * {@code from} properties with the base method, then remove the {@code from} dimensions left to right, each
+     * with its own method.
+     */
+    private Object fromAggregate(AggregateExpression a, AggregateExpression.StandardMethod method, List<Entity> rows)
+            throws ODataApplicationException {
+        List<AggregateExpression> froms = a.getFrom();
+        for (AggregateExpression f : froms) {
+            boolean hasTarget = (f.getPath() != null && !f.getPath().isEmpty()) || f.getExpression() != null;
+            if (f.getStandardMethod() == null || !hasTarget) throw bad("'from' needs '<property> with <method>'");
+        }
+        Map<List<Object>, List<Object>> base = new LinkedHashMap<>();
+        for (Entity e : rows) {
+            List<Object> key = new ArrayList<>();
+            for (AggregateExpression f : froms) key.add(normalized(value(f, e)));
+            base.computeIfAbsent(key, k -> new ArrayList<>()).add(value(a, e));
+        }
+        Map<List<Object>, Object> level = new LinkedHashMap<>();
+        for (Map.Entry<List<Object>, List<Object>> g : base.entrySet()) level.put(g.getKey(), reduce(method, g.getValue()));
+        for (AggregateExpression f : froms) {
+            Map<List<Object>, List<Object>> grouped = new LinkedHashMap<>();
+            for (Map.Entry<List<Object>, Object> g : level.entrySet()) {
+                grouped.computeIfAbsent(g.getKey().subList(1, g.getKey().size()), k -> new ArrayList<>()).add(g.getValue());
+            }
+            Map<List<Object>, Object> next = new LinkedHashMap<>();
+            for (Map.Entry<List<Object>, List<Object>> g : grouped.entrySet()) next.put(g.getKey(), reduce(f.getStandardMethod(), g.getValue()));
+            level = next;
+        }
+        return level.isEmpty() ? null : level.values().iterator().next();
+    }
+
+    /** All rows reached from {@code in} over a collection navigation path (for inline aggregates). */
+    private List<Entity> related(List<Entity> in, List<UriResource> path) throws ODataApplicationException {
+        if (path == null || path.size() != 1 || !(path.get(0) instanceof UriResourceNavigation nav)) {
+            throw unsupported("Inline aggregates other than over one navigation property");
+        }
+        if (navigation == null) throw unsupported("Navigation in $apply");
+        List<Entity> out = new ArrayList<>();
+        for (Entity e : in) out.addAll(navigation.navigate(e, nav.getProperty().getName()));
+        return out;
+    }
+
     private static boolean isCount(AggregateExpression a) {
         List<UriResource> path = a.getPath();
-        return a.getExpression() == null && a.getStandardMethod() == null && path != null && !path.isEmpty()
-                && path.get(path.size() - 1) instanceof UriResourceCount;
+        return a.getExpression() == null && a.getStandardMethod() == null && path != null && path.size() == 1
+                && path.get(0) instanceof UriResourceCount;
     }
 
     private Object value(AggregateExpression a, Entity e) throws ODataApplicationException {
         if (a.getExpression() != null) return evaluate(a.getExpression(), e);
         return path(a.getPath(), e);
+    }
+
+    private static Object normalized(Object v) {
+        return v == null ? null : RelationJoin.normalize(v);
     }
 
     static Object reduce(AggregateExpression.StandardMethod method, List<Object> values) throws ODataApplicationException {
@@ -193,34 +259,76 @@ final class ApplyEvaluator {
 
     // --- groupby ------------------------------------------------------------------------------------------------
 
+    /**
+     * {@code groupby((P1,rollup(P2,P3)),…)}: one grouping per rollup level — (P1,P2,P3), (P1,P2), and with
+     * {@code rollup($all,…)} also (P1) — each with the nested transformations; subtotal rows simply lack the
+     * rolled-up properties.
+     */
     private List<Entity> groupBy(List<Entity> in, GroupBy groupBy) throws ODataApplicationException {
-        List<GroupByItem> items = groupBy.getGroupByItems();
-        for (GroupByItem g : items) {
-            if (g.isRollupAll() || (g.getRollup() != null && !g.getRollup().isEmpty())) throw unsupported("rollup");
+        List<List<UriResource>> fixed = new ArrayList<>();
+        List<List<List<UriResource>>> rollupLevels = new ArrayList<>();
+        for (GroupByItem g : groupBy.getGroupByItems()) {
+            if (g.getRollup() != null && !g.getRollup().isEmpty()) {
+                List<List<UriResource>> paths = new ArrayList<>();
+                for (GroupByItem r : g.getRollup()) paths.add(r.getPath());
+                rollupLevels.add(paths);
+                if (g.isRollupAll()) rollupLevels.set(rollupLevels.size() - 1, withAll(paths));
+            } else if (g.getPath() != null && !g.getPath().isEmpty()) {
+                fixed.add(g.getPath());
+            }
         }
+        List<List<List<UriResource>>> groupings = new ArrayList<>();
+        groupings.add(new ArrayList<>(fixed));
+        for (List<List<UriResource>> rollup : rollupLevels) {
+            boolean all = rollup.get(0) == null;
+            List<List<UriResource>> paths = all ? rollup.subList(1, rollup.size()) : rollup;
+            int min = all ? 0 : 1;
+            List<List<List<UriResource>>> next = new ArrayList<>();
+            for (List<List<UriResource>> grouping : groupings) {
+                for (int n = paths.size(); n >= min; n--) {
+                    List<List<UriResource>> g = new ArrayList<>(grouping);
+                    g.addAll(paths.subList(0, n));
+                    next.add(g);
+                }
+            }
+            groupings = next;
+        }
+        List<Entity> out = new ArrayList<>();
+        for (List<List<UriResource>> grouping : groupings) out.addAll(group(in, grouping, groupBy.getApplyOption()));
+        return out;
+    }
+
+    /** Marks a rollup that includes the grand total ({@code rollup($all,…)}) with a leading null. */
+    private static List<List<UriResource>> withAll(List<List<UriResource>> paths) {
+        List<List<UriResource>> marked = new ArrayList<>();
+        marked.add(null);
+        marked.addAll(paths);
+        return marked;
+    }
+
+    private List<Entity> group(List<Entity> in, List<List<UriResource>> paths, ApplyOption nested)
+            throws ODataApplicationException {
         Map<List<Object>, List<Entity>> groups = new LinkedHashMap<>();
         Map<List<Object>, List<Object>> keyValues = new LinkedHashMap<>();
         for (Entity e : in) {
-            List<Object> values = new ArrayList<>(items.size());
-            List<Object> key = new ArrayList<>(items.size());
-            for (GroupByItem g : items) {
-                Object v = path(g.getPath(), e);
+            List<Object> values = new ArrayList<>(paths.size());
+            List<Object> key = new ArrayList<>(paths.size());
+            for (List<UriResource> path : paths) {
+                Object v = path(path, e);
                 values.add(v);
-                key.add(v == null ? null : RelationJoin.normalize(v));
+                key.add(normalized(v));
             }
             groups.computeIfAbsent(key, k -> new ArrayList<>()).add(e);
             keyValues.putIfAbsent(key, values);
         }
+        if (groups.isEmpty() && paths.isEmpty()) groups.put(List.of(), List.of()); // grand total of nothing
         List<Entity> out = new ArrayList<>();
         for (Map.Entry<List<Object>, List<Entity>> group : groups.entrySet()) {
-            List<Entity> rows = groupBy.getApplyOption() == null ? List.of(new Entity())
-                    : apply(group.getValue(), groupBy.getApplyOption());
-            List<Object> values = keyValues.get(group.getKey());
+            List<Entity> rows = nested == null ? List.of(new Entity()) : apply(group.getValue(), nested);
+            List<Object> values = keyValues.getOrDefault(group.getKey(), List.of());
             for (Entity row : rows) {
                 Entity result = new Entity();
-                for (int i = 0; i < items.size(); i++) {
-                    set(result, name(items.get(i).getPath()), values.get(i));
-                }
+                for (int i = 0; i < values.size(); i++) set(result, name(paths.get(i)), values.get(i));
                 for (Property p : row.getProperties()) {
                     if (result.getProperty(p.getName()) == null) result.addProperty(p);
                 }

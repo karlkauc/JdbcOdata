@@ -14,7 +14,15 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
+import org.apache.olingo.commons.api.http.HttpMethod;
 import org.apache.olingo.server.api.OData;
+import org.apache.olingo.server.api.ODataApplicationException;
+import org.apache.olingo.server.api.ODataRequest;
+import org.apache.olingo.server.api.ODataResponse;
+import org.apache.olingo.server.api.uri.UriInfo;
+import org.apache.olingo.server.core.uri.parser.Parser;
+import org.apache.olingo.server.core.uri.parser.UriParserException;
+import org.apache.olingo.server.core.uri.validator.UriValidationException;
 import org.apache.olingo.server.api.ODataHttpHandler;
 import org.apache.olingo.server.api.ServiceMetadata;
 import org.slf4j.Logger;
@@ -75,9 +83,14 @@ public class ODataServlet extends HttpServlet {
             // Per-caller content (row-level security), revalidated via ETag instead of never stored.
             resp.setHeader("Cache-Control", "private, no-cache");
             resp.setHeader("Vary", "Authorization");
+            QueryEntityCollectionProcessor processor = new QueryEntityCollectionProcessor(support,
+                    new RequestContext(context, req.getHeader("User-Agent"), clientIp(req)));
+            if (isSpecialResource(req)) {
+                serveSpecial(req, resp, metadata, processor);
+                return;
+            }
             ODataHttpHandler handler = odata.createHandler(metadata);
-            handler.register(new QueryEntityCollectionProcessor(support,
-                    new RequestContext(context, req.getHeader("User-Agent"), clientIp(req))));
+            handler.register(processor);
             handler.register(new JsonErrorProcessor());
             handler.process(olingoRequest(req), resp);
         } catch (RuntimeException e) {
@@ -86,6 +99,52 @@ public class ODataServlet extends HttpServlet {
                 resp.reset();
                 writeJsonError(resp, 500, "Internal server error");
             }
+        }
+    }
+
+    /** {@code /$all} and {@code /$crossjoin(...)}: parsed by Olingo, but not dispatched to processors by it. */
+    static boolean isSpecialResource(HttpServletRequest req) {
+        String path = odataPath(req);
+        return "GET".equals(req.getMethod()) && ("/$all".equals(path) || path.startsWith("/$crossjoin("));
+    }
+
+    private static String odataPath(HttpServletRequest req) {
+        String prefix = req.getContextPath() + req.getServletPath();
+        String uri = req.getRequestURI();
+        return uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
+    }
+
+    private void serveSpecial(HttpServletRequest req, HttpServletResponse resp, ServiceMetadata metadata,
+                              QueryEntityCollectionProcessor processor) throws IOException {
+        String base = req.getRequestURL().toString();
+        String path = odataPath(req);
+        base = base.substring(0, base.length() - path.length());
+        String query = QueryRewriter.rewrite(req.getQueryString());
+        try {
+            UriInfo uriInfo = new Parser(metadata.getEdm(), odata).parseUri(path, query, null, base);
+            ODataRequest request = new ODataRequest();
+            request.setMethod(HttpMethod.GET);
+            request.setRawBaseUri(base);
+            request.setRawODataPath(path);
+            request.setRawQueryPath(query);
+            request.setRawRequestUri(base + path + (query == null ? "" : "?" + query));
+            for (String header : java.util.Collections.list(req.getHeaderNames())) {
+                request.addHeader(header, java.util.Collections.list(req.getHeaders(header)));
+            }
+            ODataResponse response = new ODataResponse();
+            processor.init(odata, metadata);
+            processor.readSpecial(request, response, uriInfo);
+            resp.setStatus(response.getStatusCode());
+            response.getAllHeaders().forEach((name, values) -> values.forEach(v -> resp.addHeader(name, v)));
+            if (response.getContent() != null) {
+                try (var in = response.getContent()) {
+                    in.transferTo(resp.getOutputStream());
+                }
+            }
+        } catch (UriParserException | UriValidationException e) {
+            writeJsonError(resp, 400, e.getMessage());
+        } catch (ODataApplicationException e) {
+            writeJsonError(resp, e.getStatusCode(), e.getMessage());
         }
     }
 
@@ -118,6 +177,11 @@ public class ODataServlet extends HttpServlet {
             @Override
             public String getRequestURI() {
                 return odataPath;
+            }
+
+            @Override
+            public String getQueryString() {
+                return QueryRewriter.rewrite(super.getQueryString());
             }
         };
     }

@@ -73,7 +73,9 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
   Navigationspfade wie `Umsatz(1)/Kunde` funktionieren ebenso.
 - **Protokoll:** serverseitiges Paging (`page-size`, `Prefer: odata.maxpagesize`), ETags mit 304, Parameter-Aliase
   und `$batch` (nur Lesen).
-- **Suche und Aggregation:** `$search` und `$apply` (`groupby`, `aggregate`, `topcount`, …) werden in-memory ausgewertet.
+- **Suche und Aggregation:** `$search`, `$apply` (`groupby` mit `rollup`, `aggregate` mit `from` und Inline-Aggregaten,
+  `topcount`, …) und `$compute` werden in-memory ausgewertet; dazu `$levels`, `$ref`, `$all`, `$crossjoin`,
+  `cast`/`isof`/`$it`/`$root`.
 - **Anonym (optional):** Mit `jdbcodata.odata.anonymous-user` laufen Anfragen ohne Login als ein Service-User, z. B. für
   einen öffentlichen Demo-Feed, den Excel oder der [OData Online Viewer](https://www.odata-viewer.online) ohne
   Passwortabfrage öffnen.
