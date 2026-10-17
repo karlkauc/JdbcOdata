@@ -29,6 +29,22 @@ class ODataFeedTest extends DemoProfileTest {
     }
 
     @Test
+    void worksBehindProxyWhoseHostNameContainsTheServletPath() throws Exception {
+        // X-Forwarded-* is honoured (server.forward-headers-strategy=framework); the public host "odata.example.org"
+        // contains "/odata" once "//" is prepended, which used to make Olingo reject every URI as malformed.
+        HttpResponse<String> doc = send("GET", "/odata/", null, "demo", "demo",
+                "X-Forwarded-Host", "odata.example.org", "X-Forwarded-Proto", "https");
+        assertThat(doc.statusCode()).isEqualTo(200);
+        assertThat(doc.body()).contains("\"name\":\"Sales\"");
+        HttpResponse<String> rows = send("GET", "/odata/Sales?$top=1", null, "demo", "demo",
+                "X-Forwarded-Host", "odata.example.org", "X-Forwarded-Proto", "https");
+        assertThat(rows.statusCode()).isEqualTo(200);
+        JsonNode body = json.readTree(rows.body());
+        assertThat(body.get("@odata.context").asString()).isEqualTo("$metadata#Sales");
+        assertThat(body.get("value").size()).isEqualTo(1);
+    }
+
+    @Test
     void metadataContainsEntityTypeFromSnapshot() throws Exception {
         HttpResponse<String> r = get("/odata/$metadata", "demo", "demo");
         assertThat(r.statusCode()).isEqualTo(200);

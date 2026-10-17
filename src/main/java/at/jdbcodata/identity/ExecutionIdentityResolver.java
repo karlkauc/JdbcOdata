@@ -86,8 +86,24 @@ public class ExecutionIdentityResolver {
 
     /** Pass-through callers of FIXED queries are authenticated by opening a connection with their own login. */
     private void verifyPassThroughLogin(QueryDefinition query, BasicCredentials creds) {
-        Datasource ds = datasourceService.require(query.datasourceId());
-        try (Connection c = pools.connect(ds, creds.username(), creds.password())) {
+        verifyLogin(datasourceService.require(query.datasourceId()), creds.username(), creds.password());
+    }
+
+    /**
+     * True if the caller's own Basic Auth password is the only credential behind this identity: nobody has verified
+     * it yet except the target database. Service users were authenticated against their service password.
+     */
+    public static boolean isUnverifiedPassThrough(IdentityContext context, ExecutionIdentity identity) {
+        return !context.isServiceUser() && identity.mode() == ExecutionMode.CALLER;
+    }
+
+    /**
+     * Opens (and immediately returns) a pooled connection with the given login. A wrong password surfaces as
+     * {@link at.jdbcodata.datasource.DbAuthenticationException}. Used so that a cache hit never hands out a result
+     * to a caller who did not prove the DB password.
+     */
+    public void verifyLogin(Datasource ds, String username, String password) {
+        try (Connection c = pools.connect(ds, username, password)) {
             c.isValid(2);
         } catch (SQLException e) {
             throw DbErrorClassifier.translate(e, ds.name());

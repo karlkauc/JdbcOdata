@@ -22,7 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest;
         "jdbcodata.stats.async=false",
         "jdbcodata.master-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
         "jdbcodata.cache.cleanup-interval-ms=3600000",
-        "jdbcodata.security.rate-limit-per-minute=100000"
+        "jdbcodata.security.rate-limit-per-minute=100000",
+        "server.forward-headers-strategy=framework"
 })
 public abstract class DemoProfileTest {
 
@@ -40,11 +41,22 @@ public abstract class DemoProfileTest {
 
     protected HttpResponse<String> send(String method, String path, String jsonBody, String user, String password)
             throws IOException, InterruptedException {
+        return send(method, path, jsonBody, user, password, (String[]) null);
+    }
+
+    /** Like {@link #send} with additional request headers given as name/value pairs. */
+    protected HttpResponse<String> send(String method, String path, String jsonBody, String user, String password,
+                                        String... extraHeaders) throws IOException, InterruptedException {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path));
         if (jsonBody == null) {
             b.method(method, HttpRequest.BodyPublishers.noBody());
         } else {
             b.method(method, HttpRequest.BodyPublishers.ofString(jsonBody)).header("Content-Type", "application/json");
+        }
+        if (extraHeaders != null) {
+            for (int i = 0; i < extraHeaders.length; i += 2) {
+                b.header(extraHeaders[i], extraHeaders[i + 1]);
+            }
         }
         if (user != null) {
             b.header("Authorization", "Basic " + Base64.getEncoder().encodeToString((user + ":" + password).getBytes()));

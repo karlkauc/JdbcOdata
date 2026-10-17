@@ -68,4 +68,26 @@ class ODataServletTest {
         req.addHeader("X-Forwarded-For", "192.168.1.5, 10.0.0.2");
         assertThat(ODataServlet.clientIp(req)).isEqualTo("192.168.1.5");
     }
+
+    @Test
+    void olingoRequestStripsServletPathButKeepsFullUrl() {
+        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/odata/Kunden");
+        req.setServletPath("/odata");
+        req.setScheme("https");
+        req.setServerName("odata.example.org");
+        req.setServerPort(443);
+        var wrapped = ODataServlet.olingoRequest(req);
+        assertThat(wrapped.getServletPath()).isEmpty();
+        assertThat(wrapped.getContextPath()).isEmpty();
+        assertThat(wrapped.getRequestURI()).isEqualTo("/Kunden");
+        assertThat(wrapped.getRequestURL().toString()).isEqualTo("https://odata.example.org/odata/Kunden");
+        assertThat(wrapped.getHeader("Host")).isEqualTo(req.getHeader("Host"));
+    }
+
+    @Test
+    void olingoRequestLeavesUriWithoutMappingPrefixUntouched() {
+        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/other");
+        req.setServletPath("/odata");
+        assertThat(ODataServlet.olingoRequest(req).getRequestURI()).isEqualTo("/other");
+    }
 }

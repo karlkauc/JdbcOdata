@@ -9,6 +9,7 @@ import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
 import at.jdbcodata.datasource.TooManyExecutionsException;
 import at.jdbcodata.identity.ExecutionIdentity;
+import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.identity.QueryNotVisibleException;
 import at.jdbcodata.query.ParameterBinder;
 import at.jdbcodata.query.QueryDefinition;
@@ -181,6 +182,12 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     exec = new Execution(query, table, CacheStatus.BYPASS, null);
                 } else {
                     ResultCache.CachedResult r = support.cache().getOrLoad(key, params, ttl, run);
+                    if (r.status() == CacheStatus.HIT
+                            && ExecutionIdentityResolver.isUnverifiedPassThrough(request.identity(), identity)) {
+                        // The key holds only the DB user name. A hit must not bypass the database login, so the
+                        // caller's password is checked against the datasource before the cached rows go out.
+                        support.identityResolver().verifyLogin(ds, identity.dbUsername(), identity.dbPassword());
+                    }
                     exec = new Execution(query, r.cached().table(), r.status(),
                             r.status() == CacheStatus.HIT ? r.cached().ageSeconds() : null);
                 }

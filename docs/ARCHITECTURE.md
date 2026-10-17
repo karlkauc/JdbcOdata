@@ -215,7 +215,7 @@ flowchart TD
 | Transparenz | Response-Header `X-Cache: HIT|MISS|BYPASS` und `X-Cache-Age: <Sekunden>` |
 | Aufräumen | Hintergrundjob löscht abgelaufene Einträge; Gesamtgröße des Caches ist konfigurierbar (LRU) |
 
-Cache-Hit bedeutet null DB-Last: OData-Optionen werden vollständig auf dem gecachten Ergebnis ausgewertet. Umsetzung: `ResultCache` (Caffeine mit Gewicht nach Zeilen × Spalten und Ablauf je Eintrag, darunter Tabelle `cache_entry` mit GZIP-komprimiertem Binärformat aus `ResultTableCodec`), Per-Key-Lock gegen parallele Ausführungen, Aufräumjob alle 5 Minuten (abgelaufene Einträge, LRU bei Überschreitung von `jdbcodata.cache.max-size-mb`).
+Cache-Hit bedeutet keine Query-Ausführung: OData-Optionen werden vollständig auf dem gecachten Ergebnis ausgewertet. Einzige Ausnahme ist die Login-Prüfung bei reinem Pass-Through (Aufrufer ohne Service-User-Konto): Der Cache-Schlüssel enthält nur den DB-Usernamen, deshalb holt der Service vor der Auslieferung eines Treffers eine Verbindung aus dem Identitäts-Pool des Aufrufers; ein falsches Passwort führt zu 401 statt zu gecachten Daten. Bei bestehendem Pool kostet das keinen DB-Roundtrip. Umsetzung: `ResultCache` (Caffeine mit Gewicht nach Zeilen × Spalten und Ablauf je Eintrag, darunter Tabelle `cache_entry` mit GZIP-komprimiertem Binärformat aus `ResultTableCodec`), Per-Key-Lock gegen parallele Ausführungen, Aufräumjob alle 5 Minuten (abgelaufene Einträge, LRU bei Überschreitung von `jdbcodata.cache.max-size-mb`).
 
 ## 7. Statistiken und Protokollierung
 

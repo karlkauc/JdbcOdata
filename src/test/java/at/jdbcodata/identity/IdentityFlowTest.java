@@ -210,6 +210,9 @@ class IdentityFlowTest extends DemoProfileTest {
         HttpResponse<String> hit = get("/odata/" + qName + "?$top=1", "demo", "demo");
         assertThat(hit.headers().firstValue("X-Cache")).hasValue("HIT");
         assertThat(hit.headers().firstValue("X-Cache-Age")).isPresent();
+        // a cache hit must not bypass the DB login: same user name, wrong password
+        HttpResponse<String> wrongPassword = get("/odata/" + qName + "?$top=1", "demo", "wrong");
+        assertThat(wrongPassword.statusCode()).as("cache hit with wrong password").isEqualTo(401);
         assertThat(get("/odata/" + qName + "?y=2024", "demo", "demo").headers().firstValue("X-Cache")).as("other params").hasValue("MISS");
         assertThat(get("/odata/" + qName + "/$count", "demo", "demo").headers().firstValue("X-Cache")).hasValue("HIT");
         assertThat(get("/odata/" + qName + "?refresh=true", "demo", "demo").headers().firstValue("X-Cache")).hasValue("BYPASS");

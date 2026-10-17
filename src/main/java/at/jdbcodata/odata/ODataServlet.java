@@ -7,6 +7,7 @@ import at.jdbcodata.identity.ServiceAuthenticationException;
 import at.jdbcodata.query.QueryDefinition;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -62,7 +63,7 @@ public class ODataServlet extends HttpServlet {
             handler.register(new QueryEntityCollectionProcessor(support,
                     new RequestContext(context, req.getHeader("User-Agent"), clientIp(req))));
             handler.register(new JsonErrorProcessor());
-            handler.process(req, resp);
+            handler.process(olingoRequest(req), resp);
         } catch (RuntimeException e) {
             log.error("OData request {} failed outside Olingo", req.getRequestURI(), e);
             if (!resp.isCommitted()) {
@@ -74,6 +75,35 @@ public class ODataServlet extends HttpServlet {
 
     /** Caller, user agent and address of one OData request. */
     public record RequestContext(IdentityContext identity, String userAgent, String clientIp) {
+    }
+
+    /**
+     * Olingo derives the OData path by searching the servlet path inside the full request URL
+     * ({@code indexOf}). Behind a reverse proxy the URL carries the public host, and a host such as
+     * {@code odata.example.org} already contains {@code /odata}, which makes every request "malformed".
+     * This wrapper hands Olingo an empty servlet and context path plus the path below the mapping, so it
+     * uses the request URI directly and still builds absolute links from the forwarded host.
+     */
+    static HttpServletRequest olingoRequest(HttpServletRequest req) {
+        String prefix = req.getContextPath() + req.getServletPath();
+        String uri = req.getRequestURI();
+        String odataPath = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
+        return new HttpServletRequestWrapper(req) {
+            @Override
+            public String getServletPath() {
+                return "";
+            }
+
+            @Override
+            public String getContextPath() {
+                return "";
+            }
+
+            @Override
+            public String getRequestURI() {
+                return odataPath;
+            }
+        };
     }
 
     static String clientIp(HttpServletRequest req) {
