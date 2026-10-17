@@ -78,6 +78,8 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
   `cast`/`isof`/`$it`/`$root`.
 - **Push-Down (pro Query):** `$filter`, `$orderby`, `$top`, `$skip` und `$count` laufen auf Wunsch als SQL in der
   Datenbank (PostgreSQL, H2, Oracle, MySQL/MariaDB), Nicht-Übersetzbares weiter in-memory; Header `X-Push-Down`.
+- **4.01-Schreibweisen:** `matchesPattern`, `Umsaetze/$count($filter=…)`, Schlüssel als Pfadsegment (`Kunden/1`) und
+  Leerzeichen nach dem Lambda-Doppelpunkt, die Olingo 5 selbst nicht parst, werden vorher umgeschrieben.
 - **Parameter als Funktion:** Queries mit Parametern sind auch als `GetUmsatz(p_jahr=2024)` aufrufbar, komponierbar
   mit Schlüssel, Navigation, `$count` und allen Optionen.
 - **Anonym (optional):** Mit `jdbcodata.odata.anonymous-user` laufen Anfragen ohne Login als ein Service-User, z. B. für

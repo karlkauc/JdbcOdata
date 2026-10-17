@@ -78,6 +78,7 @@ public class ODataServlet extends HttpServlet {
                 }
                 return;
             }
+            EntityExpressionVisitor.resetRegexBudget();
             List<QueryDefinition> visible = identityResolver.visibleQueries(context);
             ServiceMetadata metadata = edmRegistry.serviceMetadata(visible);
             // Per-caller content (row-level security), revalidated via ETag instead of never stored.
@@ -92,7 +93,7 @@ public class ODataServlet extends HttpServlet {
             ODataHttpHandler handler = odata.createHandler(metadata);
             handler.register(processor);
             handler.register(new JsonErrorProcessor());
-            handler.process(olingoRequest(req), resp);
+            handler.process(olingoRequest(req, metadata.getEdm()), resp);
         } catch (RuntimeException e) {
             log.error("OData request {} failed outside Olingo", req.getRequestURI(), e);
             if (!resp.isCommitted()) {
@@ -160,9 +161,19 @@ public class ODataServlet extends HttpServlet {
      * uses the request URI directly and still builds absolute links from the forwarded host.
      */
     static HttpServletRequest olingoRequest(HttpServletRequest req) {
+        return olingoRequest(req, null);
+    }
+
+    /** As above; with an EDM, key segments ({@code Kunden/1}) are also rewritten to {@code Kunden(1)}. */
+    static HttpServletRequest olingoRequest(HttpServletRequest req, org.apache.olingo.commons.api.edm.Edm edm) {
         String prefix = req.getContextPath() + req.getServletPath();
         String uri = req.getRequestURI();
-        String odataPath = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
+        String original = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
+        String odataPath = KeySegmentRewriter.rewrite(original, edm);
+        // Olingo takes the base URI as request URL minus OData path, so the URL must end with the rewritten path.
+        String url = req.getRequestURL().toString();
+        StringBuffer requestUrl = new StringBuffer(odataPath.equals(original) || !url.endsWith(original) ? url
+                : url.substring(0, url.length() - original.length()) + odataPath);
         return new HttpServletRequestWrapper(req) {
             @Override
             public String getServletPath() {
@@ -177,6 +188,11 @@ public class ODataServlet extends HttpServlet {
             @Override
             public String getRequestURI() {
                 return odataPath;
+            }
+
+            @Override
+            public StringBuffer getRequestURL() {
+                return new StringBuffer(requestUrl);
             }
 
             @Override

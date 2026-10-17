@@ -163,6 +163,9 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                 }
                 if (last) throw unsupported("Comparing collections; use any(), all() or /$count");
                 UriResource next = parts.get(i + 1);
+                if (next instanceof UriResourceLambdaAny any && any.getLambdaVariable().startsWith(ExpressionRewriter.COUNT_VARIABLE)) {
+                    return count(targets, any.getLambdaVariable(), any.getExpression()); // Nav/$count($filter=…)
+                }
                 if (next instanceof UriResourceLambdaAny any) {
                     return lambda(targets, any.getLambdaVariable(), any.getExpression(), true);
                 }
@@ -233,6 +236,85 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
         }
     }
 
+    /** {@code Nav/$count($filter=…)} (rewritten into a tagged lambda): number of elements matching the body. */
+    private BigDecimal count(List<Entity> elements, String variable, Expression body)
+            throws ExpressionVisitException, ODataApplicationException {
+        long n = 0;
+        for (Entity element : elements) {
+            Map<String, Entity> vars = new HashMap<>(lambdaVariables);
+            vars.put(variable, element);
+            if (bool(new EntityExpressionVisitor(entity, navigation, vars).evaluate(body))) n++;
+        }
+        return BigDecimal.valueOf(n);
+    }
+
+    private static final Map<String, java.util.regex.Pattern> PATTERNS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** {@code matchesPattern}: the regular expression matches somewhere in the value (use ^ and $ to anchor). */
+    static boolean matchesPattern(String value, String regex) throws ODataApplicationException {
+        java.util.regex.Pattern p;
+        try {
+            p = PATTERNS.size() > 1000 ? java.util.regex.Pattern.compile(regex)
+                    : PATTERNS.computeIfAbsent(regex, java.util.regex.Pattern::compile);
+        } catch (java.util.regex.PatternSyntaxException e) {
+            throw new ODataApplicationException("Invalid pattern in matchesPattern: " + e.getDescription(),
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        try {
+            long[] request = REQUEST_REGEX_BUDGET.get();
+            long[] row = {Math.min(REGEX_STEPS, request[0])};
+            try {
+                return p.matcher(new BudgetedChars(value, row)).find();
+            } finally {
+                request[0] -= Math.min(REGEX_STEPS, request[0]) - Math.max(row[0], 0);
+            }
+        } catch (RegexBudgetExceeded e) {
+            throw new ODataApplicationException("matchesPattern: the pattern is too expensive to evaluate",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+    }
+
+    /** Character reads one regex match may perform; stops catastrophic backtracking ("(.*a){12}$"). */
+    private static final long REGEX_STEPS = 100_000;
+    /** Character reads all matchesPattern calls of one request may perform together. */
+    private static final long REQUEST_REGEX_STEPS = 20_000_000;
+    private static final ThreadLocal<long[]> REQUEST_REGEX_BUDGET = ThreadLocal.withInitial(() -> new long[] {REQUEST_REGEX_STEPS});
+
+    /** Called at the start of every OData request (same thread evaluates the whole request). */
+    static void resetRegexBudget() {
+        REQUEST_REGEX_BUDGET.get()[0] = REQUEST_REGEX_STEPS;
+    }
+
+    private static final class RegexBudgetExceeded extends RuntimeException {
+        RegexBudgetExceeded() {
+            super(null, null, false, false);
+        }
+    }
+
+    /** A CharSequence that counts reads against a shared budget. */
+    private record BudgetedChars(CharSequence text, long[] budget) implements CharSequence {
+        @Override
+        public int length() {
+            return text.length();
+        }
+
+        @Override
+        public char charAt(int index) {
+            if (--budget[0] < 0) throw new RegexBudgetExceeded();
+            return text.charAt(index);
+        }
+
+        @Override
+        public CharSequence subSequence(int start, int end) {
+            return new BudgetedChars(text.subSequence(start, end), budget);
+        }
+
+        @Override
+        public String toString() {
+            return text.toString();
+        }
+    }
+
     /** {@code any}: true if one element matches (false for an empty collection); {@code all}: true if none fails. */
     private boolean lambda(List<Entity> elements, String variable, Expression body, boolean any)
             throws ExpressionVisitException, ODataApplicationException {
@@ -296,6 +378,9 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                 String b = string(p.get(1));
                 if (method == MethodKind.CONCAT) return (a == null ? "" : a) + (b == null ? "" : b);
                 if (a == null || b == null) return method == MethodKind.INDEXOF ? null : false;
+                if (method == MethodKind.CONTAINS && b.startsWith(ExpressionRewriter.PATTERN_MARKER)) {
+                    return matchesPattern(a, b.substring(ExpressionRewriter.PATTERN_MARKER.length()));
+                }
                 return switch (method) {
                     case CONTAINS -> a.contains(b);
                     case STARTSWITH -> a.startsWith(b);
