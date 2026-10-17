@@ -16,7 +16,8 @@ import org.springframework.mock.web.MockHttpServletResponse;
 class ODataServletTest {
 
     private static ProcessorSupport support() {
-        return new ProcessorSupport(null, null, null, null, null, null, new LoginRateLimiter(TestData.props(10, 10, "")));
+        return new ProcessorSupport(null, null, null, null, null, null, new LoginRateLimiter(TestData.props(10, 10, "")),
+                TestData.props(10, 10, ""));
     }
 
     private static at.jdbcodata.config.JdbcOdataProperties props() {

@@ -1,6 +1,7 @@
 package at.jdbcodata.odata;
 
 import at.jdbcodata.cache.ResultCache;
+import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.query.QueryExecutor;
@@ -18,5 +19,6 @@ public record ProcessorSupport(
         QueryExecutor executor,
         ResultCache cache,
         ExecutionLogService executionLog,
-        LoginRateLimiter rateLimiter) {
+        LoginRateLimiter rateLimiter,
+        JdbcOdataProperties properties) {
 }

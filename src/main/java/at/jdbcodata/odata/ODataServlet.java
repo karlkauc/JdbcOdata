@@ -72,6 +72,9 @@ public class ODataServlet extends HttpServlet {
             }
             List<QueryDefinition> visible = identityResolver.visibleQueries(context);
             ServiceMetadata metadata = edmRegistry.serviceMetadata(visible);
+            // Per-caller content (row-level security), revalidated via ETag instead of never stored.
+            resp.setHeader("Cache-Control", "private, no-cache");
+            resp.setHeader("Vary", "Authorization");
             ODataHttpHandler handler = odata.createHandler(metadata);
             handler.register(new QueryEntityCollectionProcessor(support,
                     new RequestContext(context, req.getHeader("User-Agent"), clientIp(req))));

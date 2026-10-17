@@ -31,20 +31,20 @@ final class QueryOptionsEvaluator {
     }
 
     /** With {@code navigation}, member paths in $filter/$orderby may follow navigation properties. */
-    static EntityCollection apply(List<Entity> entities, UriInfo uriInfo, NavigationResolver navigation)
+    static EntityCollection apply(List<Entity> entities, UriInfo uriInfo, EvaluationContext navigation)
             throws ODataApplicationException {
         return apply(entities, uriInfo.getSearchOption(), uriInfo.getFilterOption(), uriInfo.getOrderByOption(),
                 uriInfo.getSkipOption(), uriInfo.getTopOption(), navigation);
     }
 
     static EntityCollection apply(List<Entity> entities, FilterOption filter, OrderByOption orderBy, SkipOption skipOption,
-                                  TopOption topOption, NavigationResolver navigation) throws ODataApplicationException {
+                                  TopOption topOption, EvaluationContext navigation) throws ODataApplicationException {
         return apply(entities, null, filter, orderBy, skipOption, topOption, navigation);
     }
 
     /** Same evaluation for the nested options of an {@code $expand} item; {@code $search} restricts first. */
     static EntityCollection apply(List<Entity> entities, SearchOption search, FilterOption filter, OrderByOption orderBy,
-                                  SkipOption skipOption, TopOption topOption, NavigationResolver navigation)
+                                  SkipOption skipOption, TopOption topOption, EvaluationContext navigation)
             throws ODataApplicationException {
         List<Entity> result = SearchEvaluator.filter(entities, search);
         if (filter != null) {
@@ -97,7 +97,7 @@ final class QueryOptionsEvaluator {
         return collection;
     }
 
-    private static Object evaluate(Expression expr, Entity e, NavigationResolver navigation) throws ODataApplicationException {
+    private static Object evaluate(Expression expr, Entity e, EvaluationContext navigation) throws ODataApplicationException {
         try {
             return new EntityExpressionVisitor(e, navigation).evaluate(expr);
         } catch (ExpressionVisitException ex) {

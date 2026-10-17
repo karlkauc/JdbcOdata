@@ -55,6 +55,12 @@ import org.apache.olingo.server.api.ODataLibraryException;
 import org.apache.olingo.server.api.ODataRequest;
 import org.apache.olingo.server.api.ODataResponse;
 import org.apache.olingo.server.api.ServiceMetadata;
+import org.apache.olingo.server.api.batch.BatchFacade;
+import org.apache.olingo.server.api.deserializer.batch.BatchOptions;
+import org.apache.olingo.server.api.deserializer.batch.BatchRequestPart;
+import org.apache.olingo.server.api.deserializer.batch.ODataResponsePart;
+import org.apache.olingo.server.api.prefer.PreferencesApplied;
+import org.apache.olingo.server.api.processor.BatchProcessor;
 import org.apache.olingo.server.api.processor.CountEntityCollectionProcessor;
 import org.apache.olingo.server.api.processor.EntityProcessor;
 import org.apache.olingo.server.api.processor.PrimitiveValueProcessor;
@@ -71,6 +77,7 @@ import org.apache.olingo.server.api.uri.UriResourceKind;
 import org.apache.olingo.server.api.uri.UriResourcePrimitiveProperty;
 import org.apache.olingo.server.api.uri.UriResourceEntitySet;
 import org.apache.olingo.server.api.uri.UriResourceNavigation;
+import org.apache.olingo.server.api.uri.queryoption.AliasQueryOption;
 import org.apache.olingo.server.api.uri.queryoption.CustomQueryOption;
 import org.apache.olingo.server.api.uri.queryoption.ExpandItem;
 import org.apache.olingo.server.api.uri.queryoption.ExpandOption;
@@ -85,7 +92,7 @@ import org.slf4j.LoggerFactory;
  * One instance per request, because it carries the caller's identity.
  */
 public class QueryEntityCollectionProcessor implements CountEntityCollectionProcessor, EntityProcessor,
-        PrimitiveValueProcessor {
+        PrimitiveValueProcessor, BatchProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryEntityCollectionProcessor.class);
     private static final Locale LOCALE = Locale.ENGLISH;
@@ -112,6 +119,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     public void readEntityCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo,
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
         rejectUnsupportedOptions(uriInfo);
+        begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
         Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
         if (r.entities() == null) {
@@ -120,11 +128,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         EdmEntitySet entitySet = r.entitySet();
         if (uriInfo.getApplyOption() != null) {
-            writeApplyResult(response, uriInfo, r, custom, responseFormat);
+            writeApplyResult(req, response, uriInfo, r, custom, responseFormat);
             return;
         }
         EntityCollection collection = QueryOptionsEvaluator.apply(r.entities(), uriInfo, navigationResolver(custom));
-        // Only the requested page is expanded, after $filter/$orderby/$skip/$top of the outer collection.
+        Page page = page(req, uriInfo, collection.getEntities());
+        collection.getEntities().clear();
+        collection.getEntities().addAll(page.rows());
+        if (page.nextLink() != null) collection.setNext(java.net.URI.create(page.nextLink()));
+        applyPreference(response, page);
+        // Only the delivered page is expanded, after $filter/$orderby/$skip/$top and paging.
         if (uriInfo.getExpandOption() != null) {
             expand(collection.getEntities(), r.query(), uriInfo.getExpandOption(), custom, 1);
         }
@@ -141,17 +154,14 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 .build();
         ODataSerializer serializer = odata.createSerializer(responseFormat);
         SerializerResult result = serializer.entityCollection(serviceMetadata, entitySet.getEntityType(), collection, options);
-
-        response.setContent(result.getContent());
-        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
-        response.setHeader(HttpHeader.CONTENT_TYPE, responseFormat.toContentTypeString());
-        setCacheHeaders(response, r.root());
+        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
     }
 
     @Override
     public void countEntityCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo)
             throws ODataApplicationException, ODataLibraryException {
         rejectUnsupportedOptions(uriInfo);
+        begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
         Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
         if (r.entities() == null) {
@@ -161,25 +171,24 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 : new ApplyEvaluator(navigationResolver(custom)).apply(r.entities(), uriInfo.getApplyOption());
         EntityCollection collection = QueryOptionsEvaluator.apply(input, uriInfo, navigationResolver(custom));
         byte[] body = String.valueOf(collection.getCount()).getBytes(StandardCharsets.UTF_8);
-        response.setContent(new ByteArrayInputStream(body));
-        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
-        response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.TEXT_PLAIN.toContentTypeString());
-        setCacheHeaders(response, r.root());
+        respond(req, response, new ByteArrayInputStream(body), ContentType.TEXT_PLAIN.toContentTypeString(), r.root());
     }
 
     /**
      * {@code $apply} first, then $search/$filter/$orderby/$skip/$top/$count on the transformed rows (which may refer
      * to aliases), then $select. Written by {@link ApplyResultWriter} because the rows are dynamic structures.
      */
-    private void writeApplyResult(ODataResponse response, UriInfo uriInfo, Resolved r, Map<String, String> custom,
-                                  ContentType responseFormat) throws ODataApplicationException {
+    private void writeApplyResult(ODataRequest req, ODataResponse response, UriInfo uriInfo, Resolved r,
+                                  Map<String, String> custom, ContentType responseFormat) throws ODataApplicationException {
         if (!responseFormat.isCompatible(ContentType.APPLICATION_JSON)) {
             throw new ODataApplicationException("$apply results are available as JSON only",
                     HttpStatusCode.NOT_ACCEPTABLE.getStatusCode(), LOCALE);
         }
-        NavigationResolver navigation = navigationResolver(custom);
+        EvaluationContext navigation = navigationResolver(custom);
         List<Entity> applied = new ApplyEvaluator(navigation).apply(r.entities(), uriInfo.getApplyOption());
-        EntityCollection page = QueryOptionsEvaluator.apply(applied, uriInfo, navigation);
+        EntityCollection filtered = QueryOptionsEvaluator.apply(applied, uriInfo, navigation);
+        Page page = page(req, uriInfo, filtered.getEntities());
+        applyPreference(response, page);
         java.util.Set<String> select = new java.util.HashSet<>();
         if (uriInfo.getSelectOption() != null) {
             for (org.apache.olingo.server.api.uri.queryoption.SelectItem item : uriInfo.getSelectOption().getSelectItems()) {
@@ -193,11 +202,150 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
         }
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
-        byte[] body = ApplyResultWriter.write(r.entitySet().getName(), page.getEntities(), count ? page.getCount() : null, select);
+        byte[] body = ApplyResultWriter.write(r.entitySet().getName(), page.rows(), count ? filtered.getCount() : null,
+                select, page.nextLink());
+        respond(req, response, new ByteArrayInputStream(body), "application/json;odata.metadata=minimal", r.root());
+    }
+
+    // --- request state, paging, ETags -------------------------------------------------------------------------
+
+    /** Parameter aliases of the current request ({@code @name → option}). */
+    private final Map<String, AliasQueryOption> aliases = new HashMap<>();
+
+    /**
+     * Starts a read: drops per-request state. The processor instance serves all parts of a {@code $batch}, which may
+     * use different parameters, so executions and joins must not leak from one part into the next.
+     */
+    private void begin(UriInfo uriInfo) {
+        executions.clear();
+        filterJoins.clear();
+        aliases.clear();
+        if (uriInfo.getAliases() != null) {
+            for (AliasQueryOption a : uriInfo.getAliases()) {
+                aliases.put(a.getName().startsWith("@") ? a.getName() : "@" + a.getName(), a);
+            }
+        }
+    }
+
+    /** One page of a result: rows to deliver, the link to the next page, the page size applied from {@code Prefer}. */
+    private record Page(List<Entity> rows, String nextLink, Integer appliedMaxPageSize) {
+    }
+
+    /**
+     * Server-driven paging. The page size is {@code jdbcodata.odata.page-size} or the client's
+     * {@code Prefer: odata.maxpagesize} (whichever is smaller when both are set). {@code $skiptoken} is the number of
+     * rows already delivered of the result after $filter/$orderby/$skip/$top; the next page is served from the same
+     * cached result, so pages stay consistent while the cache entry lives.
+     */
+    private Page page(ODataRequest req, UriInfo uriInfo, List<Entity> rows) throws ODataApplicationException {
+        int offset = 0;
+        if (uriInfo.getSkipTokenOption() != null) {
+            try {
+                offset = Integer.parseInt(uriInfo.getSkipTokenOption().getValue());
+            } catch (NumberFormatException e) {
+                offset = -1;
+            }
+            if (offset < 0) {
+                throw new ODataApplicationException("Invalid $skiptoken", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+            }
+        }
+        int configured = support.properties() == null ? 0 : support.properties().odata().pageSize();
+        Integer preferred = odata.createPreferences(req.getHeaders(HttpHeader.PREFER)).getMaxPageSize();
+        int size = configured;
+        Integer applied = null;
+        if (preferred != null && preferred > 0) {
+            size = configured > 0 ? Math.min(preferred, configured) : preferred;
+            applied = size;
+        }
+        List<Entity> rest = rows.subList(Math.min(offset, rows.size()), rows.size());
+        String next = null;
+        if (size > 0 && rest.size() > size) {
+            rest = rest.subList(0, size);
+            next = nextLink(req.getRawRequestUri(), offset + size);
+        }
+        return new Page(new ArrayList<>(rest), next, applied);
+    }
+
+    /** The request URI with {@code $skiptoken} replaced. */
+    static String nextLink(String rawRequestUri, int skipToken) {
+        int q = rawRequestUri.indexOf('?');
+        String base = q < 0 ? rawRequestUri : rawRequestUri.substring(0, q);
+        StringBuilder query = new StringBuilder();
+        if (q >= 0) {
+            for (String part : rawRequestUri.substring(q + 1).split("&")) {
+                if (part.isEmpty() || part.startsWith("$skiptoken=") || part.toLowerCase(Locale.ROOT).startsWith("%24skiptoken=")) {
+                    continue;
+                }
+                query.append(query.length() == 0 ? "" : "&").append(part);
+            }
+        }
+        query.append(query.length() == 0 ? "" : "&").append("$skiptoken=").append(skipToken);
+        return base + "?" + query;
+    }
+
+    private static void applyPreference(ODataResponse response, Page page) {
+        if (page.appliedMaxPageSize() != null) {
+            response.setHeader(HttpHeader.PREFERENCE_APPLIED,
+                    PreferencesApplied.with().maxPageSize(page.appliedMaxPageSize()).build().toValueString());
+        }
+    }
+
+    /**
+     * Writes a read response with a weak ETag of the body; answers 304 without body when {@code If-None-Match}
+     * matches. The execution headers (X-Cache, X-Query-Version) are kept on both.
+     */
+    private static void respond(ODataRequest req, ODataResponse response, java.io.InputStream content, String contentType,
+                                Execution root) throws ODataApplicationException {
+        byte[] body;
+        try (java.io.InputStream in = content) {
+            body = in.readAllBytes();
+        } catch (java.io.IOException e) {
+            throw new ODataApplicationException("Cannot write the response", HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode(),
+                    LOCALE, e);
+        }
+        String etag = ResponseETag.of(body);
+        response.setHeader(HttpHeader.ETAG, etag);
+        if (root != null) setCacheHeaders(response, root);
+        if (ResponseETag.matches(req.getHeader(HttpHeader.IF_NONE_MATCH), etag)) {
+            response.setStatusCode(HttpStatusCode.NOT_MODIFIED.getStatusCode());
+            return;
+        }
         response.setContent(new ByteArrayInputStream(body));
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
-        response.setHeader(HttpHeader.CONTENT_TYPE, "application/json;odata.metadata=minimal");
-        setCacheHeaders(response, r.root());
+        response.setHeader(HttpHeader.CONTENT_TYPE, contentType);
+    }
+
+    // --- $batch -------------------------------------------------------------------------------------------------
+
+    /**
+     * {@code POST /odata/$batch} (multipart/mixed): every part is dispatched like a single request under the caller's
+     * identity; read parts behave exactly as outside a batch, change sets end in 405 because the feed is read-only.
+     */
+    @Override
+    public void processBatch(BatchFacade facade, ODataRequest req, ODataResponse response)
+            throws ODataApplicationException, ODataLibraryException {
+        String boundary = facade.extractBoundaryFromContentType(req.getHeader(HttpHeader.CONTENT_TYPE));
+        List<BatchRequestPart> parts = odata.createFixedFormatDeserializer().parseBatchRequest(req.getBody(), boundary,
+                BatchOptions.with().rawBaseUri(req.getRawBaseUri()).rawServiceResolutionUri(req.getRawServiceResolutionUri())
+                        .build());
+        List<ODataResponsePart> responses = new ArrayList<>();
+        for (BatchRequestPart part : parts) {
+            responses.add(facade.handleBatchRequest(part));
+        }
+        String responseBoundary = "batch_" + UUID.randomUUID();
+        response.setContent(odata.createFixedFormatSerializer().batchResponse(responses, responseBoundary));
+        response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.MULTIPART_MIXED + ";boundary=" + responseBoundary);
+        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+    }
+
+    @Override
+    public ODataResponsePart processChangeSet(BatchFacade facade, List<ODataRequest> requests)
+            throws ODataApplicationException, ODataLibraryException {
+        List<ODataResponse> responses = new ArrayList<>();
+        for (ODataRequest r : requests) {
+            responses.add(facade.handleODataRequest(r));
+        }
+        return new ODataResponsePart(responses, true);
     }
 
     // --- single entities, navigation paths, properties --------------------------------------------------------
@@ -207,6 +355,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     public void readEntity(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
             throws ODataApplicationException, ODataLibraryException {
         rejectUnsupportedOptions(uriInfo);
+        begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
         Resolved r = resolve(uriInfo.getUriResourceParts(), custom, req);
         setCacheHeaders(response, r.root());
@@ -227,9 +376,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 .select(uriInfo.getSelectOption()).expand(uriInfo.getExpandOption()).build();
         SerializerResult result = odata.createSerializer(responseFormat)
                 .entity(serviceMetadata, entitySet.getEntityType(), r.single(), options);
-        response.setContent(result.getContent());
-        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
-        response.setHeader(HttpHeader.CONTENT_TYPE, responseFormat.toContentTypeString());
+        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
     }
 
     /** {@code Kunden(1)/Name}. */
@@ -243,9 +390,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         SerializerResult result = odata.createSerializer(responseFormat).primitive(serviceMetadata,
                 (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
                 PrimitiveSerializerOptions.with().contextURL(contextUrl).build());
-        response.setContent(result.getContent());
-        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
-        response.setHeader(HttpHeader.CONTENT_TYPE, responseFormat.toContentTypeString());
+        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), null);
     }
 
     /** {@code Kunden(1)/Name/$value}: the raw value as text. */
@@ -262,9 +407,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (org.apache.olingo.commons.api.edm.EdmPrimitiveTypeException e) {
             text = String.valueOf(p.property().getValue());
         }
-        response.setContent(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)));
-        response.setStatusCode(HttpStatusCode.OK.getStatusCode());
-        response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.TEXT_PLAIN.toContentTypeString());
+        respond(req, response, new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)),
+                ContentType.TEXT_PLAIN.toContentTypeString(), null);
     }
 
     private record PropertyRead(EdmEntitySet entitySet, String keyPath, EdmProperty edmProperty, Property property) {
@@ -277,6 +421,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (!parts.isEmpty() && parts.get(parts.size() - 1).getKind() == UriResourceKind.value) {
             parts.remove(parts.size() - 1);
         }
+        begin(uriInfo);
         if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof UriResourcePrimitiveProperty propPart)) {
             throw new ODataApplicationException("Only primitive properties can be read",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
@@ -326,7 +471,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             single = byKey(entities, first.getKeyPredicates(), set.getName());
             entities = null;
         }
-        NavigationResolver navigation = navigationResolver(custom);
+        EvaluationContext navigation = navigationResolver(custom);
         for (int i = 1; i < parts.size(); i++) {
             if (!(parts.get(i) instanceof UriResourceNavigation nav)) {
                 throw new ODataApplicationException("Path segment '" + parts.get(i).getSegmentValue() + "' is not supported",
@@ -538,8 +683,22 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      * Resolver for navigation paths in $filter and $orderby ({@code Kunde/Region eq 'Nord'},
      * {@code Umsaetze/any(u: u/Betrag gt 1000)}): executes the target like $expand does and joins in memory.
      */
-    private NavigationResolver navigationResolver(Map<String, String> custom) {
-        return (source, navName) -> {
+    private EvaluationContext navigationResolver(Map<String, String> custom) {
+        return new EvaluationContext() {
+            @Override
+            public List<Entity> navigate(Entity source, String navName) throws ODataApplicationException {
+                return QueryEntityCollectionProcessor.this.navigate(source, navName, custom);
+            }
+
+            @Override
+            public AliasQueryOption alias(String name) {
+                return aliases.get(name.startsWith("@") ? name : "@" + name);
+            }
+        };
+    }
+
+    private List<Entity> navigate(Entity source, String navName, Map<String, String> custom) throws ODataApplicationException {
+        {
             String sourceQuery = source.getType() == null ? null
                     : source.getType().substring(source.getType().lastIndexOf('.') + 1);
             String key = sourceQuery + "/" + navName;
@@ -562,7 +721,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 filterJoins.put(key, join);
             }
             return join.matches(source);
-        };
+        }
     }
 
     /** Navigation property names an expand item stands for ({@code *} = all of the source type). */

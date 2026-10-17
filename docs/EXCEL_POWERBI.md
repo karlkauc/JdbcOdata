@@ -24,6 +24,10 @@ Hinweise:
 
 ## PowerBI Desktop
 
+Ist serverseitiges Paging aktiv (`jdbcodata.odata.page-size`), folgen Excel und Power BI den
+`@odata.nextLink`-Verweisen selbständig; die Tabelle enthält trotzdem alle Zeilen.
+
+
 Deklarierte Beziehungen zwischen Queries (Admin-UI → Query → Beziehungen) stehen im `$metadata` als
 Navigationseigenschaften. Der OData-Connector zeigt sie als zusätzliche Spalten (`Kunde`, `Umsaetze`)
 und lädt sie beim Aufklappen per `$expand` mit. Für große Modelle ist es meist besser, die Tabellen einzeln

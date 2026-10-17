@@ -24,7 +24,7 @@ final class ApplyResultWriter {
     private ApplyResultWriter() {
     }
 
-    static byte[] write(String entitySetName, List<Entity> rows, Integer count, Set<String> select) {
+    static byte[] write(String entitySetName, List<Entity> rows, Integer count, Set<String> select, String nextLink) {
         Set<String> columns = new LinkedHashSet<>();
         for (Entity e : rows) {
             for (Property p : e.getProperties()) {
@@ -48,6 +48,7 @@ final class ApplyResultWriter {
                 g.writeEndObject();
             }
             g.writeEndArray();
+            if (nextLink != null) g.writeStringProperty("@odata.nextLink", nextLink);
             g.writeEndObject();
         }
         return out.toByteArray();

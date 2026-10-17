@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.olingo.server.api.OData;
 import org.apache.olingo.server.api.ServiceMetadata;
+import org.apache.olingo.server.api.etag.ServiceMetadataETagSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -30,7 +31,21 @@ public class EdmRegistry {
                 .collect(Collectors.joining("|"));
         return cache.computeIfAbsent(key, k -> {
             log.debug("Building OData metadata with {} entity sets", visibleQueries.size());
-            return odata.createServiceMetadata(new DynamicEdmProvider(visibleQueries), List.of());
+            // The key changes with every query/relation/snapshot change, so it is a valid validator: Olingo
+            // answers If-None-Match on $metadata and the service document with 304.
+            String etag = "W/\"" + ResponseETag.hash(k.getBytes(java.nio.charset.StandardCharsets.UTF_8)) + "\"";
+            ServiceMetadataETagSupport etagSupport = new ServiceMetadataETagSupport() {
+                @Override
+                public String getMetadataETag() {
+                    return etag;
+                }
+
+                @Override
+                public String getServiceDocumentETag() {
+                    return etag;
+                }
+            };
+            return odata.createServiceMetadata(new DynamicEdmProvider(visibleQueries), List.of(), etagSupport);
         });
     }
 

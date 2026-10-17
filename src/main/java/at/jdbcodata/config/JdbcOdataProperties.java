@@ -22,9 +22,12 @@ public record JdbcOdataProperties(
      * {@code Authorization} header (public demo feeds, OData explorers without a login dialog). Empty = every
      * request needs Basic credentials. The user must be enabled, must not be flagged force-passthrough and needs
      * stored credentials or FIXED queries; requests with a header are authenticated as before.
+     * {@code pageSize}: server-driven paging, rows per response before an {@code @odata.nextLink}; 0 = off (clients
+     * can still ask for pages with {@code Prefer: odata.maxpagesize}, never larger than this value when it is set).
      */
     public record OData(@DefaultValue("500000") int maxRows, @DefaultValue("60") int defaultTimeoutSec,
-                        @DefaultValue("2000") long concurrencyWaitMs, @DefaultValue("") String anonymousUser) {
+                        @DefaultValue("2000") long concurrencyWaitMs, @DefaultValue("") String anonymousUser,
+                        @DefaultValue("0") int pageSize) {
     }
 
     public record Seed(@DefaultValue("") String file) {

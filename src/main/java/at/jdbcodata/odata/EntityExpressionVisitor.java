@@ -27,6 +27,7 @@ import org.apache.olingo.server.api.uri.UriResourceLambdaAny;
 import org.apache.olingo.server.api.uri.UriResourceLambdaVariable;
 import org.apache.olingo.server.api.uri.UriResourceNavigation;
 import org.apache.olingo.server.api.uri.UriResourcePrimitiveProperty;
+import org.apache.olingo.server.api.uri.queryoption.AliasQueryOption;
 import org.apache.olingo.server.api.uri.queryoption.expression.Binary;
 import org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind;
 import org.apache.olingo.server.api.uri.queryoption.expression.Expression;
@@ -42,7 +43,7 @@ import org.apache.olingo.server.api.uri.queryoption.expression.UnaryOperatorKind
 /**
  * Evaluates an OData expression against one entity. Values are canonicalised via {@link FilterValues}.
  *
- * <p>Member paths may follow navigation properties when a {@link NavigationResolver} is given: single-valued
+ * <p>Member paths may follow navigation properties when a {@link EvaluationContext} is given: single-valued
  * navigations ({@code Kunde/Region}), chains of them, {@code any}/{@code all} lambdas over collections
  * ({@code Umsaetze/any(u: u/Betrag gt 1000)}) and {@code Umsaetze/$count}. Because Olingo's {@code Member.accept}
  * hands lambdas to the visitor without the path that leads to the collection, {@link #evaluate} walks the
@@ -59,18 +60,18 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
         }
     };
     private final Entity entity;
-    private final NavigationResolver navigation;
+    private final EvaluationContext navigation;
     private final Map<String, Entity> lambdaVariables;
 
     EntityExpressionVisitor(Entity entity) {
         this(entity, null, Map.of());
     }
 
-    EntityExpressionVisitor(Entity entity, NavigationResolver navigation) {
+    EntityExpressionVisitor(Entity entity, EvaluationContext navigation) {
         this(entity, navigation, Map.of());
     }
 
-    private EntityExpressionVisitor(Entity entity, NavigationResolver navigation, Map<String, Entity> lambdaVariables) {
+    private EntityExpressionVisitor(Entity entity, EvaluationContext navigation, Map<String, Entity> lambdaVariables) {
         this.entity = entity;
         this.navigation = navigation;
         this.lambdaVariables = lambdaVariables;
@@ -319,9 +320,36 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
         return member(member);
     }
 
+    /** {@code @name}: evaluates the alias value given in the query string (an expression or a literal). */
     @Override
     public Object visitAlias(String aliasName) throws ExpressionVisitException, ODataApplicationException {
-        throw unsupported("Parameter aliases");
+        AliasQueryOption alias = navigation == null ? null : navigation.alias(aliasName);
+        if (alias == null) throw bad("Parameter alias '" + aliasName + "' is not defined in the query string");
+        if (alias.getValue() != null) return evaluate(alias.getValue());
+        return aliasLiteral(alias.getText());
+    }
+
+    /** Literal text of an alias that Olingo did not parse into an expression. */
+    static Object aliasLiteral(String text) throws ODataApplicationException {
+        if (text == null || text.isBlank() || "null".equals(text.strip())) return null;
+        String t = text.strip();
+        if (t.length() >= 2 && t.startsWith("'") && t.endsWith("'")) return unquote(t);
+        if ("true".equalsIgnoreCase(t) || "false".equalsIgnoreCase(t)) return Boolean.parseBoolean(t);
+        try {
+            return new BigDecimal(t);
+        } catch (NumberFormatException e) {
+            // not a number
+        }
+        try {
+            return LocalDate.parse(t);
+        } catch (DateTimeParseException e) {
+            // not a date
+        }
+        try {
+            return OffsetDateTime.parse(t).toInstant();
+        } catch (DateTimeParseException e) {
+            throw bad("Cannot interpret the value of the parameter alias: " + t);
+        }
     }
 
     @Override

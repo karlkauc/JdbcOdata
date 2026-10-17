@@ -32,6 +32,8 @@ public class SecurityConfig {
         http.securityMatcher("/odata/**")
                 .authorizeHttpRequests(a -> a.anyRequest().permitAll())
                 .csrf(c -> c.disable())
+                // Responses are per caller and validated by ETag; the servlet sets "private, no-cache".
+                .headers(h -> h.cacheControl(c -> c.disable()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         return http.build();
     }

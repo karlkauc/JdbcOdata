@@ -54,9 +54,9 @@ final class ApplyEvaluator {
 
     private static final Locale LOCALE = Locale.ENGLISH;
 
-    private final NavigationResolver navigation;
+    private final EvaluationContext navigation;
 
-    ApplyEvaluator(NavigationResolver navigation) {
+    ApplyEvaluator(EvaluationContext navigation) {
         this.navigation = navigation;
     }
 

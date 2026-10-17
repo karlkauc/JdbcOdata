@@ -106,7 +106,7 @@ class ODataFilterTest extends DemoProfileTest {
             "customer add 1 eq 2    | 400",
             "not customer           | 400",
             "-customer eq 1         | 400",
-            "@p eq 1                | 501",
+            "@p eq 1                | 400",
             "sale_month eq 'x'      | 400",
             "geo.length(customer) eq 1 | 400",
             "unknown eq 1           | 400",
