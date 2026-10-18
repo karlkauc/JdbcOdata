@@ -132,6 +132,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
         begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
+        if (uriInfo.getDeltaTokenOption() != null || wantsTrackChanges(req)) {
+            // snapshots and comparisons need the current rows, not a cached result (the cache is refreshed)
+            custom = new LinkedHashMap<>(custom);
+            custom.put(REFRESH_OPTION, "true");
+        }
         Resolved r = resolvePushDown(uriInfo, custom, req, false);
         if (r == null) r = resolve(uriInfo.getUriResourceParts(), custom, req);
         if (r.entities() == null) {
@@ -446,6 +451,14 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     binds.addAll(sql.binds());
                 } catch (SqlFilterTranslator.Untranslatable e) {
                     residual.add(conjunct);
+                    try {
+                        // a search the database can only narrow down: pre-filter there, decide in memory
+                        SqlFilterTranslator.Sql pre = translator.prefilter(conjunct);
+                        where.add(pre.text());
+                        binds.addAll(pre.binds());
+                    } catch (SqlFilterTranslator.Untranslatable ignored) {
+                        // stays in memory only
+                    }
                 }
             }
         }
@@ -528,7 +541,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             try {
                 SqlFilterTranslator.Sql sql;
                 if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Filter f) {
-                    sql = translator.predicate(f.getFilterOption().getExpression());
+                    try {
+                        sql = translator.predicate(f.getFilterOption().getExpression());
+                    } catch (SqlFilterTranslator.Untranslatable e) {
+                        SqlFilterTranslator.Sql pre = translator.prefilter(f.getFilterOption().getExpression());
+                        where.add(pre.text());
+                        binds.addAll(pre.binds());
+                        summary.add("search(partial)");
+                        stopped = true;
+                        break;
+                    }
                     summary.add("filter");
                 } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Search se) {
                     SqlFilterTranslator.SearchSql bounded = translator.searchFilter(se.getSearchOption().getSearchExpression());
@@ -552,6 +574,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
         }
         SqlFilterTranslator.Aggregation aggregation = null;
+        org.apache.olingo.server.api.uri.queryoption.apply.GroupBy rollupGrandTotal = null;
         if (i < items.size() && !stopped) {
             try {
                 org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
@@ -560,9 +583,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     summary.add("aggregate");
                 } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.GroupBy g) {
                     List<List<UriResource>> paths = new ArrayList<>();
+                    boolean rollup = false;
                     for (org.apache.olingo.server.api.uri.queryoption.apply.GroupByItem gi : g.getGroupByItems()) {
-                        if (gi.getRollup() != null && !gi.getRollup().isEmpty()) throw new SqlFilterTranslator.Untranslatable("rollup");
-                        paths.add(gi.getPath());
+                        if (gi.getRollup() != null && !gi.getRollup().isEmpty()) rollup = true;
+                        else paths.add(gi.getPath());
                     }
                     List<org.apache.olingo.server.api.uri.queryoption.apply.AggregateExpression> aggs = List.of();
                     if (g.getApplyOption() != null) {
@@ -572,11 +596,19 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                         }
                         aggs = na.getExpressions();
                     }
-                    aggregation = translator.aggregation(paths, aggs);
+                    if (rollup) {
+                        List<List<List<UriResource>>> groupings = ApplyEvaluator.groupings(g);
+                        aggregation = translator.rollup(groupings, aggs);
+                        // an empty input still has a grand total in memory; SQL would return no row for it
+                        rollupGrandTotal = groupings.stream().anyMatch(List::isEmpty) ? g : null;
+                    } else {
+                        aggregation = translator.aggregation(paths, aggs);
+                    }
                     summary.add("groupby");
                 }
             } catch (SqlFilterTranslator.Untranslatable e) {
                 aggregation = null;
+                rollupGrandTotal = null;
             }
             if (aggregation != null) i++;
         }
@@ -615,14 +647,17 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             if (rowOrder != null) binds.addAll(rowOrder.binds());
         }
         if (where.isEmpty() && aggregation == null && rowOrder == null) return null;
-        // Groups come back sorted by the grouping columns, so the order is the same on every request.
-        String groupOrder = aggregation == null || aggregation.groupBy().isBlank() ? null : aggregation.groupBy();
+        // Groups come back in the order of their first row, like the in-memory groupby.
+        boolean grouped = aggregation != null && aggregation.grouped();
+        String groupOrder = !grouped ? null : (aggregation.rollup() ? "jdbcodata_q." + SqlWrapper.LEVEL + ", " : "")
+                + "MIN(jdbcodata_q." + SqlWrapper.ROW_NUMBER + ")";
         String order = rowOrder != null && !rowOrder.text().isBlank() ? rowOrder.text() : groupOrder;
         boolean rowPaging = rowSkip != null || rowTop != null;
         SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where), binds, order,
                 rowPaging ? (rowSkip == null ? 0 : rowSkip) : null, rowTop,
-                aggregation == null ? null : aggregation.select(), aggregation == null ? null : aggregation.groupBy());
-        if (aggregation != null) {
+                aggregation == null ? null : aggregation.select(), aggregation == null ? null : aggregation.groupBy(),
+                null, grouped, aggregation != null && aggregation.rollup() ? aggregation.levels().size() : 0);
+        if (aggregation != null && rollupGrandTotal == null) {
             PostAggregation post = postAggregation(items, i, aggregation, dialect, custom, uriInfo, wrapper);
             if (post != null) {
                 wrapper = post.wrapper();
@@ -641,6 +676,12 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         executions.put(query.name(), root);
         List<Entity> rows = aggregation == null ? EntityMapper.toEntities(query, root.table())
                 : aggregatedRows(aggregation, root.table());
+        if (rollupGrandTotal != null && rows.isEmpty()) {
+            // nothing matched: the in-memory groupby of no rows gives the grand total row(s) exactly
+            org.apache.olingo.server.core.uri.queryoption.ApplyOptionImpl only = new org.apache.olingo.server.core.uri.queryoption.ApplyOptionImpl();
+            only.add(rollupGrandTotal);
+            rows = new ApplyEvaluator(navigationResolver(custom)).apply(List.of(), only);
+        }
         org.apache.olingo.server.core.uri.queryoption.ApplyOptionImpl remaining = new org.apache.olingo.server.core.uri.queryoption.ApplyOptionImpl();
         for (int k = i; k < items.size(); k++) remaining.add(items.get(k));
         return new Resolved(root, query, rootSet, rows, null, new PushDown(wrapper, List.of(), false,
@@ -653,15 +694,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     /**
      * {@code filter}, {@code orderby}, {@code skip} and {@code top} directly after a pushed groupby/aggregate run as
-     * an outer SELECT over the aggregated rows (in this order; a filter after paging stays in memory; paging only
-     * after an explicit orderby). Ties are broken by the grouping columns, the order the groups have anyway. When the whole $apply went to the database,
+     * an outer SELECT over the aggregated rows (in this order; a filter after paging stays in memory). Groups keep
+     * the order of their first row, which also breaks ties of orderby, exactly as in memory. When the whole $apply went to the database,
      * the translatable conjuncts of $filter are added too; the in-memory $filter repeats them harmlessly.
      */
     private PostAggregation postAggregation(List<org.apache.olingo.server.api.uri.queryoption.ApplyItem> items, int from,
                                             SqlFilterTranslator.Aggregation aggregation, SqlDialect dialect,
                                             Map<String, String> custom, UriInfo uriInfo, SqlWrapper inner) {
         SqlFilterTranslator post = new SqlFilterTranslator(aggregation.columns(), dialect, navigationResolver(custom));
-        List<String> groups = aggregation.groupNames();
+        // ties are broken by the position of the group's first row, as the stable in-memory sort does
+        List<String> groups = aggregation.order();
         List<String> where = new ArrayList<>();
         List<Object> whereBinds = new ArrayList<>();
         SqlFilterTranslator.Sql order = null;
@@ -674,7 +716,18 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             try {
                 if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Filter f && order == null
                         && skip == null && top == null) {
-                    SqlFilterTranslator.Sql sql = post.predicate(f.getFilterOption().getExpression());
+                    SqlFilterTranslator.Sql sql;
+                    try {
+                        sql = post.predicate(f.getFilterOption().getExpression());
+                    } catch (SqlFilterTranslator.Untranslatable e) {
+                        // e.g. a condition on an average: the database narrows down, the step stays in memory
+                        SqlFilterTranslator.Sql pre = averagePrefilter(f.getFilterOption().getExpression(), aggregation, post, dialect);
+                        if (pre == null) throw e;
+                        where.add(pre.text());
+                        whereBinds.addAll(pre.binds());
+                        summary.add("filter(partial)");
+                        break;
+                    }
                     where.add(sql.text());
                     whereBinds.addAll(sql.binds());
                     summary.add("filter");
@@ -683,11 +736,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     order = post.orderBy(o.getOrderByOption(), groups);
                     summary.add("orderby");
                 } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Skip sk && top == null
-                        && order != null && !groups.isEmpty()) {
+                        && !groups.isEmpty()) {
                     skip = (skip == null ? 0 : skip) + sk.getSkipOption().getValue();
                     summary.add("skip");
-                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Top t && order != null
-                        && !groups.isEmpty()) {
+                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Top t && !groups.isEmpty()) {
                     top = top == null ? t.getTopOption().getValue() : Math.min(top, t.getTopOption().getValue());
                     summary.add("top");
                 } else {
@@ -723,8 +775,82 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where), binds,
                 order == null || order.text().isBlank() ? null : order.text(), paging ? (skip == null ? 0 : skip) : null, top,
                 null, null, new SqlWrapper(dialect, inner.where(), inner.whereBinds(), null, null, null, inner.select(),
-                        inner.groupBy())); // no ORDER BY in the subquery (SQL Server forbids it there)
+                        inner.groupBy(), null, inner.numbered(), inner.levels())); // no ORDER BY in the subquery
         return new PostAggregation(wrapper, i, summary);
+    }
+
+    /** Rounding tolerance for averages: in memory they are divided with 10 decimals (half up). */
+    private static final java.math.BigDecimal AVERAGE_TOLERANCE = new java.math.BigDecimal("1E-9");
+
+    /**
+     * A condition that keeps at least every row the filter keeps, for filters on averages, which are divided in
+     * Java: {@code A gt L} becomes {@code COUNT > 0 AND SUM >= (L - ε)·COUNT}, {@code lt}/{@code le} use
+     * {@code (L + ε)}, {@code eq} both; other translatable conjuncts are taken exactly, the rest is dropped (which
+     * only widens the condition). {@code null} when nothing narrows the rows.
+     */
+    private static SqlFilterTranslator.Sql averagePrefilter(Expression filter, SqlFilterTranslator.Aggregation aggregation,
+                                                            SqlFilterTranslator post, SqlDialect dialect) {
+        List<String> parts = new ArrayList<>();
+        List<Object> binds = new ArrayList<>();
+        for (Expression conjunct : conjuncts(filter)) {
+            try {
+                SqlFilterTranslator.Sql exact = post.predicate(conjunct);
+                parts.add(exact.text());
+                binds.addAll(exact.binds());
+                continue;
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                // maybe an average comparison
+            }
+            if (!(conjunct instanceof org.apache.olingo.server.api.uri.queryoption.expression.Binary b)) continue;
+            org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind op = b.getOperator();
+            Expression left = b.getLeftOperand();
+            Expression right = b.getRightOperand();
+            if (left instanceof org.apache.olingo.server.api.uri.queryoption.expression.Literal) {
+                Expression t = left;
+                left = right;
+                right = t;
+                op = switch (op) {
+                    case GT -> org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.LT;
+                    case GE -> org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.LE;
+                    case LT -> org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.GT;
+                    case LE -> org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.GE;
+                    default -> op;
+                };
+            }
+            if (!(left instanceof org.apache.olingo.server.api.uri.queryoption.expression.Member m)
+                    || !(right instanceof org.apache.olingo.server.api.uri.queryoption.expression.Literal lit)) continue;
+            List<UriResource> path = m.getResourcePath().getUriResourceParts();
+            if (path.size() != 1) continue;
+            SqlFilterTranslator.Slot slot = aggregation.slots().stream()
+                    .filter(x -> x.kind().equals("average") && x.name().equals(path.get(0).getSegmentValue())).findFirst().orElse(null);
+            java.math.BigDecimal limit;
+            try {
+                limit = new EntityExpressionVisitor(new Entity()).visitLiteral(lit) instanceof java.math.BigDecimal bd ? bd : null;
+            } catch (org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitException | ODataApplicationException e) {
+                limit = null;
+            }
+            if (slot == null || limit == null) continue;
+            String sum = "jdbcodata_q." + dialect.quote(slot.label() + "s");
+            String count = "jdbcodata_q." + dialect.quote(slot.label() + "c");
+            boolean lower = op == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.GT
+                    || op == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.GE
+                    || op == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.EQ;
+            boolean upper = op == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.LT
+                    || op == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.LE
+                    || op == org.apache.olingo.server.api.uri.queryoption.expression.BinaryOperatorKind.EQ;
+            if (!lower && !upper) continue;
+            StringBuilder c = new StringBuilder("(" + count + " > 0");
+            if (lower) {
+                c.append(" AND ").append(sum).append(" >= ? * ").append(count);
+                binds.add(limit.subtract(AVERAGE_TOLERANCE));
+            }
+            if (upper) {
+                c.append(" AND ").append(sum).append(" <= ? * ").append(count);
+                binds.add(limit.add(AVERAGE_TOLERANCE));
+            }
+            parts.add(c.append(")").toString());
+        }
+        return parts.isEmpty() ? null : new SqlFilterTranslator.Sql(String.join(" AND ", parts), binds);
     }
 
     /** Rows of a pushed groupby/aggregate in the form the in-memory evaluation produces. */
@@ -732,7 +858,14 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         List<Entity> out = new ArrayList<>();
         for (Object[] row : table.rows()) {
             Entity e = new Entity();
+            java.util.Set<String> present = null;
+            if (aggregation.rollup()) {
+                Object level = row[table.indexOf(SqlFilterTranslator.LEVEL)];
+                present = aggregation.levels().get(((Number) level).intValue() - 1);
+            }
             for (SqlFilterTranslator.Slot slot : aggregation.slots()) {
+                // subtotal rows lack the rolled-up properties, as in memory
+                if (present != null && slot.kind().equals("group") && !present.contains(slot.label())) continue;
                 Object value;
                 if (slot.kind().equals("average")) {
                     Object sum = FilterValues.canonical(row[table.indexOf(slot.label() + "s")]);
@@ -802,6 +935,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         aliases.clear();
         rootLookups.clear();
         caseCache.clear();
+        searches.clear();
         if (uriInfo.getAliases() != null) {
             for (AliasQueryOption a : uriInfo.getAliases()) {
                 aliases.put(a.getName().startsWith("@") ? a.getName() : "@" + a.getName(), a);
@@ -891,10 +1025,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     /**
      * What a delta link stands for: the OData path and the query options except $deltatoken and $skiptoken, or
-     * {@code null} when the result cannot be tracked: $top/$skip (the window would shift), rows without id.
+     * {@code null} when the result cannot be tracked (rows without id). With $top/$skip the snapshot is the window:
+     * entities moving in or out of it are reported as new or removed.
      */
     private static String deltaScope(ODataRequest req, UriInfo uriInfo, List<Entity> rows) {
-        if (uriInfo.getTopOption() != null || uriInfo.getSkipOption() != null) return null;
         for (Entity e : rows) if (e.getId() == null) return null;
         List<String> kept = new ArrayList<>();
         String query = req.getRawQueryPath();
@@ -922,7 +1056,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         requireJson(responseFormat);
         if (scope == null) {
-            throw new ODataApplicationException("Delta links are not available for requests with $top or $skip",
+            throw new ODataApplicationException("Delta links need entities with ids (no $apply results)",
                     HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
         }
         String owner = request.identity().caller();
@@ -1723,6 +1857,12 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
 
             @Override
+            public org.apache.olingo.server.api.uri.queryoption.search.SearchExpression search(String name)
+                    throws ODataApplicationException {
+                return QueryEntityCollectionProcessor.this.search(name, custom);
+            }
+
+            @Override
             public List<Entity> entitySet(String name) throws ODataApplicationException {
                 Execution exec = executions.get(name);
                 if (exec == null) {
@@ -1748,6 +1888,24 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 return found;
             }
         };
+    }
+
+    /** Searches parsed by {@link SearchSyntax}, per placeholder. */
+    private final Map<String, org.apache.olingo.server.api.uri.queryoption.search.SearchExpression> searches = new HashMap<>();
+
+    private org.apache.olingo.server.api.uri.queryoption.search.SearchExpression search(String name, Map<String, String> custom)
+            throws ODataApplicationException {
+        org.apache.olingo.server.api.uri.queryoption.search.SearchExpression cached = searches.get(name);
+        if (cached != null) return cached;
+        String text = custom.get(QueryRewriter.SEARCH_OPTION + name.substring(QueryRewriter.SEARCH_ALIAS.length()));
+        if (text == null) return null;
+        try {
+            org.apache.olingo.server.api.uri.queryoption.search.SearchExpression e = SearchSyntax.parse(text);
+            searches.put(name, e);
+            return e;
+        } catch (IllegalArgumentException e) {
+            throw new ODataApplicationException("$search: " + e.getMessage(), HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
     }
 
     /** Parsed case branches per placeholder and row shape (type plus property names). */

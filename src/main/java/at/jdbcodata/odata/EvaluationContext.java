@@ -39,6 +39,12 @@ interface EvaluationContext {
         return caseBranches(name, entity);
     }
 
+    /** The search behind placeholder {@code @jdbcodata_searchN} (see {@link QueryRewriter#SEARCH_ALIAS}), or null. */
+    default org.apache.olingo.server.api.uri.queryoption.search.SearchExpression search(String name)
+            throws ODataApplicationException {
+        return null;
+    }
+
     /** All rows of an entity set ({@code $root/Set} in hierarchy transformations). */
     default List<Entity> entitySet(String name) throws ODataApplicationException {
         throw new ODataApplicationException("$root not supported here", 501, java.util.Locale.ENGLISH);

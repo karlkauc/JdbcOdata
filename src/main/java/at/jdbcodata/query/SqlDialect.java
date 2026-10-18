@@ -4,17 +4,20 @@ import java.util.Locale;
 
 /** SQL differences that matter for push-down: identifier quoting, paging syntax and a few functions. */
 public enum SqlDialect {
-    /** PostgreSQL, H2: {@code OFFSET ? ROWS FETCH NEXT ? ROWS ONLY}. */
+    /** H2: {@code OFFSET ? ROWS FETCH NEXT ? ROWS ONLY}; strings compare like Java ({@code String.compareTo}). */
     STANDARD,
+    /** PostgreSQL: like STANDARD; binary string order via {@code COLLATE "C"}. */
+    POSTGRES,
     /** Oracle 12c and later: like STANDARD, but no time parts via EXTRACT on DATE and {@code LENGTH}. */
     ORACLE,
-    /** MySQL, MariaDB: backtick quoting, {@code LIMIT ? OFFSET ?}; LIKE is not pushed (case-insensitive collations). */
+    /** MySQL, MariaDB: backtick quoting, {@code LIMIT ? OFFSET ?}; strings via {@code COLLATE utf8mb4_bin}. */
     MYSQL;
 
     /** The dialect of a JDBC URL, or {@code null} when push-down is not supported for that database. */
     public static SqlDialect of(String jdbcUrl) {
         String url = jdbcUrl == null ? "" : jdbcUrl.toLowerCase(Locale.ROOT);
-        if (url.startsWith("jdbc:postgresql:") || url.startsWith("jdbc:h2:")) return STANDARD;
+        if (url.startsWith("jdbc:postgresql:")) return POSTGRES;
+        if (url.startsWith("jdbc:h2:")) return STANDARD;
         if (url.startsWith("jdbc:oracle:")) return ORACLE;
         if (url.startsWith("jdbc:mysql:") || url.startsWith("jdbc:mariadb:")) return MYSQL;
         return null;
@@ -29,8 +32,35 @@ public enum SqlDialect {
         return this == ORACLE ? "LENGTH" : "CHAR_LENGTH";
     }
 
+    /** LIKE over {@link #binary} text is case- and accent-sensitive everywhere, like the in-memory evaluation. */
     public boolean supportsLike() {
-        return this != MYSQL;
+        return true;
+    }
+
+    /**
+     * A string expression in binary (code point) order and equality, as Java compares strings: the database
+     * collation would otherwise order umlauts, case and blanks differently, and MySQL's default collations even
+     * compare case-insensitively. PostgreSQL and MySQL take an explicit collation on one side (bind placeholders
+     * stay as they are), Oracle compares NLSSORT keys; H2 already compares like Java. A column in another
+     * character set than utf8mb4 makes MySQL reject the statement, and the request falls back to memory.
+     */
+    public String binary(String expression) {
+        return switch (this) {
+            case POSTGRES -> "?".equals(expression) ? expression : "(" + expression + ") COLLATE \"C\"";
+            case MYSQL -> "?".equals(expression) ? expression : "(" + expression + ") COLLATE utf8mb4_bin";
+            case ORACLE -> "NLSSORT(" + expression + ", 'NLS_SORT=BINARY')";
+            case STANDARD -> expression;
+        };
+    }
+
+    /** Can MIN/MAX run over {@link #binary} strings and return the string itself? */
+    public boolean supportsBinaryMinMax() {
+        return this != ORACLE;
+    }
+
+    /** {@code ROW_NUMBER()} over the rows in the order the database returns them. */
+    public String rowNumber() {
+        return this == ORACLE ? "ROW_NUMBER() OVER (ORDER BY NULL)" : "ROW_NUMBER() OVER ()";
     }
 
     public boolean supportsTimeExtract() {

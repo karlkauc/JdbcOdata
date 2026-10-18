@@ -76,6 +76,8 @@ final class SqlFilterTranslator {
     // --- predicates ---------------------------------------------------------------------------------------------
 
     Sql predicate(Expression e) throws Untranslatable {
+        org.apache.olingo.server.api.uri.queryoption.search.SearchExpression search = searchPlaceholder(e);
+        if (search != null) return search(search); // exact, or Untranslatable (see prefilter)
         if (e instanceof Alias a) return predicate(alias(a));
         if (e instanceof Binary b) {
             BinaryOperatorKind op = b.getOperator();
@@ -144,10 +146,10 @@ final class SqlFilterTranslator {
         }
         String a = l.sql().text();
         String b = r.sql().text();
-        boolean ordering = op != BinaryOperatorKind.EQ && op != BinaryOperatorKind.NE;
-        if (ordering && ("Edm.String".equals(l.edmType()) || "Edm.String".equals(r.edmType()))) {
-            // the database collation orders strings differently than Java
-            throw new Untranslatable("string range comparison");
+        if ("Edm.String".equals(l.edmType()) || "Edm.String".equals(r.edmType())) {
+            // compare like Java does, not by the database collation
+            a = dialect.binary(a);
+            b = dialect.binary(b);
         }
         return switch (op) {
             case EQ -> join("(" + a + " = " + b + ")", l.sql(), r.sql());
@@ -163,7 +165,6 @@ final class SqlFilterTranslator {
 
     /** contains/startswith/endswith with a literal pattern: LIKE with '!' as escape character. */
     private Sql like(Method m) throws Untranslatable {
-        if (!dialect.supportsLike()) throw new Untranslatable("LIKE is case-insensitive on this database");
         if (m.getParameters().size() != 2) throw new Untranslatable("arity");
         Value subject = value(m.getParameters().get(0));
         if (!subject.nullLiteral() && !"Edm.String".equals(subject.edmType())) throw new Untranslatable("LIKE on non-string");
@@ -179,7 +180,12 @@ final class SqlFilterTranslator {
             case STARTSWITH -> escaped + "%";
             default -> "%" + escaped;
         };
-        return new Sql("(" + subject.sql().text() + " LIKE ? ESCAPE '!')", append(subject.sql().binds(), pattern));
+        return new Sql("(" + likeSubject(subject.sql().text()) + " LIKE ? ESCAPE '!')", append(subject.sql().binds(), pattern));
+    }
+
+    /** LIKE subject with case- and accent-sensitive matching (Oracle's LIKE already is, NLSSORT would not fit). */
+    private String likeSubject(String expression) {
+        return dialect == SqlDialect.ORACLE ? expression : dialect.binary(expression);
     }
 
     // --- values -------------------------------------------------------------------------------------------------
@@ -255,6 +261,32 @@ final class SqlFilterTranslator {
         return new Value(new Sql(sql, arg.sql().binds()), false, type);
     }
 
+    /**
+     * A condition that keeps at least the rows {@code e} keeps, for search placeholders whose exact translation
+     * is not possible; {@link Untranslatable} for anything else.
+     */
+    Sql prefilter(Expression e) throws Untranslatable {
+        org.apache.olingo.server.api.uri.queryoption.search.SearchExpression search = searchPlaceholder(e);
+        if (search == null) throw new Untranslatable("no search");
+        return searchFilter(search).sql();
+    }
+
+    /** The search behind {@code cast(@jdbcodata_searchN,Edm.Boolean)}, or null. */
+    private org.apache.olingo.server.api.uri.queryoption.search.SearchExpression searchPlaceholder(Expression e) {
+        if (e instanceof Method m && m.getMethod() == MethodKind.CAST && !m.getParameters().isEmpty()
+                && m.getParameters().get(0) instanceof Alias a) {
+            e = a;
+        }
+        if (!(e instanceof Alias a) || context == null) return null;
+        String name = a.getParameterName().startsWith("@") ? a.getParameterName() : "@" + a.getParameterName();
+        if (!name.startsWith(QueryRewriter.SEARCH_ALIAS)) return null;
+        try {
+            return context.search(name);
+        } catch (ODataApplicationException ex) {
+            return null;
+        }
+    }
+
     // --- $search -------------------------------------------------------------------------------------------------
 
     /**
@@ -306,7 +338,7 @@ final class SqlFilterTranslator {
             String pattern = "%" + needle.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
             for (QueryColumn c : columns.values()) {
                 if (!"Edm.String".equals(c.edmType())) continue;
-                parts.add("LOWER(jdbcodata_q." + dialect.quote(c.name()) + ") LIKE ? ESCAPE '!'");
+                parts.add(likeSubject("LOWER(jdbcodata_q." + dialect.quote(c.name()) + ")") + " LIKE ? ESCAPE '!'");
                 binds.add(pattern);
             }
             // LIKE that ignores case and accents (MySQL) finds more than the in-memory search: a superset only
@@ -370,8 +402,36 @@ final class SqlFilterTranslator {
     record Slot(String kind, String name, String label, String edmType) {
     }
 
-    /** SELECT list, GROUP BY and how to read the result back. */
-    record Aggregation(String select, String groupBy, List<Slot> slots) {
+    /** Label of the first-appearance position of a group ({@code MIN(jdbcodata_rn)}), see {@link #aggregation}. */
+    static final String FIRST = "jdbcodata_first";
+    /** Label of the rollup level of a row (1 = first grouping). */
+    static final String LEVEL = "jdbcodata_level";
+
+    /**
+     * SELECT list, GROUP BY and how to read the result back. With grouping, the source rows are numbered and
+     * {@link #FIRST} is the position of the first row of each group: ordering by it gives the groups in the order
+     * the in-memory evaluation produces (order of first appearance).
+     */
+    record Aggregation(String select, String groupBy, List<Slot> slots, List<java.util.Set<String>> levels) {
+
+        Aggregation(String select, String groupBy, List<Slot> slots) {
+            this(select, groupBy, slots, null);
+        }
+
+        boolean grouped() {
+            return groupBy != null && !groupBy.isBlank();
+        }
+
+        /** Rollup: one level per grouping, the labels of the group slots each level has. */
+        boolean rollup() {
+            return levels != null;
+        }
+
+        /** Tie-breaking order that reproduces the in-memory order: level (rollup), then first appearance. */
+        List<String> order() {
+            if (!grouped()) return List.of();
+            return rollup() ? List.of(LEVEL, FIRST) : List.of(FIRST);
+        }
 
         /**
          * The result columns for translating later steps (filter, orderby) over the aggregated rows. Averages are
@@ -384,6 +444,8 @@ final class SqlFilterTranslator {
                 if (s.edmType() == null || s.kind().equals("average")) continue;
                 out.add(new QueryColumn(++i, s.label(), s.name(), 0, null, s.edmType(), null, null, true, false, true));
             }
+            if (grouped()) out.add(new QueryColumn(++i, FIRST, FIRST, 0, null, "Edm.Int64", null, null, false, false, true));
+            if (rollup()) out.add(new QueryColumn(++i, LEVEL, LEVEL, 0, null, "Edm.Int64", null, null, false, false, true));
             return out;
         }
 
@@ -413,9 +475,10 @@ final class SqlFilterTranslator {
         for (List<UriResource> path : groupPaths) {
             QueryColumn c = column(path);
             if (!GROUPABLE.contains(c.edmType())) throw new Untranslatable("grouping by " + c.edmType());
-            if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) throw new Untranslatable("case-insensitive grouping");
             String label = "g" + (++n);
             String col = "jdbcodata_q." + dialect.quote(c.name());
+            // MySQL groups 'a' and 'A' together under its default collations
+            if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) col = dialect.binary(col);
             select.add(col + " AS " + dialect.quote(label));
             group.add(col);
             slots.add(new Slot("group", c.propertyName(), label, c.edmType()));
@@ -453,22 +516,83 @@ final class SqlFilterTranslator {
                     slots.add(new Slot("average", agg.getAlias(), label, null));
                 }
                 case MIN, MAX -> {
-                    if (!SUMMABLE.contains(c.edmType()) && !"Edm.Date".equals(c.edmType())) {
+                    boolean string = "Edm.String".equals(c.edmType()) && dialect.supportsBinaryMinMax();
+                    if (!SUMMABLE.contains(c.edmType()) && !"Edm.Date".equals(c.edmType()) && !string) {
                         throw new Untranslatable(agg.getStandardMethod() + " of " + c.edmType());
                     }
-                    select.add(agg.getStandardMethod().name() + "(" + col + ") AS " + dialect.quote(label));
+                    select.add(agg.getStandardMethod().name() + "(" + (string ? dialect.binary(col) : col) + ") AS " + dialect.quote(label));
                     slots.add(new Slot("minmax", agg.getAlias(), label, c.edmType()));
                 }
                 case COUNT_DISTINCT -> {
                     if (!GROUPABLE.contains(c.edmType())) throw new Untranslatable("countdistinct of " + c.edmType());
-                    if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) throw new Untranslatable("case-insensitive distinct");
-                    select.add("COUNT(DISTINCT " + col + ") AS " + dialect.quote(label));
+                    String distinct = dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType()) ? dialect.binary(col) : col;
+                    select.add("COUNT(DISTINCT " + distinct + ") AS " + dialect.quote(label));
                     slots.add(new Slot("count", agg.getAlias(), label, "Edm.Int64"));
                 }
                 default -> throw new Untranslatable("method " + agg.getStandardMethod());
             }
         }
+        if (!group.isEmpty()) {
+            select.add("MIN(jdbcodata_q." + at.jdbcodata.query.SqlWrapper.ROW_NUMBER + ") AS " + dialect.quote(FIRST));
+        }
         return new Aggregation(String.join(", ", select), String.join(", ", group), slots);
+    }
+
+    /**
+     * {@code groupby((P1,rollup(P2,P3)),aggregate(…))}: all groupings in one scan. Every row is combined with the
+     * levels 1…n ({@link at.jdbcodata.query.SqlWrapper#LEVEL}); a group column takes part in the levels whose
+     * grouping contains it ({@code CASE WHEN level IN (…) THEN col END}) and is null elsewhere, so
+     * {@code GROUP BY level, …} yields the groups of every grouping. Works on every supported database, unlike
+     * ROLLUP/GROUPING SETS.
+     *
+     * @param groupings the groupings in in-memory order, the first one containing every path
+     */
+    Aggregation rollup(List<List<List<UriResource>>> groupings,
+                       List<org.apache.olingo.server.api.uri.queryoption.apply.AggregateExpression> aggregates)
+            throws Untranslatable {
+        Aggregation values = aggregation(List.of(), aggregates);
+        List<List<UriResource>> all = groupings.get(0);
+        String level = "jdbcodata_q." + at.jdbcodata.query.SqlWrapper.LEVEL;
+        List<String> select = new ArrayList<>();
+        List<String> group = new ArrayList<>(List.of(level));
+        List<Slot> slots = new ArrayList<>();
+        List<java.util.Set<String>> levels = new ArrayList<>();
+        for (int k = 0; k < groupings.size(); k++) levels.add(new java.util.HashSet<>());
+        select.add(level + " AS " + dialect.quote(LEVEL));
+        int n = 0;
+        for (List<UriResource> path : all) {
+            QueryColumn c = column(path);
+            if (!GROUPABLE.contains(c.edmType())) throw new Untranslatable("grouping by " + c.edmType());
+            String label = "g" + (++n);
+            String col = "jdbcodata_q." + dialect.quote(c.name());
+            if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) col = dialect.binary(col);
+            List<String> in = new ArrayList<>();
+            for (int k = 0; k < groupings.size(); k++) {
+                if (containsPath(groupings.get(k), path)) {
+                    in.add(String.valueOf(k + 1));
+                    levels.get(k).add(label);
+                }
+            }
+            String expr = in.size() == groupings.size() ? col : "CASE WHEN " + level + " IN (" + String.join(", ", in) + ") THEN " + col + " END";
+            select.add(expr + " AS " + dialect.quote(label));
+            group.add(expr);
+            slots.add(new Slot("group", c.propertyName(), label, c.edmType()));
+        }
+        if (!values.select().isBlank()) select.add(values.select());
+        slots.addAll(values.slots());
+        select.add("MIN(jdbcodata_q." + at.jdbcodata.query.SqlWrapper.ROW_NUMBER + ") AS " + dialect.quote(FIRST));
+        return new Aggregation(String.join(", ", select), String.join(", ", group), slots, levels);
+    }
+
+    private static boolean containsPath(List<List<UriResource>> grouping, List<UriResource> path) {
+        for (List<UriResource> p : grouping) if (sameMember(p, path)) return true;
+        return false;
+    }
+
+    private static boolean sameMember(List<UriResource> a, List<UriResource> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) if (!a.get(i).getSegmentValue().equals(b.get(i).getSegmentValue())) return false;
+        return true;
     }
 
     private QueryColumn column(List<UriResource> path) throws Untranslatable {
@@ -493,14 +617,17 @@ final class SqlFilterTranslator {
             for (OrderByItem item : orderBy.getOrders()) {
                 Value v = value(item.getExpression());
                 if (v.nullLiteral()) continue;
-                parts.add(v.sql().text() + (item.isDescending() ? " DESC" : " ASC") + nulls(item.isDescending()));
+                String text = "Edm.String".equals(v.edmType()) ? dialect.binary(v.sql().text()) : v.sql().text();
+                parts.add(text + (item.isDescending() ? " DESC" : " ASC") + nulls(item.isDescending()));
                 binds.addAll(v.sql().binds());
             }
         }
         // Stable paging: the key decides between equal sort values.
         for (String key : keyProperties) {
             QueryColumn c = columns.get(key);
-            if (c != null) parts.add("jdbcodata_q." + dialect.quote(c.name()) + " ASC" + nulls(false));
+            if (c == null) continue;
+            String col = "jdbcodata_q." + dialect.quote(c.name());
+            parts.add(("Edm.String".equals(c.edmType()) ? dialect.binary(col) : col) + " ASC" + nulls(false));
         }
         return new Sql(String.join(", ", parts), binds);
     }

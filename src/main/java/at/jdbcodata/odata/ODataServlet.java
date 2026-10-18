@@ -84,8 +84,17 @@ public class ODataServlet extends HttpServlet {
             // Per-caller content (row-level security), revalidated via ETag instead of never stored.
             resp.setHeader("Cache-Control", "private, no-cache");
             resp.setHeader("Vary", "Authorization");
-            QueryEntityCollectionProcessor processor = new QueryEntityCollectionProcessor(support,
-                    new RequestContext(context, req.getHeader("User-Agent"), clientIp(req)));
+            RequestContext requestContext = new RequestContext(context, req.getHeader("User-Agent"), clientIp(req));
+            String path = odataPath(req);
+            if (path.startsWith(ASYNC_MONITOR)) {
+                serveMonitor(req, resp, context.caller(), path.substring(ASYNC_MONITOR.length()));
+                return;
+            }
+            if (wantsAsync(req) && ("GET".equals(req.getMethod()) || ("POST".equals(req.getMethod()) && "/$batch".equals(path)))) {
+                serveAsync(req, resp, metadata, requestContext);
+                return;
+            }
+            QueryEntityCollectionProcessor processor = new QueryEntityCollectionProcessor(support, requestContext);
             if (isSpecialResource(req)) {
                 serveSpecial(req, resp, metadata, processor);
                 return;
@@ -147,6 +156,151 @@ public class ODataServlet extends HttpServlet {
         } catch (ODataApplicationException e) {
             writeJsonError(resp, e.getStatusCode(), e.getMessage());
         }
+    }
+
+    // --- asynchronous requests (Prefer: respond-async) ---------------------------------------------------------
+
+    /** Path of the status monitors: {@code /odata/$async/<id>}. */
+    static final String ASYNC_MONITOR = "/$async/";
+
+    static boolean wantsAsync(HttpServletRequest req) {
+        for (String prefer : java.util.Collections.list(req.getHeaders("Prefer"))) {
+            for (String p : prefer.split(",")) {
+                if (p.strip().equalsIgnoreCase("respond-async")) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Runs the request in the background and answers 202 with the status monitor in {@code Location}. When the
+     * caller already has too many running jobs, the request is answered synchronously (the preference is optional).
+     */
+    private void serveAsync(HttpServletRequest req, HttpServletResponse resp, ServiceMetadata metadata,
+                            RequestContext requestContext) throws IOException {
+        String path = odataPath(req);
+        String base = req.getRequestURL().toString();
+        base = base.substring(0, base.length() - path.length());
+        ODataRequest request = new ODataRequest();
+        request.setMethod(HttpMethod.valueOf(req.getMethod()));
+        request.setProtocol(req.getProtocol());
+        boolean special = isSpecialResource(req);
+        Rewritten rw = "/$batch".equals(path) ? new Rewritten(path, req.getQueryString())
+                : special ? new Rewritten(path, QueryRewriter.rewrite(req.getQueryString()))
+                : rewrite(req.getMethod(), path, req.getQueryString(), metadata.getEdm());
+        request.setRawBaseUri(base);
+        request.setRawODataPath(rw.path());
+        request.setRawQueryPath(rw.query() == null ? "" : rw.query());
+        request.setRawRequestUri(base + rw.path() + (rw.query() == null ? "" : "?" + rw.query()));
+        for (String header : java.util.Collections.list(req.getHeaderNames())) {
+            request.addHeader(header, java.util.Collections.list(req.getHeaders(header)));
+        }
+        request.setBody(new java.io.ByteArrayInputStream(req.getInputStream().readAllBytes()));
+        java.util.concurrent.Callable<AsyncRequests.Result> work = () -> {
+            EntityExpressionVisitor.resetRegexBudget();
+            QueryEntityCollectionProcessor processor = new QueryEntityCollectionProcessor(support, requestContext);
+            ODataResponse response;
+            if (special) {
+                response = new ODataResponse();
+                try {
+                    UriInfo uriInfo = new Parser(metadata.getEdm(), odata).parseUri(rw.path(), rw.query(), null, request.getRawBaseUri());
+                    processor.init(odata, metadata);
+                    processor.readSpecial(request, response, uriInfo);
+                } catch (UriParserException | UriValidationException e) {
+                    return jsonError(400, e.getMessage());
+                } catch (ODataApplicationException e) {
+                    return jsonError(e.getStatusCode(), e.getMessage());
+                }
+            } else {
+                ODataHttpHandler handler = odata.createHandler(metadata);
+                handler.register(processor);
+                handler.register(new JsonErrorProcessor());
+                response = handler.process(request);
+            }
+            byte[] body = response.getContent() == null ? new byte[0] : response.getContent().readAllBytes();
+            return new AsyncRequests.Result(response.getStatusCode(), response.getAllHeaders(), body);
+        };
+        String id = support.asyncRequests().submit(requestContext.identity().caller(), work);
+        if (id == null) {
+            try {
+                write(resp, work.call());
+            } catch (Exception e) {
+                log.error("OData request {} failed", req.getRequestURI(), e);
+                writeJsonError(resp, 500, "Internal server error");
+            }
+            return;
+        }
+        resp.setStatus(202);
+        resp.setHeader("Location", base + ASYNC_MONITOR + id);
+        resp.setHeader("Preference-Applied", "respond-async");
+        resp.setHeader("Retry-After", "1");
+    }
+
+    /**
+     * Status monitor: 202 while the job runs, then 200 with the response as {@code application/http}; DELETE
+     * cancels the job. Only the caller who started it can see it.
+     */
+    private void serveMonitor(HttpServletRequest req, HttpServletResponse resp, String caller, String id) throws IOException {
+        if ("DELETE".equals(req.getMethod())) {
+            if (support.asyncRequests().cancel(id, caller)) resp.setStatus(204);
+            else writeJsonError(resp, 404, "Unknown asynchronous request");
+            return;
+        }
+        if (!"GET".equals(req.getMethod())) {
+            writeJsonError(resp, 405, "Only GET and DELETE on a status monitor");
+            return;
+        }
+        AsyncRequests.Job job = support.asyncRequests().find(id, caller);
+        if (job == null) {
+            writeJsonError(resp, 404, "Unknown or expired asynchronous request");
+            return;
+        }
+        if (!job.future().isDone()) {
+            resp.setStatus(202);
+            resp.setHeader("Location", req.getRequestURL().toString());
+            resp.setHeader("Retry-After", "1");
+            return;
+        }
+        AsyncRequests.Result result;
+        try {
+            result = job.future().get();
+        } catch (java.util.concurrent.CancellationException e) {
+            writeJsonError(resp, 404, "The asynchronous request was cancelled");
+            return;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            writeJsonError(resp, 500, "Internal server error");
+            return;
+        } catch (java.util.concurrent.ExecutionException e) {
+            log.error("Asynchronous OData request {} failed", id, e.getCause());
+            result = jsonError(500, "Internal server error");
+        }
+        StringBuilder head = new StringBuilder("HTTP/1.1 ").append(result.status()).append(' ')
+                .append(reason(result.status())).append("\r\n");
+        result.headers().forEach((name, values) -> values.forEach(v -> head.append(name).append(": ").append(v).append("\r\n")));
+        head.append("\r\n");
+        resp.setStatus(200);
+        resp.setContentType("application/http");
+        resp.setHeader("Content-Transfer-Encoding", "binary");
+        resp.getOutputStream().write(head.toString().getBytes(StandardCharsets.UTF_8));
+        resp.getOutputStream().write(result.body());
+    }
+
+    private static String reason(int status) {
+        org.apache.olingo.commons.api.http.HttpStatusCode code = org.apache.olingo.commons.api.http.HttpStatusCode.fromStatusCode(status);
+        return code == null ? "" : code.getInfo();
+    }
+
+    private static AsyncRequests.Result jsonError(int status, String message) {
+        String body = "{\"error\":{\"code\":\"" + status + "\",\"message\":\"" + String.valueOf(message).replace("\"", "'") + "\"}}";
+        return new AsyncRequests.Result(status, java.util.Map.of("Content-Type", List.of("application/json")),
+                body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void write(HttpServletResponse resp, AsyncRequests.Result result) throws IOException {
+        resp.setStatus(result.status());
+        result.headers().forEach((name, values) -> values.forEach(v -> resp.addHeader(name, v)));
+        resp.getOutputStream().write(result.body());
     }
 
     /** Caller, user agent and address of one OData request. */

@@ -140,7 +140,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
                         tag(CAPABILITIES, "BatchSupported", true),
                         tag(CAPABILITIES, "KeyAsSegmentSupported", true),
                         tag(CAPABILITIES, "CrossJoinSupported", true),
-                        tag(CAPABILITIES, "AsynchronousRequestsSupported", false),
+                        tag(CAPABILITIES, "AsynchronousRequestsSupported", true),
                         stringCollection(AGGREGATION + ".CustomAggregationMethods",
                                 ApplyEvaluator.CUSTOM_METHODS.stream().map(m -> NAMESPACE + "." + m).toList())));
     }

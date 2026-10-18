@@ -17,7 +17,7 @@ class ODataServletTest {
 
     private static ProcessorSupport support() {
         return new ProcessorSupport(null, null, null, null, null, null, new LoginRateLimiter(TestData.props(10, 10, "")),
-                TestData.props(10, 10, ""), new DeltaTracker());
+                TestData.props(10, 10, ""), new DeltaTracker(null), new AsyncRequests());
     }
 
     private static at.jdbcodata.config.JdbcOdataProperties props() {

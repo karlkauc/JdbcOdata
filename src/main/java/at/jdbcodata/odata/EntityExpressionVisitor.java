@@ -510,6 +510,10 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                 return null;
             }
         }
+        if (bare.startsWith(QueryRewriter.SEARCH_ALIAS) && navigation != null) {
+            org.apache.olingo.server.api.uri.queryoption.search.SearchExpression search = navigation.search(bare);
+            if (search != null) return SearchEvaluator.matches(search, entity);
+        }
         AliasQueryOption alias = navigation == null ? null : navigation.alias(aliasName);
         if (alias == null) throw bad("Parameter alias '" + aliasName + "' is not defined in the query string");
         if (alias.getValue() != null) return evaluate(alias.getValue());

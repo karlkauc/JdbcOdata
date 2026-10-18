@@ -197,6 +197,67 @@ class ProtocolFeaturesTest extends DemoProfileTest {
         assertThat(r.body()).contains("\"RowId\":2").contains("\r\n3").contains("\"Zehn\":10");
     }
 
+    // --- asynchronous requests ---------------------------------------------------------------------------------
+
+    private HttpResponse<String> poll(String monitor) throws Exception {
+        HttpResponse<String> r = null;
+        for (int i = 0; i < 100; i++) {
+            r = getWith(monitor);
+            if (r.statusCode() != 202) return r;
+            Thread.sleep(50);
+        }
+        return r;
+    }
+
+    @Test
+    void respondAsyncReturnsAStatusMonitor() throws Exception {
+        HttpResponse<String> accepted = getWith("/odata/Sales?$orderby=RowId&$top=2&$select=RowId", "Prefer", "respond-async");
+        assertThat(accepted.statusCode()).as(accepted.body()).isEqualTo(202);
+        assertThat(accepted.headers().firstValue("Preference-Applied")).hasValue("respond-async");
+        String monitor = accepted.headers().firstValue("Location").orElseThrow();
+        assertThat(monitor).contains("/odata/$async/");
+        HttpResponse<String> done = poll(monitor);
+        assertThat(done.statusCode()).isEqualTo(200);
+        assertThat(done.headers().firstValue("Content-Type").orElseThrow()).startsWith("application/http");
+        assertThat(done.body()).startsWith("HTTP/1.1 200 OK").contains("\"RowId\":1").contains("\"RowId\":2");
+        // the same monitor for another caller does not exist
+        assertThat(send("GET", URI.create(monitor).getRawPath(), null, ADMIN, ADMIN_PASSWORD).statusCode()).isIn(401, 404);
+        assertThat(send("DELETE", URI.create(monitor).getRawPath(), null, "demo", "demo").statusCode()).isEqualTo(204);
+        assertThat(getWith(monitor).statusCode()).isEqualTo(404);
+        // errors arrive inside the monitor's response, with key segments and other rewrites applied
+        HttpResponse<String> missing = poll(getWith("/odata/Sales/99999", "Prefer", "respond-async").headers().firstValue("Location").orElseThrow());
+        assertThat(missing.body()).startsWith("HTTP/1.1 404");
+        HttpResponse<String> count = poll(getWith("/odata/Sales/$filter(" + enc("RowId le 3") + ")/$count", "Prefer", "respond-async")
+                .headers().firstValue("Location").orElseThrow());
+        assertThat(count.body()).startsWith("HTTP/1.1 200").endsWith("3");
+        assertThat(getWith("/odata/$metadata").body()).contains("AsynchronousRequestsSupported\"><Bool>true");
+    }
+
+    @Test
+    void batchCanRunAsynchronously() throws Exception {
+        String body = String.join("\r\n",
+                "--batch_1",
+                "Content-Type: application/http",
+                "Content-Transfer-Encoding: binary",
+                "",
+                "GET Sales/3 HTTP/1.1",
+                "Accept: application/json",
+                "",
+                "",
+                "--batch_1--",
+                "");
+        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/odata/$batch"))
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+                .header("Content-Type", "multipart/mixed;boundary=batch_1")
+                .header("Prefer", "respond-async")
+                .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString("demo:demo".getBytes()))
+                .build();
+        HttpResponse<String> accepted = java.net.http.HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+        assertThat(accepted.statusCode()).isEqualTo(202);
+        HttpResponse<String> done = poll(accepted.headers().firstValue("Location").orElseThrow());
+        assertThat(done.body()).startsWith("HTTP/1.1 200").contains("multipart/mixed").contains("\"RowId\":3");
+    }
+
     private HttpResponse<String> sendRaw(String body) throws Exception {
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/odata/$batch"))
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))

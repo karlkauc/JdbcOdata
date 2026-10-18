@@ -104,6 +104,10 @@ class PushDownTest extends DemoProfileTest {
             "region lt 'Z' and amount gt 1000",
             "true",
             "region eq @r",
+            "region lt 'Süd'",
+            "customer ge 'Beta' and region le 'Nord'",
+            "region gt 'm'",
+            "tolower(region) gt 'n'",
     })
     void filtersAnswerLikeInMemory(String filter) throws Exception {
         String q = "?$filter=" + enc(filter) + "&$orderby=id&@r='Süd'";
@@ -117,9 +121,11 @@ class PushDownTest extends DemoProfileTest {
     @Test
     void translatableFiltersGoToTheDatabaseOthersStayInMemory() throws Exception {
         assertThat(both("PdSales", "?$filter=" + enc("region eq 'Nord'")).headers().firstValue("X-Push-Down")).hasValue("filter");
-        assertThat(both("PdSales", "?$filter=" + enc("region eq 'Nord' and region gt 'M'")).headers().firstValue("X-Push-Down"))
+        assertThat(both("PdSales", "?$filter=" + enc("region eq 'Nord' and amount div 2 gt 1000")).headers().firstValue("X-Push-Down"))
                 .hasValue("filter(partial)");
-        assertThat(both("PdSales", "?$filter=" + enc("region gt 'M'")).headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$filter=" + enc("amount div 2 gt 1000")).headers().firstValue("X-Push-Down")).isEmpty();
+        // strings compare in binary order, as in Java
+        assertThat(both("PdSales", "?$filter=" + enc("region gt 'M'")).headers().firstValue("X-Push-Down")).hasValue("filter");
         assertThat(both("PdSales", "?$top=3").headers().firstValue("X-Push-Down")).hasValue("top");
         assertThat(both("PdSales", "?$apply=" + enc("filter(amount gt 0)")).headers().firstValue("X-Push-Down")).hasValue("apply:filter");
     }
@@ -145,7 +151,7 @@ class PushDownTest extends DemoProfileTest {
     void pagingIsPushedOnlyWhenTheFilterIsComplete() throws Exception {
         assertThat(both("PdSales", "?$filter=amount%20gt%203000&$orderby=id&$top=2&$count=true").headers().firstValue("X-Push-Down"))
                 .hasValue("filter,orderby,top,count");
-        assertThat(both("PdSales", "?$filter=region%20gt%20'M'&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$filter=amount%20div%202%20gt%201000&$top=2").headers().firstValue("X-Push-Down")).isEmpty();
         assertThat(both("PdSales", "?$search=e&$top=2").headers().firstValue("X-Push-Down")).hasValue("search(partial)");
     }
 
@@ -181,6 +187,9 @@ class PushDownTest extends DemoProfileTest {
             "?$search=06-1&$orderby=id",
             "?$search=1.5&$orderby=id",
             "?$search=t1&$orderby=id",
+            "?$search=(Beta%20OR%20Alpha)%20AND%20NOT%20Nord&$orderby=id",
+            "?$search=NOT%20(Beta%20OR%202025)&$orderby=id",
+            "?$search=(Nord)&$filter=amount%20gt%201000&$orderby=id&$top=3&$count=true",
             "?$search=Beta&$filter=amount%20gt%205000&$orderby=amount&$top=3&$count=true",
     })
     void searchAnswersLikeInMemory(String q) throws Exception {
@@ -223,6 +232,17 @@ class PushDownTest extends DemoProfileTest {
             "search(\"2025\")/aggregate($count as N)|",
             "search(\"2025\")/groupby((customer),aggregate($count as N))|$orderby=customer",
             "filter(amount gt 1000)/orderby(amount desc,id)/skip(1)/top(4)|",
+            "groupby((rollup($all,region)),aggregate($count as N))|",
+            "groupby((delivered,rollup(customer,region)),aggregate(amount with max as X))/filter(X gt 1000)/top(4)|",
+            "filter(amount gt 999999)/groupby((rollup($all,region)),aggregate($count as N,amount with sum as S))|",
+            "groupby((rollup(customer,region)),aggregate(amount with sum as S))/orderby(S desc)|",
+            "groupby((customer),aggregate(amount with average as A))/filter(A gt 3000 and customer ne 'x')|",
+            "groupby((customer,region),aggregate(amount with average as A))/filter(A le 4000)/orderby(A desc)|",
+            "groupby((customer,region),aggregate($count as N))/top(3)|",
+            "groupby((customer,region),aggregate($count as N))/orderby(N)/skip(1)|",
+            "groupby((region),aggregate(customer with min as C,customer with max as D))|",
+            "search(NOT Beta)/groupby((customer),aggregate($count as N))|",
+            "search((Beta OR Alpha) 2025)/aggregate($count as N)|",
     })
     void applyAnswersLikeInMemory(String spec) throws Exception {
         String[] p = spec.split("\\|", -1);
@@ -231,11 +251,8 @@ class PushDownTest extends DemoProfileTest {
         assertThat(pushed.statusCode()).as(pushed.body()).isEqualTo(200);
         JsonNode a = body(pushed);
         JsonNode b = body(both("MemSales", q));
-        if (p[1].contains("$orderby") || !a.get("value").isArray() || a.get("value").size() <= 1) {
-            assertThat(normalized(a)).as(spec).isEqualTo(normalized(b));
-        } else {
-            assertThat(java.util.Set.copyOf(rowsOf(normalized(a)))).as(spec).isEqualTo(java.util.Set.copyOf(rowsOf(normalized(b))));
-        }
+        // groups keep the order of first appearance in the database too, so even the order matches
+        assertThat(normalized(a)).as(spec).isEqualTo(normalized(b));
         assertThat(both("PdSales/$count", q).body()).isEqualTo(both("MemSales/$count", q).body());
     }
 
@@ -262,15 +279,18 @@ class PushDownTest extends DemoProfileTest {
                 .headers().firstValue("X-Push-Down")).hasValue("apply:groupby,filter,orderby,top");
         assertThat(both("PdSales", "?$apply=" + enc("groupby((customer),aggregate(amount with sum as S))") + "&$filter=" + enc("S gt 20000"))
                 .headers().firstValue("X-Push-Down")).hasValue("apply:groupby,$filter");
-        // averages are divided in Java, a filter on them stays in memory; so does paging without orderby
+        // averages are divided in Java: the database pre-filters, the filter itself runs in memory
         assertThat(both("PdSales", "?$apply=" + enc("groupby((customer),aggregate(amount with average as A))/filter(A gt 1)"))
-                .headers().firstValue("X-Push-Down")).hasValue("apply:groupby");
+                .headers().firstValue("X-Push-Down")).hasValue("apply:groupby,filter(partial)");
         assertThat(both("PdSales", "?$apply=" + enc("groupby((customer),aggregate(amount with sum as S))/top(1)"))
-                .headers().firstValue("X-Push-Down")).hasValue("apply:groupby");
+                .headers().firstValue("X-Push-Down")).hasValue("apply:groupby,top");
         assertThat(both("PdSales", "?$apply=" + enc("search(\"2025\")/aggregate($count as N)")).headers().firstValue("X-Push-Down"))
                 .hasValue("apply:search(partial)");
         assertThat(both("PdSales", "?$apply=" + enc("groupby((sold_at))")).headers().firstValue("X-Push-Down")).isEmpty();
-        assertThat(both("PdSales", "?$apply=" + enc("groupby((rollup(customer,region)))")).headers().firstValue("X-Push-Down")).isEmpty();
+        assertThat(both("PdSales", "?$apply=" + enc("groupby((rollup(customer,region)))")).headers().firstValue("X-Push-Down"))
+                .hasValue("apply:groupby");
+        assertThat(both("PdSales", "?$apply=" + enc("groupby((customer),aggregate(amount with average as A))/filter(A gt 1)/top(1)"))
+                .headers().firstValue("X-Push-Down")).hasValue("apply:groupby,filter(partial)");
     }
 
     @Test

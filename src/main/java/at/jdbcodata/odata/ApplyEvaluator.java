@@ -282,7 +282,7 @@ final class ApplyEvaluator {
     }
 
     /** The groupings of a groupby: one, or one per rollup level combination. */
-    private static List<List<List<UriResource>>> groupings(GroupBy groupBy) {
+    static List<List<List<UriResource>>> groupings(GroupBy groupBy) {
         List<List<UriResource>> fixed = new ArrayList<>();
         List<List<List<UriResource>>> rollupLevels = new ArrayList<>();
         for (GroupByItem g : groupBy.getGroupByItems()) {

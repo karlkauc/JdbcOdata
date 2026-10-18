@@ -21,5 +21,6 @@ public record ProcessorSupport(
         ExecutionLogService executionLog,
         LoginRateLimiter rateLimiter,
         JdbcOdataProperties properties,
-        DeltaTracker deltaTracker) {
+        DeltaTracker deltaTracker,
+        AsyncRequests asyncRequests) {
 }

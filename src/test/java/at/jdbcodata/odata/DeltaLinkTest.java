@@ -27,6 +27,9 @@ class DeltaLinkTest extends DemoProfileTest {
     private final JsonMapper json = JsonMapper.builder().build();
     private UUID queryId;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     private static void sql(String... statements) throws Exception {
         try (Connection c = DriverManager.getConnection(DEMO_URL, "demo", "demo"); Statement s = c.createStatement()) {
             for (String st : statements) s.execute(st);
@@ -133,10 +136,18 @@ class DeltaLinkTest extends DemoProfileTest {
 
     @Test
     void trackingNeedsAStableWindow() throws Exception {
-        HttpResponse<String> top = getUrl("/odata/DeltaItems?$top=2", "demo", "demo", "Prefer", "odata.track-changes");
+        // $top: the snapshot is the window
+        HttpResponse<String> top = getUrl("/odata/DeltaItems?$top=2&$orderby=item_id", "demo", "demo", "Prefer", "odata.track-changes");
         assertThat(top.statusCode()).isEqualTo(200);
-        assertThat(json.readTree(top.body()).has("@odata.deltaLink")).isFalse();
-        assertThat(top.headers().firstValue("Preference-Applied")).isEmpty();
+        String topLink = json.readTree(top.body()).get("@odata.deltaLink").asString();
+        sql("INSERT INTO delta_items VALUES (0, 'Nagel', 5)");
+        JsonNode moved = json.readTree(getUrl(topLink, "demo", "demo").body());
+        sql("DELETE FROM delta_items WHERE item_id = 0");
+        assertThat(ids(moved)).containsExactly(0);
+        assertThat(removed(moved)).singleElement().satisfies(id -> assertThat(id).contains("item_id=2"));
+        // snapshots are in the metadata database: a new tracker (e.g. after a restart) still knows the token
+        String token = topLink.substring(topLink.indexOf("$deltatoken=") + "$deltatoken=".length());
+        assertThat(new DeltaTracker(jdbc).find(token, "demo", "/DeltaItems?$top=2&$orderby=item_id")).isNotNull();
         // with server-driven paging the link is on the last page
         String url = "/odata/DeltaItems";
         String deltaLink = null;
@@ -150,7 +161,7 @@ class DeltaLinkTest extends DemoProfileTest {
         }
         assertThat(pages).isGreaterThan(1);
         assertThat(json.readTree(getUrl(deltaLink, "demo", "demo").body()).get("value").size()).isZero();
-        assertThat(getUrl("/odata/DeltaItems?$apply=aggregate($count%20as%20N)&$deltatoken=x", "demo", "demo").statusCode())
+        assertThat(getUrl("/odata/DeltaItems?$apply=aggregate($count%20as%20N)&$deltatoken=0123456789abcdef0123456789abcdef", "demo", "demo").statusCode())
                 .isEqualTo(400);
         assertThat(getUrl("/odata/$metadata", "demo", "demo").body()).contains("Capabilities.ChangeTracking");
     }

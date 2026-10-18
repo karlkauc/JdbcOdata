@@ -73,9 +73,9 @@ Queries mit Parametern sind zusätzlich als OData-Funktion aufrufbar: `GetUmsatz
 
 Clients, die nur Änderungen nachladen wollen, senden `Prefer: odata.track-changes` und folgen später dem
 `@odata.deltaLink` der Antwort: Er liefert neue, geänderte und gelöschte Zeilen seit dem letzten Abruf. Der
-Service merkt sich dafür einen Schnappschuss im Speicher (24 Stunden, nicht über einen Neustart hinweg; dann
-antwortet der Link mit 410 und der Client lädt neu). Voraussetzung sind Schlüsselspalten; bei aktivem Cache
-werden Änderungen erst nach Ablauf des Cache-Eintrags sichtbar.
+Service merkt sich dafür einen Schnappschuss in der Metadaten-Datenbank (7 Tage, auch über Neustarts hinweg;
+danach antwortet der Link mit 410 und der Client lädt neu). Voraussetzung sind Schlüsselspalten; solche Abrufe
+umgehen den Ergebnis-Cache.
 
 ## 4. Cache
 

@@ -40,6 +40,7 @@ final class QueryRewriter {
     /** @param target type of the addressed resource (for case result types), may be null */
     static String rewrite(String query, boolean singleEntity, org.apache.olingo.commons.api.edm.EdmStructuredType target) {
         if (query == null || query.isEmpty()) return query;
+        query = ownSearches(query);
         List<String> parts = new ArrayList<>(List.of(query.split("&", -1)));
         boolean changed = false;
         ExpressionRewriter expressions = new ExpressionRewriter(target);
@@ -85,6 +86,183 @@ final class QueryRewriter {
             parts.add("$apply=" + transformation);
         }
         return String.join("&", parts);
+    }
+
+    // --- $search beyond Olingo's parser -----------------------------------------------------------------------
+
+    /** Alias placeholder for a search Olingo cannot parse; the text travels as custom option {@link #SEARCH_OPTION}N. */
+    static final String SEARCH_ALIAS = "@jdbcodata_search";
+    static final String SEARCH_OPTION = "jdbcodata-search";
+
+    /**
+     * Searches {@link SearchSyntax} has to parse become a filter condition {@code cast(@jdbcodata_searchN,Edm.Boolean)}
+     * (a search only restricts the rows, like a filter): {@code $search} is and-ed into {@code $filter},
+     * {@code search(…)} in $apply becomes {@code filter(…)}, {@code $search} inside $expand options joins that
+     * level's {@code $filter}.
+     */
+    private static String ownSearches(String query) {
+        if (!query.contains("search") && !query.contains("Search")) return query;
+        List<String> parts = new ArrayList<>(List.of(query.split("&", -1)));
+        List<String> texts = new ArrayList<>();
+        String searchToFilter = null;
+        for (int i = 0; i < parts.size(); i++) {
+            String name = optionName(parts.get(i));
+            String decoded = decode(value(parts.get(i)));
+            if (decoded == null) continue;
+            if ("$search".equals(name) && SearchSyntax.needsOwnParser(decoded, false)) {
+                texts.add(decoded);
+                searchToFilter = placeholder(texts.size());
+                parts.remove(i--);
+            } else if ("$apply".equals(name)) {
+                String rewritten = applySearches(decoded, texts);
+                if (!rewritten.equals(decoded)) parts.set(i, "$apply=" + encode(rewritten));
+            } else if ("$expand".equals(name)) {
+                String rewritten = expandSearches(decoded, texts);
+                if (!rewritten.equals(decoded)) parts.set(i, "$expand=" + encode(rewritten));
+            }
+        }
+        if (texts.isEmpty()) return query;
+        if (searchToFilter != null) {
+            int filter = -1;
+            for (int i = 0; i < parts.size(); i++) if ("$filter".equals(optionName(parts.get(i)))) filter = i;
+            if (filter < 0) {
+                parts.add("$filter=" + encode(searchToFilter));
+            } else {
+                parts.set(filter, "$filter=" + encode("(" + decode(value(parts.get(filter))) + ") and " + searchToFilter));
+            }
+        }
+        for (int n = 0; n < texts.size(); n++) parts.add(SEARCH_OPTION + (n + 1) + "=" + encode(texts.get(n)));
+        return String.join("&", parts);
+    }
+
+    private static String placeholder(int n) {
+        return "cast(" + SEARCH_ALIAS + n + ",Edm.Boolean)";
+    }
+
+    private static String applySearches(String apply, List<String> texts) {
+        List<int[]> found = SearchSyntax.applySearches(apply);
+        StringBuilder out = new StringBuilder(apply);
+        for (int k = found.size() - 1; k >= 0; k--) {
+            int[] f = found.get(k);
+            String inner = apply.substring(f[1] + 1, f[2]);
+            if (!SearchSyntax.needsOwnParser(inner, true)) continue;
+            texts.add(inner);
+            out.replace(f[0], f[2] + 1, "filter(" + placeholder(texts.size()) + ")");
+        }
+        return out.toString();
+    }
+
+    /** {@code Nav($search=…;$filter=…)}: the search joins the $filter of its option block. */
+    private static String expandSearches(String expand, List<String> texts) {
+        String s = expand;
+        int from = 0;
+        while (true) {
+            int at = indexOutsideQuotes(s, "$search=", from);
+            if (at < 0) return s;
+            int open = enclosingParen(s, at);
+            int close = open < 0 ? -1 : SearchSyntax.closing(s, open);
+            if (close < 0) return s;
+            List<String> options = splitOptions(s.substring(open + 1, close));
+            int searchIndex = -1;
+            int filterIndex = -1;
+            for (int i = 0; i < options.size(); i++) {
+                String o = options.get(i).strip();
+                if (o.startsWith("$search=") && searchIndex < 0) searchIndex = i;
+                if (o.startsWith("$filter=")) filterIndex = i;
+            }
+            String text = searchIndex < 0 ? null : options.get(searchIndex).strip().substring("$search=".length());
+            if (text == null || !SearchSyntax.needsOwnParser(text, false)) {
+                from = at + 1;
+                continue;
+            }
+            texts.add(text);
+            String condition = placeholder(texts.size());
+            if (filterIndex >= 0) {
+                String f = options.get(filterIndex).strip().substring("$filter=".length());
+                options.set(filterIndex, "$filter=(" + f + ") and " + condition);
+                options.remove(searchIndex);
+            } else {
+                options.set(searchIndex, "$filter=" + condition);
+            }
+            s = s.substring(0, open + 1) + String.join(";", options) + s.substring(close);
+            from = open + 1;
+        }
+    }
+
+    private static int indexOutsideQuotes(String s, String needle, int from) {
+        boolean literal = false;
+        boolean phrase = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (literal) {
+                if (c == '\'') literal = false;
+                continue;
+            }
+            if (phrase) {
+                if (c == '\\') i++;
+                else if (c == '"') phrase = false;
+                continue;
+            }
+            if (c == '\'') literal = true;
+            else if (c == '"') phrase = true;
+            else if (i >= from && s.startsWith(needle, i)) return i;
+        }
+        return -1;
+    }
+
+    /** The '(' that opens the block containing position {@code at}, or -1. */
+    private static int enclosingParen(String s, int at) {
+        java.util.ArrayDeque<Integer> stack = new java.util.ArrayDeque<>();
+        boolean literal = false;
+        boolean phrase = false;
+        for (int i = 0; i < at; i++) {
+            char c = s.charAt(i);
+            if (literal) {
+                if (c == '\'') literal = false;
+                continue;
+            }
+            if (phrase) {
+                if (c == '\\') i++;
+                else if (c == '"') phrase = false;
+                continue;
+            }
+            if (c == '\'') literal = true;
+            else if (c == '"') phrase = true;
+            else if (c == '(') stack.push(i);
+            else if (c == ')' && !stack.isEmpty()) stack.pop();
+        }
+        return stack.isEmpty() ? -1 : stack.peek();
+    }
+
+    /** Options of an expand block, split at {@code ;} on level 0 outside literals and phrases. */
+    private static List<String> splitOptions(String block) {
+        List<String> out = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        boolean literal = false;
+        boolean phrase = false;
+        for (int i = 0; i < block.length(); i++) {
+            char c = block.charAt(i);
+            if (literal) {
+                if (c == '\'') literal = false;
+                continue;
+            }
+            if (phrase) {
+                if (c == '\\') i++;
+                else if (c == '"') phrase = false;
+                continue;
+            }
+            if (c == '\'') literal = true;
+            else if (c == '"') phrase = true;
+            else if (c == '(') depth++;
+            else if (c == ')') depth--;
+            else if (c == ';' && depth == 0) {
+                out.add(block.substring(start, i));
+                start = i + 1;
+            }
+        }
+        out.add(block.substring(start));
+        return out;
     }
 
     /** Custom option prefix for options evaluated by {@link ExtendedApply} instead of Olingo. */

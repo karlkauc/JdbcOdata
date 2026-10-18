@@ -59,6 +59,9 @@ class ExpressionRewriterTest {
         assertThat(QueryRewriter.rewrite("$filter=A/any(u:%20u/B%20gt%201)&$top=2"))
                 .isEqualTo("$filter=A/any(u:u/B%20gt%201)&$top=2");
         assertThat(QueryRewriter.rewrite("$filter=Name%20eq%20'a%26b'")).isEqualTo("$filter=Name%20eq%20'a%26b'");
-        assertThat(QueryRewriter.rewrite("$search=any(u:%20x)")).isEqualTo("$search=any(u:%20x)");
+        assertThat(QueryRewriter.rewrite("$search=u:%20x")).isEqualTo("$search=u:%20x");
+        // parentheses: the search becomes a filter condition parsed by SearchSyntax
+        assertThat(QueryRewriter.rewrite("$search=(a%20OR%20b)&$filter=X%20gt%201"))
+                .isEqualTo("$filter=(X%20gt%201)%20and%20cast(@jdbcodata_search1,Edm.Boolean)&jdbcodata-search1=(a%20OR%20b)");
     }
 }

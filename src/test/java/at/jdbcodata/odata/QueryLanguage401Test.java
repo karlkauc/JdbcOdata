@@ -144,6 +144,24 @@ class QueryLanguage401Test extends DemoProfileTest {
         assertThat(label.stream().filter(c -> c.get("G").asString().equals("gross")).count()).isEqualTo(1);
     }
 
+    @Test
+    void searchWithParenthesesEverywhere() throws Exception {
+        List<JsonNode> top = rows("Sales?$search=" + enc("(Nord OR Süd) AND NOT \"Beta AG\""));
+        assertThat(top.size()).isEqualTo((int) salesCount(s -> (s.get("region").asString().equals("Nord")
+                || s.get("region").asString().equals("Süd")) && !s.get("customer").asString().equals("Beta AG")));
+        List<JsonNode> expanded = rows("P6Customers?$expand=Sales($search=" + enc("(Nord OR Süd) AND NOT 9999") + ";$filter="
+                + enc("amount gt 1000") + ")&$orderby=customer");
+        for (JsonNode c : expanded) {
+            long expected = salesCount(s -> s.get("customer").asString().equals(c.get("customer").asString())
+                    && (s.get("region").asString().equals("Nord") || s.get("region").asString().equals("Süd")) && amount(s) > 1000);
+            assertThat(c.get("Sales").size()).isEqualTo((int) expected);
+        }
+        JsonNode applied = rows("Sales?$apply=" + enc("search(NOT (Nord OR Süd))/aggregate($count as N)")).get(0);
+        assertThat(applied.get("N").asInt()).isEqualTo((int) salesCount(s -> !s.get("region").asString().equals("Nord")
+                && !s.get("region").asString().equals("Süd")));
+        assertThat(call("Sales?$search=" + enc("(Nord OR")).statusCode()).isEqualTo(400);
+    }
+
     // --- $filter path segment -----------------------------------------------------------------------------------
 
     @Test
