@@ -60,14 +60,22 @@ wiederherstellen.
 
 ### Push-Down
 
-Im Query-Editor „Filter in der Datenbank auswerten (Push-Down)“ setzen. Dann laufen `$filter`, `$orderby`,
-`$top`, `$skip` und `$count` als gekapseltes SQL in der Datenbank, soweit sie sich mit gleicher Bedeutung
-übersetzen lassen; der Rest wird wie bisher im Speicher ausgewertet. Sinnvoll für große Ergebnisse, die
+Im Query-Editor „Filter in der Datenbank auswerten (Push-Down)“ setzen. Dann laufen `$filter`, `$search`,
+`$orderby`, `$top`, `$skip`, `$count` und `$apply`-Gruppierungen als gekapseltes SQL in der Datenbank, soweit
+sie sich mit gleicher Bedeutung übersetzen lassen; der Rest wird wie bisher im Speicher ausgewertet. Sinnvoll für große Ergebnisse, die
 Clients selten vollständig laden. Voraussetzung: Schlüsselmodus „Spalten“ mit Schlüsselspalte, Datenbank
 PostgreSQL, H2, Oracle oder MySQL/MariaDB. Gepushte Abrufe umgehen den Cache. Der Antwort-Header
 `X-Push-Down` zeigt, was in der Datenbank lief. In `seed.yml`: `pushDown: true`.
 
 Queries mit Parametern sind zusätzlich als OData-Funktion aufrufbar: `GetUmsatz(p_jahr=2024)`.
+
+### Änderungsverfolgung
+
+Clients, die nur Änderungen nachladen wollen, senden `Prefer: odata.track-changes` und folgen später dem
+`@odata.deltaLink` der Antwort: Er liefert neue, geänderte und gelöschte Zeilen seit dem letzten Abruf. Der
+Service merkt sich dafür einen Schnappschuss im Speicher (24 Stunden, nicht über einen Neustart hinweg; dann
+antwortet der Link mit 410 und der Client lädt neu). Voraussetzung sind Schlüsselspalten; bei aktivem Cache
+werden Änderungen erst nach Ablauf des Cache-Eintrags sichtbar.
 
 ## 4. Cache
 

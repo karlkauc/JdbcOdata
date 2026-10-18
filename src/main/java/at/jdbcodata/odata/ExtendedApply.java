@@ -27,7 +27,8 @@ import org.apache.olingo.server.api.uri.queryoption.apply.GroupBy;
  * $apply transformations the Olingo 5 parser does not know, evaluated around the ones it does:
  *
  * <ul>
- *   <li>{@code join(Nav as A[,T])} / {@code outerjoin(Nav as A[,T])}: one row per related row, which is available
+ *   <li>{@code join(Nav as A[,T])} / {@code outerjoin(Nav as A[,T])}: one row per related row ({@code Nav} may be a
+ *       path {@code A/B}), which is available
  *       as single-valued navigation {@code A}; outerjoin keeps rows without related rows ({@code A} null).</li>
  *   <li>{@code nest(T1 as A1,…)}: one row with collection-valued navigations {@code Ai} holding the result of
  *       {@code Ti} (inside {@code groupby}: per group).</li>
@@ -133,8 +134,16 @@ final class ExtendedApply {
         if (!m.matches()) throw bad((outer ? "outerjoin" : "join") + " needs 'NavigationProperty as Alias'");
         String nav = m.group(1).strip();
         String alias = m.group(2);
-        EdmNavigationProperty property = type.getNavigationProperty(nav);
-        if (property == null || nav.contains("/")) throw bad("'" + nav + "' is no navigation property here");
+        // a path of navigation properties (A/B): the related rows at its end
+        List<String> segments = List.of(nav.split("/"));
+        EdmNavigationProperty property = null;
+        EdmStructuredType walk = type;
+        for (String segment : segments) {
+            property = walk == null ? null : walk.getNavigationProperty(segment.strip());
+            if (property == null) throw bad("'" + nav + "' is no navigation path here");
+            walk = property.getType();
+        }
+        EdmEntityType targetType = property.getType();
         if (type.getProperty(alias) != null && type.getNavigationProperty(alias) == null) {
             throw bad("Alias '" + alias + "' is already a property");
         }
@@ -142,9 +151,14 @@ final class ExtendedApply {
         List<Entity> out = new ArrayList<>();
         EdmStructuredType outerType = type;
         for (Entity e : rows) {
-            List<Entity> targets = host.context().navigate(e, nav);
+            List<Entity> targets = List.of(e);
+            for (String segment : segments) {
+                List<Entity> next = new ArrayList<>();
+                for (Entity t : targets) next.addAll(host.context().navigate(t, segment.strip()));
+                targets = next;
+            }
             if (nested != null && !nested.isBlank()) {
-                type = property.getType();
+                type = targetType;
                 targets = run(targets, nested);
             }
             if (targets.isEmpty() && outer) {
@@ -160,7 +174,7 @@ final class ExtendedApply {
                 out.add(row);
             }
         }
-        type = RowType.withNavigation(RowType.of(out, outerType, host.edm()), alias, property.getType(), false);
+        type = RowType.withNavigation(RowType.of(out, outerType, host.edm()), alias, targetType, false);
         return out;
     }
 

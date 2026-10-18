@@ -169,9 +169,8 @@ public class ODataServlet extends HttpServlet {
         String prefix = req.getContextPath() + req.getServletPath();
         String uri = req.getRequestURI();
         String original = uri.startsWith(prefix) ? uri.substring(prefix.length()) : uri;
-        PathFilterRewriter.Result pathFilters = PathFilterRewriter.extract(original);
-        String odataPath = KeySegmentRewriter.rewrite(pathFilters.path(), edm);
-        boolean singleEntity = "GET".equals(req.getMethod()) && KeySegmentRewriter.addressesSingleEntity(odataPath, edm);
+        Rewritten rewritten = rewrite(req.getMethod(), original, req.getQueryString(), edm);
+        String odataPath = rewritten.path();
         // Olingo takes the base URI as request URL minus OData path, so the URL must end with the rewritten path.
         String url = req.getRequestURL().toString();
         StringBuffer requestUrl = new StringBuffer(odataPath.equals(original) || !url.endsWith(original) ? url
@@ -199,10 +198,26 @@ public class ODataServlet extends HttpServlet {
 
             @Override
             public String getQueryString() {
-                return QueryRewriter.rewrite(PathFilterRewriter.mergeIntoQuery(super.getQueryString(), pathFilters.filters()),
-                        singleEntity, KeySegmentRewriter.targetType(odataPath, edm));
+                return rewritten.query();
             }
         };
+    }
+
+    /** OData path and query string after all rewrites that close Olingo 5 parser gaps. */
+    record Rewritten(String path, String query) {
+    }
+
+    /**
+     * Path filter segments, key segments and query-option rewrites for one request; used for top-level requests
+     * and for every part of a {@code $batch}.
+     */
+    static Rewritten rewrite(String method, String path, String query, org.apache.olingo.commons.api.edm.Edm edm) {
+        PathFilterRewriter.Result pathFilters = PathFilterRewriter.extract(path);
+        String odataPath = KeySegmentRewriter.rewrite(pathFilters.path(), edm);
+        boolean singleEntity = "GET".equals(method) && KeySegmentRewriter.addressesSingleEntity(odataPath, edm);
+        String q = QueryRewriter.rewrite(PathFilterRewriter.mergeIntoQuery(query, pathFilters.filters()),
+                singleEntity, KeySegmentRewriter.targetType(odataPath, edm));
+        return new Rewritten(odataPath, q);
     }
 
     static String clientIp(HttpServletRequest req) {

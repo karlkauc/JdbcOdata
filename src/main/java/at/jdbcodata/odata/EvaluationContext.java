@@ -30,6 +30,15 @@ interface EvaluationContext {
         return null;
     }
 
+    /**
+     * As above for a case inside lambda bodies: {@code lambdaVariables} are the elements bound to the variables in
+     * scope, which the branches may reference ({@code u/Betrag}).
+     */
+    default List<Expression[]> caseBranches(String name, Entity entity, java.util.Map<String, Entity> lambdaVariables)
+            throws ODataApplicationException {
+        return caseBranches(name, entity);
+    }
+
     /** All rows of an entity set ({@code $root/Set} in hierarchy transformations). */
     default List<Entity> entitySet(String name) throws ODataApplicationException {
         throw new ODataApplicationException("$root not supported here", 501, java.util.Locale.ENGLISH);

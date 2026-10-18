@@ -169,6 +169,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             Map.entry(CAPABILITIES + ".InsertRestrictions", CAPABILITIES + ".InsertRestrictionsType"),
             Map.entry(CAPABILITIES + ".UpdateRestrictions", CAPABILITIES + ".UpdateRestrictionsType"),
             Map.entry(CAPABILITIES + ".DeleteRestrictions", CAPABILITIES + ".DeleteRestrictionsType"),
+            Map.entry(CAPABILITIES + ".ChangeTracking", CAPABILITIES + ".ChangeTrackingType"),
             Map.entry(AGGREGATION + ".ApplySupported", AGGREGATION + ".ApplySupportedType"),
             Map.entry(AGGREGATION + ".CustomAggregationMethods", "Collection(" + AGGREGATION + ".QualifiedName)"),
             Map.entry(AGGREGATION + ".RecursiveHierarchy", AGGREGATION + ".RecursiveHierarchyType"));
@@ -281,6 +282,8 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         a.add(record("FilterRestrictions", "Filterable", true));
         a.add(record("SortRestrictions", "Sortable", true));
         a.add(record("ExpandRestrictions", "Expandable", q != null && !visibleRelations(q).isEmpty(), "MaxLevels", 8));
+        // delta links (Prefer: odata.track-changes); with row numbers as keys every shift would count as a change
+        a.add(record("ChangeTracking", "Supported", q != null && q.keyMode() == at.jdbcodata.query.KeyMode.COLUMNS));
         a.add(tag(CAPABILITIES, "TopSupported", true));
         a.add(tag(CAPABILITIES, "SkipSupported", true));
         a.add(tag(CAPABILITIES, "IndexableByKey", true));

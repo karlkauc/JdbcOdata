@@ -20,5 +20,6 @@ public record ProcessorSupport(
         ResultCache cache,
         ExecutionLogService executionLog,
         LoginRateLimiter rateLimiter,
-        JdbcOdataProperties properties) {
+        JdbcOdataProperties properties,
+        DeltaTracker deltaTracker) {
 }

@@ -76,8 +76,11 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 - **Suche und Aggregation:** `$search`, `$apply` (`groupby` mit `rollup`, `aggregate` mit `from` und Inline-Aggregaten,
   `topcount`, …) und `$compute` werden in-memory ausgewertet; dazu `$levels`, `$ref`, `$all`, `$crossjoin`,
   `cast`/`isof`/`$it`/`$root`.
-- **Push-Down (pro Query):** `$filter`, `$search`, `$orderby`, `$top`, `$skip`, `$count` und einfache `$apply`-Gruppierungen laufen auf Wunsch als SQL in der
+- **Push-Down (pro Query):** `$filter`, `$search` (exakt oder als Vorfilter), `$orderby`, `$top`, `$skip`, `$count` und
+  `$apply`-Gruppierungen samt folgendem `filter`/`orderby`/`top` laufen auf Wunsch als SQL in der
   Datenbank (PostgreSQL, H2, Oracle, MySQL/MariaDB), Nicht-Übersetzbares weiter in-memory; Header `X-Push-Down`.
+- **Delta-Links:** `Prefer: odata.track-changes` liefert einen `@odata.deltaLink`; dessen Abruf meldet neue, geänderte
+  und gelöschte Entitäten (Vergleich mit einem Schnappschuss im Speicher).
 - **Weitere `$apply`-Transformationen:** `join`/`outerjoin`, `nest`, Hierarchien (`ancestors`, `descendants`, `traverse`), die
   Transformation `expand` und eigene Aggregationsmethoden (`JdbcOdata.median`, `stddev`, `variance`).
 - **4.01-Schreibweisen:** `case(…)`, `$filter` als Pfadsegment, `matchesPattern`, `Umsaetze/$count($filter=…)`, Schlüssel als Pfadsegment (`Kunden/1`) und

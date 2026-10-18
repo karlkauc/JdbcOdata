@@ -59,9 +59,30 @@ final class ExpressionRewriter {
         if (expression == null || expression.isEmpty()) return expression;
         String s = lambdaColons(expression);
         s = matchesPattern(s);
+        int firstCase = cases.size();
         s = caseExpressions(s);
+        countInCases(firstCase);
         s = countWithOptions(s);
         return s;
+    }
+
+    /** Case bodies are parsed later on their own, so they need the count rewrite as well. */
+    private void countInCases(int from) {
+        for (int k = from; k < cases.size(); k++) cases.set(k, countWithOptions(cases.get(k)));
+    }
+
+    /**
+     * Lambda variables visible at a position of the expression and the type unqualified member paths refer to
+     * (inside {@code Nav/$count(...)} the elements of {@code Nav}); types are null when unknown.
+     */
+    private record Scope(java.util.Map<String, org.apache.olingo.commons.api.edm.EdmStructuredType> variables,
+                         org.apache.olingo.commons.api.edm.EdmStructuredType implicit) {
+
+        Scope with(String variable, org.apache.olingo.commons.api.edm.EdmStructuredType type) {
+            java.util.Map<String, org.apache.olingo.commons.api.edm.EdmStructuredType> v = new java.util.HashMap<>(variables);
+            v.put(variable, type);
+            return new Scope(v, implicit);
+        }
     }
 
     // --- case ------------------------------------------------------------------------------------------------
@@ -71,6 +92,10 @@ final class ExpressionRewriter {
      * undefined alias no type, so it fits anywhere; the evaluator parses the branches itself.
      */
     private String caseExpressions(String s) {
+        return caseExpressions(s, new Scope(java.util.Map.of(), context));
+    }
+
+    private String caseExpressions(String s, Scope scope) {
         StringBuilder out = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
@@ -84,10 +109,35 @@ final class ExpressionRewriter {
             if (startsWithWord(s, i, "case") && nextNonSpace(s, i + 4) == '(') {
                 int open = s.indexOf('(', i);
                 int close = closing(s, open);
-                String body = caseExpressions(s.substring(open + 1, close));
+                String body = caseExpressions(s.substring(open + 1, close), scope);
                 cases.add(body);
+                int number = ++caseCounter;
                 // Olingo needs a type for computed aliases and comparisons: cast to the type of the branch values.
-                out.append("cast(").append(CASE_ALIAS).append(++caseCounter).append(',').append(caseType(body)).append(')');
+                out.append("cast(").append(CASE_ALIAS).append(number).append(',').append(caseType(body, scope)).append(')');
+                i = close + 1;
+                continue;
+            }
+            String lambda = s.regionMatches(true, i, "/any(", 0, 5) ? "/any(" : s.regionMatches(true, i, "/all(", 0, 5) ? "/all("
+                    : s.startsWith("/$count(", i) ? "/$count(" : null;
+            if (lambda != null) {
+                int open = i + lambda.length() - 1;
+                int close = closing(s, open);
+                if (close >= s.length() || s.charAt(close) != ')') {
+                    out.append(c);
+                    i++;
+                    continue;
+                }
+                org.apache.olingo.commons.api.edm.EdmStructuredType element = collectionElement(pathBefore(out), scope);
+                String inner = s.substring(open + 1, close);
+                Scope innerScope;
+                if (lambda.equals("/$count(")) {
+                    innerScope = new Scope(scope.variables(), element);
+                } else {
+                    int colon = inner.indexOf(':');
+                    String variable = colon > 0 ? inner.substring(0, colon).strip() : "";
+                    innerScope = variable.matches("[A-Za-z_][A-Za-z0-9_]*") ? scope.with(variable, element) : scope;
+                }
+                out.append(s, i, open + 1).append(caseExpressions(inner, innerScope)).append(')');
                 i = close + 1;
                 continue;
             }
@@ -98,7 +148,7 @@ final class ExpressionRewriter {
     }
 
     /** EDM type of the case result: from the first branch value whose type is evident. */
-    private String caseType(String body) {
+    private String caseType(String body, Scope scope) {
         List<String[]> branches;
         try {
             branches = caseBranches(body);
@@ -106,13 +156,13 @@ final class ExpressionRewriter {
             return "Edm.String";
         }
         for (String[] b : branches) {
-            String t = valueType(b[1]);
+            String t = valueType(b[1], scope);
             if (t != null) return t;
         }
         return "Edm.String";
     }
 
-    private String valueType(String v) {
+    private String valueType(String v, Scope scope) {
         String t = v.strip();
         if (t.isEmpty() || t.equals("null")) return null;
         if (t.startsWith("'")) return "Edm.String";
@@ -126,10 +176,19 @@ final class ExpressionRewriter {
             int comma = t.lastIndexOf(',');
             return comma > 0 ? t.substring(comma + 1, t.length() - 1) : null;
         }
-        if (context != null && t.matches("[A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*")) {
-            org.apache.olingo.commons.api.edm.EdmStructuredType type = context;
+        if (t.matches("[$A-Za-z_][A-Za-z0-9_]*(/[A-Za-z_][A-Za-z0-9_]*)*")) {
             String[] segments = t.split("/");
-            for (int i = 0; i < segments.length; i++) {
+            org.apache.olingo.commons.api.edm.EdmStructuredType type = scope.implicit();
+            int first = 0;
+            if (segments.length > 1 && scope.variables().containsKey(segments[0])) {
+                type = scope.variables().get(segments[0]);
+                first = 1;
+            } else if (segments.length > 1 && segments[0].equals("$it")) {
+                type = context;
+                first = 1;
+            }
+            if (type == null) segments = new String[0];
+            for (int i = first; i < segments.length; i++) {
                 if (i < segments.length - 1) {
                     org.apache.olingo.commons.api.edm.EdmNavigationProperty nav = type.getNavigationProperty(segments[i]);
                     if (nav == null || nav.isCollection()) return null;
@@ -196,7 +255,9 @@ final class ExpressionRewriter {
     String expandOption(String expand) {
         if (expand == null || expand.isEmpty()) return expand;
         ExpressionRewriter r = this;
+        int firstCase = cases.size();
         String s = r.caseExpressions(r.matchesPattern(r.lambdaColons(expand)));
+        countInCases(firstCase);
         StringBuilder out = new StringBuilder();
         int i = 0;
         while (i < s.length()) {
@@ -353,6 +414,7 @@ final class ExpressionRewriter {
                     out.setLength(start);
                     String variable = COUNT_VARIABLE + (++counter);
                     String body = prefixMembers(countWithOptions(filter), variable);
+                    prefixCases(body, variable, new java.util.HashSet<>());
                     out.append("cast(").append(path).append("/any(").append(variable).append(':').append(body)
                             .append("),Edm.Int64)");
                     i = close + 1;
@@ -363,6 +425,28 @@ final class ExpressionRewriter {
             i++;
         }
         return out.toString();
+    }
+
+    /**
+     * Case placeholders inside a {@code $count($filter=…)} body refer to the elements as well: their bodies (and
+     * those of nested cases) get the lambda variable prefix, too.
+     */
+    private void prefixCases(String text, String variable, Set<Integer> done) {
+        int at = text.indexOf(CASE_ALIAS);
+        while (at >= 0) {
+            int j = at + CASE_ALIAS.length();
+            int k = j;
+            while (k < text.length() && Character.isDigit(text.charAt(k))) k++;
+            if (k > j) {
+                int n = Integer.parseInt(text.substring(j, k));
+                if (n >= 1 && n <= cases.size() && done.add(n)) {
+                    String prefixed = prefixMembers(cases.get(n - 1), variable);
+                    cases.set(n - 1, prefixed);
+                    prefixCases(prefixed, variable, done);
+                }
+            }
+            at = text.indexOf(CASE_ALIAS, k);
+        }
     }
 
     /**
@@ -419,6 +503,36 @@ final class ExpressionRewriter {
     }
 
     // --- helpers ------------------------------------------------------------------------------------------------
+
+    /** The member path at the end of {@code out} (identifiers separated by {@code /}). */
+    private static String pathBefore(CharSequence out) {
+        int start = out.length();
+        while (start > 0 && (isIdentifierChar(out.charAt(start - 1)) || out.charAt(start - 1) == '/'
+                || out.charAt(start - 1) == '$')) {
+            start--;
+        }
+        return out.subSequence(start, out.length()).toString();
+    }
+
+    /** Element type of the collection {@code path} addresses in {@code scope}, or null. */
+    private org.apache.olingo.commons.api.edm.EdmStructuredType collectionElement(String path, Scope scope) {
+        if (path.isEmpty()) return null;
+        String[] segments = path.split("/");
+        org.apache.olingo.commons.api.edm.EdmStructuredType type = scope.implicit();
+        int first = 0;
+        if (scope.variables().containsKey(segments[0])) {
+            type = scope.variables().get(segments[0]);
+            first = 1;
+        } else if (segments[0].equals("$it")) {
+            type = context;
+            first = 1;
+        }
+        for (int i = first; i < segments.length && type != null; i++) {
+            org.apache.olingo.commons.api.edm.EdmNavigationProperty nav = type.getNavigationProperty(segments[i]);
+            type = nav == null ? null : nav.getType();
+        }
+        return type;
+    }
 
     private static boolean isIdentifierChar(char c) {
         return Character.isLetterOrDigit(c) || c == '_';

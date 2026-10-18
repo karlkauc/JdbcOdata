@@ -47,7 +47,7 @@ import org.apache.olingo.server.api.uri.queryoption.expression.ExpressionVisitEx
  * {@code identity}, {@code compute}, {@code concat}, {@code aggregate} ({@code sum}, {@code min}, {@code max},
  * {@code average}, {@code countdistinct}, {@code $count}), {@code groupby} (properties, also along to-one navigations,
  * with a nested transformation sequence), {@code topcount}/{@code bottomcount}, {@code topsum}/{@code bottomsum},
- * {@code toppercent}/{@code bottompercent}. Not supported: rollup, custom aggregates and functions, {@code expand},
+ * {@code toppercent}/{@code bottompercent}. Not supported: custom aggregates and functions, {@code expand},
  * {@code from}, inline aggregates over collections.
  *
  * <p>Aggregated results are dynamic entities: their properties are the group keys and the aliases. Group keys along a
@@ -276,6 +276,13 @@ final class ApplyEvaluator {
      * rolled-up properties.
      */
     private List<Entity> groupBy(List<Entity> in, GroupBy groupBy) throws ODataApplicationException {
+        List<Entity> out = new ArrayList<>();
+        for (List<List<UriResource>> grouping : groupings(groupBy)) out.addAll(group(in, grouping, groupBy.getApplyOption()));
+        return out;
+    }
+
+    /** The groupings of a groupby: one, or one per rollup level combination. */
+    private static List<List<List<UriResource>>> groupings(GroupBy groupBy) {
         List<List<UriResource>> fixed = new ArrayList<>();
         List<List<List<UriResource>>> rollupLevels = new ArrayList<>();
         for (GroupByItem g : groupBy.getGroupByItems()) {
@@ -304,9 +311,7 @@ final class ApplyEvaluator {
             }
             groupings = next;
         }
-        List<Entity> out = new ArrayList<>();
-        for (List<List<UriResource>> grouping : groupings) out.addAll(group(in, grouping, groupBy.getApplyOption()));
-        return out;
+        return groupings;
     }
 
     /** Marks a rollup that includes the grand total ({@code rollup($all,…)}) with a leading null. */
@@ -512,14 +517,16 @@ final class ApplyEvaluator {
 
     /**
      * {@code groupby((P1,P2))} without nested transformations, as groups: a row with the group properties and the
-     * member rows. Used when the nested transformations are evaluated elsewhere (join, nest, …).
+     * member rows. Used when the nested transformations are evaluated elsewhere (join, nest, …). With rollup, the
+     * groups of all levels follow each other (subtotal groups lack the rolled-up properties).
      */
     Map<Entity, List<Entity>> groups(List<Entity> in, GroupBy groupBy) throws ODataApplicationException {
-        List<List<UriResource>> paths = new ArrayList<>();
-        for (GroupByItem g : groupBy.getGroupByItems()) {
-            if (g.getRollup() != null && !g.getRollup().isEmpty()) throw unsupported("rollup together with nest/join");
-            paths.add(g.getPath());
-        }
+        Map<Entity, List<Entity>> out = new LinkedHashMap<>();
+        for (List<List<UriResource>> paths : groupings(groupBy)) out.putAll(groups(in, paths));
+        return out;
+    }
+
+    private Map<Entity, List<Entity>> groups(List<Entity> in, List<List<UriResource>> paths) throws ODataApplicationException {
         Map<List<Object>, List<Entity>> members = new LinkedHashMap<>();
         Map<List<Object>, List<Object>> keyValues = new LinkedHashMap<>();
         for (Entity e : in) {
@@ -532,6 +539,10 @@ final class ApplyEvaluator {
             }
             members.computeIfAbsent(key, k -> new ArrayList<>()).add(e);
             keyValues.putIfAbsent(key, values);
+        }
+        if (members.isEmpty() && paths.isEmpty()) {
+            members.put(List.of(), List.of()); // grand total of nothing
+            keyValues.put(List.of(), List.of());
         }
         Map<Entity, List<Entity>> out = new LinkedHashMap<>();
         for (Map.Entry<List<Object>, List<Entity>> g : members.entrySet()) {

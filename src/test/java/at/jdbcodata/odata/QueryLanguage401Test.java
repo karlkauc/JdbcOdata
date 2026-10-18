@@ -119,6 +119,31 @@ class QueryLanguage401Test extends DemoProfileTest {
         assertThat(agg.get("value").get(0).get("S").decimalValue()).isEqualByComparingTo(expected);
     }
 
+    @Test
+    void caseInsideLambdasAndCountFilters() throws Exception {
+        List<JsonNode> any = rows("P6Customers?$filter=" + enc("Sales/any(s: case(s/amount gt 5000:true,true:false))"));
+        assertThat(any).hasSize(1);
+        assertThat(any.get(0).get("customer").asString()).isEqualTo("Beta AG");
+        // branches mixing the lambda variable and the outer entity
+        List<JsonNode> mixed = rows("P6Customers?$filter=" + enc("Sales/any(s:case(s/region eq region:s/amount,true:0) gt 5000)"));
+        for (JsonNode c : mixed) {
+            assertThat(sales.stream().anyMatch(s -> s.get("customer").asString().equals(c.get("customer").asString())
+                    && s.get("region").asString().equals(c.get("region").asString()) && amount(s) > 5000)).isTrue();
+        }
+        assertThat(rows("P6Customers?$filter=" + enc("Sales/all(s:case(s/amount gt 0:true,true:false))"))).hasSize(2);
+        List<JsonNode> counted = rows("P6Customers?$compute=" + enc("Sales/$count($filter=case(amount gt 5000:1,true:0) eq 1) as N")
+                + "&$select=customer,N");
+        assertThat(counted).hasSize(2);
+        for (JsonNode c : counted) {
+            long expected = salesCount(s -> s.get("customer").asString().equals(c.get("customer").asString()) && amount(s) > 5000);
+            assertThat(c.get("N").asInt()).isEqualTo((int) expected);
+        }
+        // a case containing a count filter
+        List<JsonNode> label = rows("P6Customers?$compute=" + enc("case(Sales/$count($filter=amount gt 5000) gt 0:'gross',true:'klein') as G")
+                + "&$select=customer,G&$orderby=customer");
+        assertThat(label.stream().filter(c -> c.get("G").asString().equals("gross")).count()).isEqualTo(1);
+    }
+
     // --- $filter path segment -----------------------------------------------------------------------------------
 
     @Test
@@ -185,6 +210,31 @@ class QueryLanguage401Test extends DemoProfileTest {
         assertThat(both.get("Low").size()).isEqualTo(1);
         double max = sales.stream().mapToDouble(QueryLanguage401Test::amount).max().orElseThrow();
         assertThat(both.get("Top2").get(0).get("amount").decimalValue().doubleValue()).isEqualTo(max);
+    }
+
+    @Test
+    void joinAlongNavigationPathsAndRollupWithNest() throws Exception {
+        List<JsonNode> grandchildren = rows("Org?$apply=" + enc("join(Children/Children as G)") + "&$filter=" + enc("name eq 'Vorstand'"));
+        assertThat(grandchildren.stream().map(r -> r.get("G").get("name").asString()).sorted().toList())
+                .containsExactly("Entwicklung", "Nord", "Sued");
+        assertThat(rows("Org?$apply=" + enc("outerjoin(Children/Children as G)") + "&$filter=" + enc("G eq null")).size())
+                .isEqualTo(5); // Vertrieb, Nord, Sued, Entwicklung, Labor have no grandchildren
+        assertThat(call("Org?$apply=" + enc("join(Children/name as G)")).statusCode()).isEqualTo(400);
+
+        List<JsonNode> rolled = rows("Sales?$apply=" + enc("groupby((rollup($all,region)),nest(aggregate($count as N) as C))"));
+        long regions = sales.stream().map(s -> s.get("region").asString()).distinct().count();
+        assertThat(rolled).hasSize((int) regions + 1);
+        JsonNode total = rolled.stream().filter(r -> !r.has("region") || r.get("region").isNull()).findFirst().orElseThrow();
+        assertThat(total.get("C").get(0).get("N").asInt()).isEqualTo(sales.size());
+        for (JsonNode r : rolled) {
+            if (r == total) continue;
+            assertThat(r.get("C").get(0).get("N").asInt())
+                    .isEqualTo((int) salesCount(s -> s.get("region").asString().equals(r.get("region").asString())));
+        }
+        List<JsonNode> joinedRollup = rows("P6Customers?$apply=" + enc("groupby((rollup($all,region)),join(Sales as S)/aggregate(S/amount with sum as T))"));
+        BigDecimal all = sales.stream().map(s -> s.get("amount").decimalValue()).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(joinedRollup.stream().filter(r -> !r.has("region") || r.get("region").isNull()).findFirst().orElseThrow()
+                .get("T").decimalValue()).isEqualByComparingTo(all);
     }
 
     // --- custom aggregation methods -----------------------------------------------------------------------------

@@ -130,7 +130,6 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     @Override
     public void readEntityCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo,
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
-        rejectUnsupportedOptions(uriInfo);
         begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
         Resolved r = resolvePushDown(uriInfo, custom, req, false);
@@ -140,6 +139,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
         }
         EdmEntitySet entitySet = r.entitySet();
+        if (uriInfo.getDeltaTokenOption() != null && (custom.containsKey(EXTENDED_APPLY) || uriInfo.getApplyOption() != null
+                || hasNestedApply(uriInfo.getExpandOption()))) {
+            throw new ODataApplicationException("Delta links are not available for $apply results",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
         if (custom.containsKey(EXTENDED_APPLY)) {
             writeExtendedResult(req, response, uriInfo, r, custom, responseFormat);
             return;
@@ -150,11 +154,23 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         EntityCollection collection = r.pushDown() != null ? afterPushDown(r, uriInfo, navigationResolver(custom), response)
                 : QueryOptionsEvaluator.apply(r.entities(), uriInfo, navigationResolver(custom));
+        String deltaScope = deltaScope(req, uriInfo, collection.getEntities());
+        if (uriInfo.getDeltaTokenOption() != null) {
+            writeDelta(req, response, uriInfo, r, collection.getEntities(), custom, responseFormat, deltaScope);
+            return;
+        }
+        boolean track = deltaScope != null && wantsTrackChanges(req);
+        List<Entity> all = track ? new ArrayList<>(collection.getEntities()) : null;
         Page page = page(req, uriInfo, collection.getEntities());
         collection.getEntities().clear();
         collection.getEntities().addAll(page.rows());
         if (page.nextLink() != null) collection.setNext(java.net.URI.create(page.nextLink()));
-        applyPreference(response, page);
+        if (track && page.nextLink() == null) {
+            // the delta link belongs on the last page; its snapshot is the whole result
+            String token = support.deltaTracker().register(request.identity().caller(), deltaScope, all);
+            collection.setDeltaLink(java.net.URI.create(deltaLink(req, deltaScope, token)));
+        }
+        applyPreference(response, page, track);
         // Only the delivered page is expanded, after $filter/$orderby/$skip/$top and paging.
         if (uriInfo.getExpandOption() != null) {
             expand(collection.getEntities(), r.query(), uriInfo.getExpandOption(), custom, 1);
@@ -434,12 +450,15 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
         }
         boolean searchPushed = false;
+        boolean searchPrefiltered = false;
         if (uriInfo.getSearchOption() != null && uriInfo.getSearchOption().getSearchExpression() != null) {
             try {
-                SqlFilterTranslator.Sql sql = translator.search(uriInfo.getSearchOption().getSearchExpression());
-                where.add(sql.text());
-                binds.addAll(sql.binds());
-                searchPushed = true;
+                SqlFilterTranslator.SearchSql sql = translator.searchFilter(uriInfo.getSearchOption().getSearchExpression());
+                where.add(sql.sql().text());
+                binds.addAll(sql.sql().binds());
+                // not exact: the database pre-filters, the in-memory search decides
+                searchPushed = sql.exact();
+                searchPrefiltered = !sql.exact();
             } catch (SqlFilterTranslator.Untranslatable e) {
                 // stays in memory
             }
@@ -474,10 +493,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         executions.put(query.name(), root);
         List<String> summary = new ArrayList<>();
-        if (uriInfo.getFilterOption() != null && where.size() > (searchPushed ? 1 : 0)) {
+        if (uriInfo.getFilterOption() != null && where.size() > (searchPushed || searchPrefiltered ? 1 : 0)) {
             summary.add(residual.isEmpty() ? "filter" : "filter(partial)");
         }
         if (searchPushed) summary.add("search");
+        if (searchPrefiltered) summary.add("search(partial)");
         if (paging) {
             if (uriInfo.getOrderByOption() != null) summary.add("orderby");
             if (uriInfo.getSkipOption() != null) summary.add("skip");
@@ -501,6 +521,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         List<String> where = new ArrayList<>();
         List<Object> binds = new ArrayList<>();
         List<String> summary = new ArrayList<>();
+        boolean stopped = false;
         int i = 0;
         for (; i < items.size(); i++) {
             org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
@@ -510,7 +531,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     sql = translator.predicate(f.getFilterOption().getExpression());
                     summary.add("filter");
                 } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Search se) {
-                    sql = translator.search(se.getSearchOption().getSearchExpression());
+                    SqlFilterTranslator.SearchSql bounded = translator.searchFilter(se.getSearchOption().getSearchExpression());
+                    if (!bounded.exact()) {
+                        // pre-filter in the database; the step itself stays in memory, and so does everything after it
+                        where.add(bounded.sql().text());
+                        binds.addAll(bounded.sql().binds());
+                        summary.add("search(partial)");
+                        stopped = true;
+                        break;
+                    }
+                    sql = bounded.sql();
                     summary.add("search");
                 } else {
                     break;
@@ -522,7 +552,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
         }
         SqlFilterTranslator.Aggregation aggregation = null;
-        if (i < items.size()) {
+        if (i < items.size() && !stopped) {
             try {
                 org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
                 if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Aggregate a) {
@@ -550,9 +580,56 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             }
             if (aggregation != null) i++;
         }
-        if (where.isEmpty() && aggregation == null) return null;
-        SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where), binds, null, null, null,
+        // Without aggregation: orderby, skip and top on the filtered rows (ties broken by the key, as for $orderby).
+        SqlFilterTranslator.Sql rowOrder = null;
+        Integer rowSkip = null;
+        Integer rowTop = null;
+        if (aggregation == null && !stopped) {
+            List<String> keys = query.columns().stream().filter(c -> c.visible() && c.key()).map(QueryColumn::propertyName).toList();
+            for (; i < items.size(); i++) {
+                org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
+                try {
+                    if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.OrderBy o && rowSkip == null && rowTop == null) {
+                        rowOrder = translator.orderBy(o.getOrderByOption(), keys);
+                        summary.add("orderby");
+                    } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Skip sk && rowTop == null) {
+                        rowSkip = (rowSkip == null ? 0 : rowSkip) + sk.getSkipOption().getValue();
+                        summary.add("skip");
+                    } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Top t) {
+                        rowTop = rowTop == null ? t.getTopOption().getValue() : Math.min(rowTop, t.getTopOption().getValue());
+                        summary.add("top");
+                    } else {
+                        break;
+                    }
+                } catch (SqlFilterTranslator.Untranslatable e) {
+                    break;
+                }
+            }
+            if ((rowSkip != null || rowTop != null) && rowOrder == null) {
+                try {
+                    rowOrder = translator.orderBy(null, keys);
+                } catch (SqlFilterTranslator.Untranslatable e) {
+                    return null;
+                }
+            }
+            if (rowOrder != null) binds.addAll(rowOrder.binds());
+        }
+        if (where.isEmpty() && aggregation == null && rowOrder == null) return null;
+        // Groups come back sorted by the grouping columns, so the order is the same on every request.
+        String groupOrder = aggregation == null || aggregation.groupBy().isBlank() ? null : aggregation.groupBy();
+        String order = rowOrder != null && !rowOrder.text().isBlank() ? rowOrder.text() : groupOrder;
+        boolean rowPaging = rowSkip != null || rowTop != null;
+        SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where), binds, order,
+                rowPaging ? (rowSkip == null ? 0 : rowSkip) : null, rowTop,
                 aggregation == null ? null : aggregation.select(), aggregation == null ? null : aggregation.groupBy());
+        if (aggregation != null) {
+            PostAggregation post = postAggregation(items, i, aggregation, dialect, custom, uriInfo, wrapper);
+            if (post != null) {
+                wrapper = post.wrapper();
+                i = post.next();
+                summary.addAll(post.summary());
+            }
+        }
         Execution root;
         try {
             root = execute(query.name(), custom, req.getRawQueryPath(), wrapper, false, false);
@@ -568,6 +645,86 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         for (int k = i; k < items.size(); k++) remaining.add(items.get(k));
         return new Resolved(root, query, rootSet, rows, null, new PushDown(wrapper, List.of(), false,
                 "apply:" + String.join(",", summary), false, true, remaining.getApplyItems().isEmpty() ? null : remaining));
+    }
+
+    /** Steps after a pushed aggregation that went to the database as well, wrapped around it. */
+    private record PostAggregation(SqlWrapper wrapper, int next, List<String> summary) {
+    }
+
+    /**
+     * {@code filter}, {@code orderby}, {@code skip} and {@code top} directly after a pushed groupby/aggregate run as
+     * an outer SELECT over the aggregated rows (in this order; a filter after paging stays in memory; paging only
+     * after an explicit orderby). Ties are broken by the grouping columns, the order the groups have anyway. When the whole $apply went to the database,
+     * the translatable conjuncts of $filter are added too; the in-memory $filter repeats them harmlessly.
+     */
+    private PostAggregation postAggregation(List<org.apache.olingo.server.api.uri.queryoption.ApplyItem> items, int from,
+                                            SqlFilterTranslator.Aggregation aggregation, SqlDialect dialect,
+                                            Map<String, String> custom, UriInfo uriInfo, SqlWrapper inner) {
+        SqlFilterTranslator post = new SqlFilterTranslator(aggregation.columns(), dialect, navigationResolver(custom));
+        List<String> groups = aggregation.groupNames();
+        List<String> where = new ArrayList<>();
+        List<Object> whereBinds = new ArrayList<>();
+        SqlFilterTranslator.Sql order = null;
+        Integer skip = null;
+        Integer top = null;
+        List<String> summary = new ArrayList<>();
+        int i = from;
+        for (; i < items.size(); i++) {
+            org.apache.olingo.server.api.uri.queryoption.ApplyItem item = items.get(i);
+            try {
+                if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Filter f && order == null
+                        && skip == null && top == null) {
+                    SqlFilterTranslator.Sql sql = post.predicate(f.getFilterOption().getExpression());
+                    where.add(sql.text());
+                    whereBinds.addAll(sql.binds());
+                    summary.add("filter");
+                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.OrderBy o && skip == null
+                        && top == null) {
+                    order = post.orderBy(o.getOrderByOption(), groups);
+                    summary.add("orderby");
+                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Skip sk && top == null
+                        && order != null && !groups.isEmpty()) {
+                    skip = (skip == null ? 0 : skip) + sk.getSkipOption().getValue();
+                    summary.add("skip");
+                } else if (item instanceof org.apache.olingo.server.api.uri.queryoption.apply.Top t && order != null
+                        && !groups.isEmpty()) {
+                    top = top == null ? t.getTopOption().getValue() : Math.min(top, t.getTopOption().getValue());
+                    summary.add("top");
+                } else {
+                    break;
+                }
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                break;
+            }
+        }
+        if (i == items.size() && uriInfo.getFilterOption() != null && skip == null && top == null) {
+            for (Expression conjunct : conjuncts(uriInfo.getFilterOption().getExpression())) {
+                try {
+                    SqlFilterTranslator.Sql sql = post.predicate(conjunct);
+                    where.add(sql.text());
+                    whereBinds.addAll(sql.binds());
+                    if (!summary.contains("$filter")) summary.add("$filter");
+                } catch (SqlFilterTranslator.Untranslatable e) {
+                    // stays in memory only
+                }
+            }
+        }
+        if (summary.isEmpty()) return null;
+        if (order == null && (skip != null || top != null || !groups.isEmpty())) {
+            try {
+                order = post.orderBy(null, groups);
+            } catch (SqlFilterTranslator.Untranslatable e) {
+                return null;
+            }
+        }
+        List<Object> binds = new ArrayList<>(whereBinds);
+        if (order != null) binds.addAll(order.binds());
+        boolean paging = skip != null || top != null;
+        SqlWrapper wrapper = new SqlWrapper(dialect, String.join(" AND ", where), binds,
+                order == null || order.text().isBlank() ? null : order.text(), paging ? (skip == null ? 0 : skip) : null, top,
+                null, null, new SqlWrapper(dialect, inner.where(), inner.whereBinds(), null, null, null, inner.select(),
+                        inner.groupBy())); // no ORDER BY in the subquery (SQL Server forbids it there)
+        return new PostAggregation(wrapper, i, summary);
     }
 
     /** Rows of a pushed groupby/aggregate in the form the in-memory evaluation produces. */
@@ -709,9 +866,132 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     }
 
     private static void applyPreference(ODataResponse response, Page page) {
-        if (page.appliedMaxPageSize() != null) {
-            response.setHeader(HttpHeader.PREFERENCE_APPLIED,
-                    PreferencesApplied.with().maxPageSize(page.appliedMaxPageSize()).build().toValueString());
+        applyPreference(response, page, false);
+    }
+
+    private static void applyPreference(ODataResponse response, Page page, boolean trackChanges) {
+        if (page.appliedMaxPageSize() == null && !trackChanges) return;
+        PreferencesApplied.Builder applied = PreferencesApplied.with();
+        if (page.appliedMaxPageSize() != null) applied.maxPageSize(page.appliedMaxPageSize());
+        if (trackChanges) applied.trackChanges();
+        response.setHeader(HttpHeader.PREFERENCE_APPLIED, applied.build().toValueString());
+    }
+
+    // --- change tracking (delta links) --------------------------------------------------------------------------
+
+    private static boolean wantsTrackChanges(ODataRequest req) {
+        for (String prefer : req.getHeaders(HttpHeader.PREFER) == null ? List.<String>of() : req.getHeaders(HttpHeader.PREFER)) {
+            for (String p : prefer.split(",")) {
+                String name = p.strip().toLowerCase(Locale.ROOT);
+                if (name.equals("odata.track-changes") || name.equals("track-changes")) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * What a delta link stands for: the OData path and the query options except $deltatoken and $skiptoken, or
+     * {@code null} when the result cannot be tracked: $top/$skip (the window would shift), rows without id.
+     */
+    private static String deltaScope(ODataRequest req, UriInfo uriInfo, List<Entity> rows) {
+        if (uriInfo.getTopOption() != null || uriInfo.getSkipOption() != null) return null;
+        for (Entity e : rows) if (e.getId() == null) return null;
+        List<String> kept = new ArrayList<>();
+        String query = req.getRawQueryPath();
+        if (query != null && !query.isEmpty()) {
+            for (String part : query.split("&")) {
+                String name = (part.contains("=") ? part.substring(0, part.indexOf('=')) : part).toLowerCase(Locale.ROOT)
+                        .replace("%24", "$");
+                if (!name.equals("$deltatoken") && !name.equals("$skiptoken") && !part.isEmpty()) kept.add(part);
+            }
+        }
+        return req.getRawODataPath() + (kept.isEmpty() ? "" : "?" + String.join("&", kept));
+    }
+
+    private static String deltaLink(ODataRequest req, String scope, String token) {
+        return req.getRawBaseUri() + scope + (scope.contains("?") ? "&" : "?") + "$deltatoken=" + token;
+    }
+
+    /**
+     * {@code $deltatoken}: the request is evaluated again and compared with the snapshot of the token. Entities
+     * that are new or whose values changed are returned, entities that disappeared (deleted, or no longer matching
+     * the filter) as deleted entities; the response carries the next delta link.
+     */
+    private void writeDelta(ODataRequest req, ODataResponse response, UriInfo uriInfo, Resolved r, List<Entity> current,
+                            Map<String, String> custom, ContentType responseFormat, String scope)
+            throws ODataApplicationException, ODataLibraryException {
+        requireJson(responseFormat);
+        if (scope == null) {
+            throw new ODataApplicationException("Delta links are not available for requests with $top or $skip",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        String owner = request.identity().caller();
+        DeltaTracker.Snapshot before = support.deltaTracker().find(uriInfo.getDeltaTokenOption().getValue(), owner, scope);
+        if (before == null) {
+            throw new ODataApplicationException("The delta link is unknown or has expired; load the feed again "
+                    + "with Prefer: odata.track-changes", HttpStatusCode.GONE.getStatusCode(), LOCALE);
+        }
+        Map<String, Long> now = DeltaTracker.fingerprints(current);
+        org.apache.olingo.commons.api.data.Delta delta = new org.apache.olingo.commons.api.data.Delta();
+        for (Entity e : current) {
+            String id = e.getId().toString();
+            if (!now.get(id).equals(before.rows().get(id))) delta.getEntities().add(e);
+        }
+        // with $filter/$search a missing entity may just no longer match: "changed" (left the set), else "deleted"
+        boolean narrowed = uriInfo.getFilterOption() != null || uriInfo.getSearchOption() != null;
+        for (String id : before.rows().keySet()) {
+            if (now.containsKey(id)) continue;
+            org.apache.olingo.commons.api.data.DeletedEntity gone = new org.apache.olingo.commons.api.data.DeletedEntity();
+            gone.setId(java.net.URI.create(id));
+            gone.setReason(narrowed ? org.apache.olingo.commons.api.data.DeletedEntity.Reason.changed
+                    : org.apache.olingo.commons.api.data.DeletedEntity.Reason.deleted);
+            delta.getDeletedEntities().add(gone);
+        }
+        if (uriInfo.getExpandOption() != null) expand(delta.getEntities(), r.query(), uriInfo.getExpandOption(), custom, 1);
+        String token = support.deltaTracker().register(owner, scope, current);
+        delta.setDeltaLink(java.net.URI.create(deltaLink(req, scope, token)));
+        EdmEntitySet entitySet = r.entitySet();
+        String selectList = odata.createUriHelper()
+                .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
+        // the delta serializer appends /$delta itself
+        ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList).build();
+        EntityCollectionSerializerOptions options = EntityCollectionSerializerOptions.with()
+                .id(req.getRawBaseUri() + "/" + entitySet.getName())
+                .contextURL(contextUrl)
+                .select(uriInfo.getSelectOption())
+                .expand(serializerExpand(uriInfo.getExpandOption(), entitySet.getEntityType()))
+                .build();
+        String maxVersion = req.getHeader("OData-MaxVersion");
+        List<String> versions = maxVersion == null ? List.of("4.0") : List.of(maxVersion.strip());
+        SerializerResult result = odata.createEdmDeltaSerializer(responseFormat, versions)
+                .entityCollection(serviceMetadata, entitySet.getEntityType(), delta, options);
+        response.setHeader(HttpHeader.PREFERENCE_APPLIED, PreferencesApplied.with().trackChanges().build().toValueString());
+        respond(req, response, fixDeletedEntityContext(result.getContent(), entitySet.getName()),
+                responseFormat.toContentTypeString(), r.root());
+    }
+
+    /**
+     * Olingo's 4.0 delta serializer writes {@code "#Set(key)/$deletedEntity"} as context of a deleted entity; the
+     * specification has {@code "#Set/$deletedEntity"} (the key is in {@code id}).
+     */
+    private static java.io.InputStream fixDeletedEntityContext(java.io.InputStream content, String entitySet)
+            throws ODataApplicationException {
+        try (java.io.InputStream in = content) {
+            tools.jackson.databind.json.JsonMapper mapper = tools.jackson.databind.json.JsonMapper.builder().build();
+            tools.jackson.databind.JsonNode body = mapper.readTree(in);
+            tools.jackson.databind.JsonNode value = body.get("value");
+            if (value != null) {
+                for (tools.jackson.databind.JsonNode row : value) {
+                    tools.jackson.databind.JsonNode ctx = row.get("@odata.context");
+                    if (ctx != null && ctx.asString().endsWith("/$deletedEntity")) {
+                        ((tools.jackson.databind.node.ObjectNode) row).put("@odata.context", "#" + entitySet + "/$deletedEntity");
+                    }
+                }
+            }
+            return new ByteArrayInputStream(mapper.writeValueAsBytes(body));
+        } catch (java.io.IOException | tools.jackson.core.JacksonException e) {
+            throw new ODataApplicationException("Cannot write the delta response",
+                    HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode(), LOCALE, e);
         }
     }
 
@@ -755,12 +1035,30 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                         .build());
         List<ODataResponsePart> responses = new ArrayList<>();
         for (BatchRequestPart part : parts) {
+            for (ODataRequest r : part.getRequests()) rewriteBatchRequest(r);
             responses.add(facade.handleBatchRequest(part));
         }
         String responseBoundary = "batch_" + UUID.randomUUID();
         response.setContent(odata.createFixedFormatSerializer().batchResponse(responses, responseBoundary));
         response.setHeader(HttpHeader.CONTENT_TYPE, ContentType.MULTIPART_MIXED + ";boundary=" + responseBoundary);
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+    }
+
+    /**
+     * Batch parts bypass the servlet, so the rewrites of {@link ODataServlet#rewrite} (key segments, filter
+     * segments, $compute, case(), …) are applied here to each part's path and query.
+     */
+    private void rewriteBatchRequest(ODataRequest r) {
+        String path = r.getRawODataPath();
+        String query = r.getRawQueryPath();
+        ODataServlet.Rewritten rw = ODataServlet.rewrite(r.getMethod() == null ? null : r.getMethod().name(), path,
+                query == null || query.isEmpty() ? null : query, serviceMetadata.getEdm());
+        String newQuery = rw.query() == null ? "" : rw.query();
+        if (rw.path().equals(path) && newQuery.equals(query == null ? "" : query)) return;
+        r.setRawODataPath(rw.path());
+        r.setRawQueryPath(newQuery);
+        String base = r.getRawBaseUri() == null ? "" : r.getRawBaseUri();
+        r.setRawRequestUri(base + rw.path() + (newQuery.isEmpty() ? "" : "?" + newQuery));
     }
 
     @Override
@@ -1415,7 +1713,13 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
             @Override
             public List<Expression[]> caseBranches(String name, Entity entity) throws ODataApplicationException {
-                return QueryEntityCollectionProcessor.this.caseBranches(name, entity, custom);
+                return QueryEntityCollectionProcessor.this.caseBranches(name, entity, Map.of(), custom);
+            }
+
+            @Override
+            public List<Expression[]> caseBranches(String name, Entity entity, Map<String, Entity> lambdaVariables)
+                    throws ODataApplicationException {
+                return QueryEntityCollectionProcessor.this.caseBranches(name, entity, lambdaVariables, custom);
             }
 
             @Override
@@ -1449,16 +1753,25 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     /** Parsed case branches per placeholder and row shape (type plus property names). */
     private final Map<String, List<Expression[]>> caseCache = new HashMap<>();
 
-    private List<Expression[]> caseBranches(String name, Entity entity, Map<String, String> custom)
-            throws ODataApplicationException {
+    private List<Expression[]> caseBranches(String name, Entity entity, Map<String, Entity> lambdaVariables,
+                                            Map<String, String> custom) throws ODataApplicationException {
         String body = custom.get(ExpressionRewriter.CASE_OPTION + name.substring(ExpressionRewriter.CASE_ALIAS.length()));
         if (body == null) return null;
         StringBuilder shape = new StringBuilder(name).append('|').append(entity.getType());
         for (Property p : entity.getProperties()) shape.append(',').append(p.getName());
         for (Link l : entity.getNavigationLinks()) shape.append(",/").append(l.getTitle());
+        java.util.TreeMap<String, Entity> variables = new java.util.TreeMap<>(lambdaVariables);
+        for (Map.Entry<String, Entity> v : variables.entrySet()) {
+            shape.append('|').append(v.getKey()).append(':').append(v.getValue().getType());
+            for (Property p : v.getValue().getProperties()) shape.append(',').append(p.getName());
+        }
         List<Expression[]> cached = caseCache.get(shape.toString());
         if (cached != null) return cached;
         org.apache.olingo.commons.api.edm.EdmStructuredType type = rowType(List.of(entity));
+        // lambda variables in scope become single-valued navigations of the row type (resolved again on evaluation)
+        for (Map.Entry<String, Entity> v : variables.entrySet()) {
+            type = RowType.withNavigation(type, v.getKey(), (EdmEntityType) rowType(List.of(v.getValue())), false);
+        }
         List<Expression[]> branches = new ArrayList<>();
         try {
             for (String[] b : ExpressionRewriter.caseBranches(body)) {
@@ -1756,11 +2069,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         return CacheKey.canonical(masked);
     }
 
-    /** System query options Olingo parses but JdbcOdata does not implement: 501 instead of silently ignoring them. */
+    /** $deltatoken outside entity collections (single entities, $count, properties): 400 instead of ignoring it. */
     private static void rejectUnsupportedOptions(UriInfo uriInfo) throws ODataApplicationException {
         if (uriInfo.getDeltaTokenOption() != null) {
-            throw new ODataApplicationException("$deltatoken is not supported: the service does not track changes; "
-                    + "load the feed again", HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
+            throw new ODataApplicationException("$deltatoken applies to entity collections only",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
         }
     }
 

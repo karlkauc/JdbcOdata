@@ -132,10 +132,11 @@ class ResponseDetailsTest extends DemoProfileTest {
     }
 
     @Test
-    void deltaTokenIsRejected() throws Exception {
+    void unknownDeltaTokenIsGone() throws Exception {
         HttpResponse<String> r = call("Sales?$deltatoken=abc");
-        assertThat(r.statusCode()).isEqualTo(501);
-        assertThat(r.body()).contains("$deltatoken");
+        assertThat(r.statusCode()).isEqualTo(410);
+        assertThat(r.body()).contains("delta link");
+        assertThat(call("Sales(1)?$deltatoken=abc").statusCode()).isEqualTo(400);
     }
 
     @Test

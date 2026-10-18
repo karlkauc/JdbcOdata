@@ -61,9 +61,14 @@ final class SqlFilterTranslator {
     private final EvaluationContext context;
 
     SqlFilterTranslator(QueryDefinition query, SqlDialect dialect, EvaluationContext context) {
+        this(query.columns(), dialect, context);
+    }
+
+    /** Over arbitrary result columns, e.g. those of a pushed aggregation ({@link Aggregation#columns()}). */
+    SqlFilterTranslator(List<QueryColumn> resultColumns, SqlDialect dialect, EvaluationContext context) {
         this.dialect = dialect;
         this.context = context;
-        for (QueryColumn c : query.columns()) {
+        for (QueryColumn c : resultColumns) {
             if (c.visible()) columns.put(c.propertyName(), c);
         }
     }
@@ -253,30 +258,49 @@ final class SqlFilterTranslator {
     // --- $search -------------------------------------------------------------------------------------------------
 
     /**
-     * {@code $search} as {@code LOWER(col) LIKE '%term%'} over the string columns. In memory a term also matches the
-     * text of numbers, dates, times and booleans; the translation is only exact when no term could match such a
-     * text (only digits, '.', '-', ':', 't', 'z', or part of "true"/"false"), or when there are no such columns.
+     * {@code $search} as {@code LOWER(col) LIKE '%term%'} over the string columns, only when that is exact: no term
+     * could match the text of a number, date, time or boolean (in memory, terms match those too) and LIKE behaves
+     * like the in-memory comparison on this database. Otherwise {@link Untranslatable}; see {@link #searchFilter}.
      */
     Sql search(org.apache.olingo.server.api.uri.queryoption.search.SearchExpression e) throws Untranslatable {
-        if (!dialect.supportsLike()) throw new Untranslatable("LIKE is case- and accent-insensitive on this database");
+        boolean[] exact = {true};
+        Sql sql = searchBound(e, true, exact);
+        if (!exact[0]) throw new Untranslatable("search term may match a number, date or boolean");
+        return sql;
+    }
+
+    /** A $search condition and whether it is exact or only a pre-filter (a superset of the matches). */
+    record SearchSql(Sql sql, boolean exact) {
+    }
+
+    /**
+     * {@code $search} as a condition that keeps at least every matching row: exact where possible, otherwise a
+     * superset that the in-memory search then narrows down. For a term that may match non-string values, the
+     * columns whose text could contain it are kept ({@code IS NOT NULL}, booleans by value); under {@code NOT} the
+     * term needs the opposite, a subset, which is the string match alone.
+     */
+    SearchSql searchFilter(org.apache.olingo.server.api.uri.queryoption.search.SearchExpression e) throws Untranslatable {
+        boolean[] exact = {true};
+        Sql sql = searchBound(e, true, exact);
+        return new SearchSql(sql, exact[0]);
+    }
+
+    /** @param upper true: superset of the matches, false: subset; {@code exact[0]} is cleared when it is neither */
+    private Sql searchBound(org.apache.olingo.server.api.uri.queryoption.search.SearchExpression e, boolean upper,
+                            boolean[] exact) throws Untranslatable {
         if (e instanceof org.apache.olingo.server.api.uri.queryoption.search.SearchBinary b) {
-            Sql l = search(b.getLeftOperand());
-            Sql r = search(b.getRightOperand());
+            Sql l = searchBound(b.getLeftOperand(), upper, exact);
+            Sql r = searchBound(b.getRightOperand(), upper, exact);
             boolean or = b.getOperator() == org.apache.olingo.server.api.uri.queryoption.search.SearchBinaryOperatorKind.OR;
             return join("(" + l.text() + (or ? " OR " : " AND ") + r.text() + ")", l, r);
         }
         if (e instanceof org.apache.olingo.server.api.uri.queryoption.search.SearchUnary u) {
-            Sql inner = search(u.getOperand());
+            Sql inner = searchBound(u.getOperand(), !upper, exact);
             return new Sql("(CASE WHEN " + inner.text() + " THEN 0 ELSE 1 END = 1)", inner.binds());
         }
         if (e instanceof org.apache.olingo.server.api.uri.queryoption.search.SearchTerm t) {
             String needle = unquoteSearch(t.getSearchTerm()).toLowerCase(java.util.Locale.ROOT);
             if (needle.isEmpty()) return Sql.of("1=1");
-            boolean otherTypes = columns.values().stream().anyMatch(c -> !"Edm.String".equals(c.edmType()));
-            if (otherTypes && (needle.matches("[0-9.:\\-tz]+") || "true".contains(needle) || "false".contains(needle))) {
-                throw new Untranslatable("search term may match a number, date or boolean");
-            }
-            if (columns.values().stream().anyMatch(c -> "Edm.Binary".equals(c.edmType()))) throw new Untranslatable("binary column");
             List<String> parts = new ArrayList<>();
             List<Object> binds = new ArrayList<>();
             String pattern = "%" + needle.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
@@ -285,10 +309,50 @@ final class SqlFilterTranslator {
                 parts.add("LOWER(jdbcodata_q." + dialect.quote(c.name()) + ") LIKE ? ESCAPE '!'");
                 binds.add(pattern);
             }
-            if (parts.isEmpty()) return Sql.of("1=0");
+            // LIKE that ignores case and accents (MySQL) finds more than the in-memory search: a superset only
+            boolean likeExact = dialect.supportsLike();
+            List<String> others = new ArrayList<>();
+            List<Object> otherBinds = new ArrayList<>();
+            for (QueryColumn c : columns.values()) {
+                if ("Edm.String".equals(c.edmType())) continue;
+                String col = "jdbcodata_q." + dialect.quote(c.name());
+                if ("Edm.Boolean".equals(c.edmType())) {
+                    boolean t1 = "true".contains(needle);
+                    boolean f1 = "false".contains(needle);
+                    if (t1 && f1) others.add(col + " IS NOT NULL");
+                    else if (t1 || f1) {
+                        others.add(col + " = ?");
+                        otherBinds.add(t1);
+                    }
+                } else if (couldMatch(c.edmType(), needle)) {
+                    others.add(col + " IS NOT NULL");
+                }
+            }
+            if (!likeExact || !others.isEmpty()) exact[0] = false;
+            if (upper) {
+                List<String> all = new ArrayList<>(parts);
+                all.addAll(others);
+                binds.addAll(otherBinds);
+                if (all.isEmpty()) return Sql.of("1=0");
+                return new Sql("(CASE WHEN (" + String.join(" OR ", all) + ") THEN 1 ELSE 0 END = 1)", binds);
+            }
+            if (!likeExact || parts.isEmpty()) return Sql.of("1=0");
             return new Sql("(CASE WHEN (" + String.join(" OR ", parts) + ") THEN 1 ELSE 0 END = 1)", binds);
         }
         throw new Untranslatable("search expression");
+    }
+
+    /** Could the in-memory text of a value of this type ({@link SearchEvaluator}) contain {@code needle}? */
+    private static boolean couldMatch(String edmType, String needle) {
+        return switch (edmType == null ? "" : edmType) {
+            case "Edm.Byte", "Edm.SByte", "Edm.Int16", "Edm.Int32", "Edm.Int64", "Edm.Decimal", "Edm.Double", "Edm.Single" ->
+                    needle.matches("[0-9.\\-]+");
+            case "Edm.Date" -> needle.matches("[0-9\\-]+");
+            case "Edm.TimeOfDay" -> needle.matches("[0-9:.]+");
+            case "Edm.DateTimeOffset" -> needle.matches("[0-9.:\\-tz]+");
+            case "Edm.Guid" -> needle.matches("[0-9a-f\\-]+");
+            default -> true; // unknown text form: keep the row
+        };
     }
 
     private static String unquoteSearch(String term) {
@@ -308,6 +372,25 @@ final class SqlFilterTranslator {
 
     /** SELECT list, GROUP BY and how to read the result back. */
     record Aggregation(String select, String groupBy, List<Slot> slots) {
+
+        /**
+         * The result columns for translating later steps (filter, orderby) over the aggregated rows. Averages are
+         * left out: they are divided in Java, so a comparison in SQL could round differently.
+         */
+        List<QueryColumn> columns() {
+            List<QueryColumn> out = new ArrayList<>();
+            int i = 0;
+            for (Slot s : slots) {
+                if (s.edmType() == null || s.kind().equals("average")) continue;
+                out.add(new QueryColumn(++i, s.label(), s.name(), 0, null, s.edmType(), null, null, true, false, true));
+            }
+            return out;
+        }
+
+        /** Names of the grouping properties. */
+        List<String> groupNames() {
+            return slots.stream().filter(s -> s.kind().equals("group")).map(Slot::name).toList();
+        }
     }
 
     private static final java.util.Set<String> GROUPABLE = java.util.Set.of("Edm.String", "Edm.Int16", "Edm.Int32",
@@ -352,7 +435,7 @@ final class SqlFilterTranslator {
                     throw new Untranslatable("aggregate without method");
                 }
                 select.add("COUNT(*) AS " + dialect.quote(label));
-                slots.add(new Slot("count", agg.getAlias(), label, null));
+                slots.add(new Slot("count", agg.getAlias(), label, "Edm.Int64"));
                 continue;
             }
             QueryColumn c = column(path);
@@ -361,7 +444,7 @@ final class SqlFilterTranslator {
                 case SUM -> {
                     if (!SUMMABLE.contains(c.edmType())) throw new Untranslatable("sum of " + c.edmType());
                     select.add("SUM(" + col + ") AS " + dialect.quote(label));
-                    slots.add(new Slot("sum", agg.getAlias(), label, null));
+                    slots.add(new Slot("sum", agg.getAlias(), label, "Edm.Decimal"));
                 }
                 case AVERAGE -> {
                     if (!SUMMABLE.contains(c.edmType())) throw new Untranslatable("average of " + c.edmType());
@@ -374,13 +457,13 @@ final class SqlFilterTranslator {
                         throw new Untranslatable(agg.getStandardMethod() + " of " + c.edmType());
                     }
                     select.add(agg.getStandardMethod().name() + "(" + col + ") AS " + dialect.quote(label));
-                    slots.add(new Slot("minmax", agg.getAlias(), label, null));
+                    slots.add(new Slot("minmax", agg.getAlias(), label, c.edmType()));
                 }
                 case COUNT_DISTINCT -> {
                     if (!GROUPABLE.contains(c.edmType())) throw new Untranslatable("countdistinct of " + c.edmType());
                     if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) throw new Untranslatable("case-insensitive distinct");
                     select.add("COUNT(DISTINCT " + col + ") AS " + dialect.quote(label));
-                    slots.add(new Slot("count", agg.getAlias(), label, null));
+                    slots.add(new Slot("count", agg.getAlias(), label, "Edm.Int64"));
                 }
                 default -> throw new Untranslatable("method " + agg.getStandardMethod());
             }

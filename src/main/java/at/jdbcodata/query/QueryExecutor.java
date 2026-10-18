@@ -92,7 +92,7 @@ public class QueryExecutor {
         NamedParameterSql parsed = NamedParameterSql.parse(query.sqlText());
         List<ParameterBinder.BoundValue> bound = ParameterBinder.order(parsed, query, params);
         String sql = wrapper == null ? parsed.jdbcSql() : countOnly ? wrapper.count(parsed.jdbcSql()) : wrapper.rows(parsed.jdbcSql());
-        List<Object> extra = wrapper == null ? List.of() : countOnly ? wrapper.whereBinds() : wrapper.rowBinds();
+        List<Object> extra = wrapper == null ? List.of() : countOnly ? wrapper.countBinds() : wrapper.rowBinds();
         long start = System.nanoTime();
         try (ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
              Connection c = pools.connect(ds, identity.dbUsername(), identity.dbPassword())) {

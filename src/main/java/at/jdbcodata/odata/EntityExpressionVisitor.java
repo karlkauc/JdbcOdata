@@ -124,6 +124,12 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                 if (last) throw unsupported("Comparing whole entities");
                 continue;
             }
+            if (part instanceof UriResourceNavigation nav && i == 0 && lambdaVariables.containsKey(nav.getProperty().getName())) {
+                // case() branches inside a lambda: the variable was parsed as a navigation of the row type
+                current = lambdaVariables.get(nav.getProperty().getName());
+                if (last) throw unsupported("Comparing whole entities");
+                continue;
+            }
             if (part instanceof UriResourceIt && i == 0) {
                 // $it: the entity the expression is evaluated for (also inside lambdas).
                 if (last) throw unsupported("Comparing whole entities");
@@ -495,7 +501,7 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
     public Object visitAlias(String aliasName) throws ExpressionVisitException, ODataApplicationException {
         String bare = aliasName.startsWith("@") ? aliasName : "@" + aliasName;
         if (bare.startsWith(ExpressionRewriter.CASE_ALIAS) && navigation != null) {
-            List<Expression[]> branches = navigation.caseBranches(bare, entity);
+            List<Expression[]> branches = navigation.caseBranches(bare, entity, lambdaVariables);
             if (branches != null) {
                 // case(c1:v1,…): the value of the first true condition, null when none is true
                 for (Expression[] b : branches) {

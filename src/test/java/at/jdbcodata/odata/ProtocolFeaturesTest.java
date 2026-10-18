@@ -163,6 +163,40 @@ class ProtocolFeaturesTest extends DemoProfileTest {
         assertThat(r.body()).contains("405");
     }
 
+    @Test
+    void batchPartsGetTheSameRewritesAsSingleRequests() throws Exception {
+        String body = String.join("\r\n",
+                "--batch_1",
+                "Content-Type: application/http",
+                "Content-Transfer-Encoding: binary",
+                "",
+                "GET Sales/2 HTTP/1.1",
+                "Accept: application/json",
+                "",
+                "",
+                "--batch_1",
+                "Content-Type: application/http",
+                "Content-Transfer-Encoding: binary",
+                "",
+                "GET Sales/$filter(RowId%20le%203)/$count HTTP/1.1",
+                "",
+                "",
+                "--batch_1",
+                "Content-Type: application/http",
+                "Content-Transfer-Encoding: binary",
+                "",
+                "GET Sales?$compute=RowId%20mul%2010%20as%20Zehn&$select=RowId,Zehn&$orderby=RowId&$top=1 HTTP/1.1",
+                "Accept: application/json",
+                "",
+                "",
+                "--batch_1--",
+                "");
+        HttpResponse<String> r = sendRaw(body);
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+        assertThat(r.body()).doesNotContain("HTTP/1.1 4").doesNotContain("HTTP/1.1 5");
+        assertThat(r.body()).contains("\"RowId\":2").contains("\r\n3").contains("\"Zehn\":10");
+    }
+
     private HttpResponse<String> sendRaw(String body) throws Exception {
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/odata/$batch"))
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
