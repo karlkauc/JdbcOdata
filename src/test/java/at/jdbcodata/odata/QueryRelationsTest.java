@@ -90,7 +90,7 @@ class QueryRelationsTest extends DemoProfileTest {
         // The navigation path resolves to the related customer.
         HttpResponse<String> nav = get("/odata/Sales(1)/Customer", "demo", "demo");
         assertThat(nav.statusCode()).isEqualTo(200);
-        assertThat(nav.body()).contains("\"@odata.context\":\"$metadata#SalesCustomers/$entity\"");
+        assertThat(nav.body()).containsPattern("\"@odata.context\":\"http[^\"]*/odata/\\$metadata#SalesCustomers/\\$entity\"");
     }
 
     @Test

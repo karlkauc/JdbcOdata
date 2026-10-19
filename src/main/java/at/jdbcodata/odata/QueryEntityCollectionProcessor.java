@@ -187,7 +187,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
-        ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList).build();
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(entitySet).selectList(selectList).build();
         EntityCollectionSerializerOptions options = EntityCollectionSerializerOptions.with()
                 .id(req.getRawBaseUri() + "/" + entitySet.getName())
                 .contextURL(contextUrl)
@@ -264,7 +264,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         applySelectOptions(page.rows(), custom);
         java.util.Set<String> select = DynamicResultWriter.selected(uriInfo.getSelectOption());
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
-        String context = "$metadata#" + r.entitySet().getName() + "("
+        String context = serviceRoot(req) + "$metadata#" + r.entitySet().getName() + "("
                 + DynamicResultWriter.contextSelectList(page.rows(), select, uriInfo.getExpandOption()) + ")";
         DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
         byte[] body = DynamicResultWriter.collection(context, page.rows(), count ? filtered.getCount() : null,
@@ -370,7 +370,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         applySelectOptions(page.rows(), custom);
         java.util.Set<String> select = DynamicResultWriter.selected(x.select());
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
-        String context = "$metadata#" + r.entitySet().getName() + "("
+        String context = serviceRoot(req) + "$metadata#" + r.entitySet().getName() + "("
                 + DynamicResultWriter.contextSelectList(page.rows(), select, x.expand()) + ")";
         DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
         byte[] body = DynamicResultWriter.collection(context, page.rows(), count ? x.filtered().getCount() : null,
@@ -1100,7 +1100,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
         // the delta serializer appends /$delta itself
-        ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList).build();
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(entitySet).selectList(selectList).build();
         EntityCollectionSerializerOptions options = EntityCollectionSerializerOptions.with()
                 .id(req.getRawBaseUri() + "/" + entitySet.getName())
                 .contextURL(contextUrl)
@@ -1245,7 +1245,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (hasNestedApply(uriInfo.getExpandOption())) {
             requireJson(responseFormat);
             java.util.Set<String> select = DynamicResultWriter.selected(uriInfo.getSelectOption());
-            String context = "$metadata#" + entitySet.getName() + "("
+            String context = serviceRoot(req) + "$metadata#" + entitySet.getName() + "("
                     + DynamicResultWriter.contextSelectList(List.of(r.single()), select, uriInfo.getExpandOption()) + ")/$entity";
             DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
             byte[] body = DynamicResultWriter.entity(context, r.single(), select, uriInfo.getExpandOption(), format);
@@ -1254,7 +1254,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
-        ContextURL contextUrl = ContextURL.with().entitySet(entitySet).selectList(selectList)
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(entitySet).selectList(selectList)
                 .suffix(ContextURL.Suffix.ENTITY).build();
         EntitySerializerOptions options = EntitySerializerOptions.with().contextURL(contextUrl)
                 .select(uriInfo.getSelectOption()).expand(serializerExpand(uriInfo.getExpandOption(), entitySet.getEntityType()))
@@ -1290,7 +1290,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (uriInfo.getExpandOption() != null) expand(List.of(entity), r.query(), uriInfo.getExpandOption(), custom, 1);
         applySelectOptions(List.of(entity), custom);
         java.util.Set<String> select = DynamicResultWriter.selected(computed.getSelectOption());
-        String context = "$metadata#" + entitySet.getName() + "("
+        String context = serviceRoot(req) + "$metadata#" + entitySet.getName() + "("
                 + DynamicResultWriter.contextSelectList(List.of(entity), select, uriInfo.getExpandOption()) + ")/$entity";
         DynamicResultWriter.Format format = DynamicResultWriter.Format.of(responseFormat);
         byte[] body = DynamicResultWriter.entity(context, entity, select, uriInfo.getExpandOption(), format);
@@ -1303,7 +1303,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         PropertyRead p = readProperty(uriInfo, req, response);
         if (p == null) return;
-        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(p.entitySet()).keyPath(p.keyPath())
                 .navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).primitive(serviceMetadata,
                 (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
@@ -1338,7 +1338,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         PropertyRead p = readCollectionProperty(uriInfo, req, response);
         if (p == null) return;
-        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(p.entitySet()).keyPath(p.keyPath())
                 .navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).primitiveCollection(serviceMetadata,
                 (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
@@ -1352,7 +1352,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         PropertyRead p = readCollectionProperty(uriInfo, req, response);
         if (p == null) return;
-        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(p.entitySet()).keyPath(p.keyPath())
                 .navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).complexCollection(serviceMetadata,
                 (org.apache.olingo.commons.api.edm.EdmComplexType) p.edmProperty().getType(), p.property(),
@@ -1424,7 +1424,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throws ODataApplicationException, ODataLibraryException {
         PropertyRead p = walkProperty(uriInfo, uriInfo.getUriResourceParts(), req, response);
         if (p == null) return;
-        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath()).navOrPropertyPath(p.path()).build();
+        ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(p.entitySet()).keyPath(p.keyPath()).navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).complex(serviceMetadata,
                 (org.apache.olingo.commons.api.edm.EdmComplexType) p.edmProperty().getType(), p.property(),
                 org.apache.olingo.server.api.serializer.ComplexSerializerOptions.with().contextURL(contextUrl)
@@ -1669,7 +1669,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         Page page = page(req, uriInfo, filtered.getEntities());
         applyPreference(response, page);
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
-        byte[] body = DynamicResultWriter.collection("$metadata#Collection(Edm.EntityType)", page.rows(),
+        byte[] body = DynamicResultWriter.collection(serviceRoot(req) + "$metadata#Collection(Edm.EntityType)", page.rows(),
                 count ? filtered.getCount() : null, page.nextLink(), java.util.Set.of(), null, e -> "#" + e.getType());
         respond(req, response, new ByteArrayInputStream(body), "application/json;odata.metadata=minimal", null);
     }
@@ -1730,7 +1730,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         Page page = page(req, uriInfo, result.getEntities());
         applyPreference(response, page);
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
-        byte[] body = DynamicResultWriter.crossjoin(sets, page.rows(), count ? result.getCount() : null, page.nextLink(),
+        byte[] body = DynamicResultWriter.crossjoin(serviceRoot(req) + "$metadata#Collection(Edm.ComplexType)", sets, page.rows(), count ? result.getCount() : null, page.nextLink(),
                 DynamicResultWriter.selected(uriInfo.getSelectOption()), uriInfo.getExpandOption());
         respond(req, response, new ByteArrayInputStream(body), "application/json;odata.metadata=minimal", null);
     }
@@ -1779,7 +1779,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
     }
 
-    /** Absolute service root, so $ref context URLs do not depend on the depth of the request path. */
+    /**
+     * Absolute service root for context URLs: Power Query rejects a relative top-level context URL
+     * ("should be an absolute Uri"), and $ref context URLs must not depend on the depth of the request path.
+     */
     private static java.net.URI serviceRoot(ODataRequest req) {
         String base = req.getRawBaseUri();
         return java.net.URI.create(base.endsWith("/") ? base : base + "/");

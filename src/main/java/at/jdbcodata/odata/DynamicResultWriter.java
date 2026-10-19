@@ -115,13 +115,13 @@ final class DynamicResultWriter {
      * {@code $crossjoin(A,B)}: one object per combination; each entity set appears as
      * {@code "A@odata.navigationLink"} or, when listed in {@code $expand}, inline (with nested {@code $select}).
      */
-    static byte[] crossjoin(List<String> sets, List<Entity> rows, Integer count, String nextLink, Set<String> select,
+    static byte[] crossjoin(String context, List<String> sets, List<Entity> rows, Integer count, String nextLink, Set<String> select,
                             ExpandOption expand) {
         FORMAT.set(Format.MINIMAL);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (JsonGenerator g = JSON.createGenerator(out)) {
             g.writeStartObject();
-            g.writeStringProperty("@odata.context", "$metadata#Collection(Edm.ComplexType)");
+            g.writeStringProperty("@odata.context", context);
             if (count != null) g.writeNumberProperty("@odata.count", count);
             g.writeName("value");
             g.writeStartArray();

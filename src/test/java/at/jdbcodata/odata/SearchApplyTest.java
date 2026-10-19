@@ -91,7 +91,7 @@ class SearchApplyTest extends DemoProfileTest {
     void aggregateWholeSet() throws Exception {
         JsonNode r = odata("/odata/Sales?$apply=" + enc("aggregate(amount with sum as Total,amount with max as Max,"
                 + "amount with average as Avg,customer with countdistinct as Customers,$count as N)"));
-        assertThat(r.get("@odata.context").asString()).isEqualTo("$metadata#Sales(Total,Max,Avg,Customers,N)");
+        assertThat(r.get("@odata.context").asString()).endsWith("/odata/$metadata#Sales(Total,Max,Avg,Customers,N)");
         JsonNode agg = r.get("value").get(0);
         BigDecimal sum = rows.stream().map(x -> x.get("amount").decimalValue()).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal max = rows.stream().map(x -> x.get("amount").decimalValue()).max(Comparator.naturalOrder()).orElseThrow();

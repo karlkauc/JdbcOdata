@@ -77,7 +77,7 @@ class ExpandTest extends DemoProfileTest {
     @Test
     void toOneExpandInlinesTheMatchingEntityOrNull() throws Exception {
         JsonNode body = odata("/odata/Sales?$expand=Customer&$select=RowId,customer&$orderby=RowId");
-        assertThat(body.get("@odata.context").asString()).isEqualTo("$metadata#Sales(RowId,customer,Customer())");
+        assertThat(body.get("@odata.context").asString()).endsWith("/odata/$metadata#Sales(RowId,customer,Customer())");
         JsonNode rows = body.get("value");
         assertThat(rows.size()).isEqualTo(24);
         for (JsonNode row : rows) {
@@ -209,7 +209,7 @@ class ExpandTest extends DemoProfileTest {
     @Test
     void entityByKeyNavigationPathsAndProperties() throws Exception {
         JsonNode one = odata("/odata/Sales(1)");
-        assertThat(one.get("@odata.context").asString()).isEqualTo("$metadata#Sales/$entity");
+        assertThat(one.get("@odata.context").asString()).endsWith("/odata/$metadata#Sales/$entity");
         assertThat(one.get("RowId").asInt()).isEqualTo(1);
         assertThat(get("/odata/Sales(9999)", "demo", "demo").statusCode()).isEqualTo(404);
 
@@ -226,7 +226,7 @@ class ExpandTest extends DemoProfileTest {
             }
         }
         JsonNode c = odata("/odata/Sales(" + withCustomer + ")/Customer");
-        assertThat(c.get("@odata.context").asString()).isEqualTo("$metadata#ExpCustomers/$entity");
+        assertThat(c.get("@odata.context").asString()).endsWith("/odata/$metadata#ExpCustomers/$entity");
         assertThat(c.get("customer").asString()).isEqualTo(customer);
         assertThat(get("/odata/Sales(" + alphaRow + ")/Customer", "demo", "demo").statusCode()).as("no related row").isEqualTo(204);
 
@@ -234,7 +234,7 @@ class ExpandTest extends DemoProfileTest {
         int expected = 0;
         for (JsonNode r : rows.get("value")) if (customer.equals(r.get("customer").asString())) expected++;
         JsonNode sales = odata("/odata/ExpCustomers" + key + "/Sales?$count=true&$top=1&$orderby=amount%20desc");
-        assertThat(sales.get("@odata.context").asString()).startsWith("$metadata#Sales");
+        assertThat(sales.get("@odata.context").asString()).contains("/odata/$metadata#Sales");
         assertThat(sales.get("@odata.count").asInt()).isEqualTo(expected);
         assertThat(sales.get("value").size()).isEqualTo(1);
         assertThat(get("/odata/ExpCustomers" + key + "/Sales/$count", "demo", "demo").body()).isEqualTo(String.valueOf(expected));

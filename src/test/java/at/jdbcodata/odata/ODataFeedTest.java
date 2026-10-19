@@ -40,7 +40,8 @@ class ODataFeedTest extends DemoProfileTest {
                 "X-Forwarded-Host", "odata.example.org", "X-Forwarded-Proto", "https");
         assertThat(rows.statusCode()).isEqualTo(200);
         JsonNode body = json.readTree(rows.body());
-        assertThat(body.get("@odata.context").asString()).isEqualTo("$metadata#Sales");
+        // Power Query rejects a relative top-level context URL ("should be an absolute Uri").
+        assertThat(body.get("@odata.context").asString()).startsWith("http").endsWith("/odata/$metadata#Sales");
         assertThat(body.get("value").size()).isEqualTo(1);
     }
 
