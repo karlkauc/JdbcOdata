@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Error · JdbcOdata</title>
+  <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body class="login-page">
+<main class="login-box">
+  <div class="brand">
+    <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h8"/></svg></span>
+    <span>JdbcOdata<small>OData feeds for Excel and Power BI</small></span>
+  </div>
+  <h1 th:text="${status != null} ? 'Error ' + ${status} : 'Error'">Error</h1>
+  <p class="muted" th:text="${error}">Something went wrong.</p>
+  <p class="muted">If this keeps happening, check the service log for details.</p>
+  <p><a class="button" th:href="@{/admin}">Back to the overview</a></p>
+</main>
+</body>
+</html>

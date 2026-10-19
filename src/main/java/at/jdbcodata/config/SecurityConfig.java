@@ -56,13 +56,15 @@ public class SecurityConfig {
     SecurityFilterChain uiChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error",
-                                "/webjars/**", "/css/**", "/js/**").permitAll()
+                                "/webjars/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
                         .requestMatchers(HttpMethod.GET, "/admin/**", "/", "/actuator/**").hasAnyRole("ADMIN", "VIEWER")
                         .requestMatchers("/admin/stats/**").hasAnyRole("ADMIN", "VIEWER")
                         .requestMatchers("/logout").authenticated()
                         .anyRequest().hasRole("ADMIN"))
                 .formLogin(f -> f.loginPage("/login").defaultSuccessUrl("/admin", false).permitAll())
                 .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout"))
+                // a form from an expired session (restart, timeout) leads back to the login instead of a bare 403
+                .exceptionHandling(e -> e.accessDeniedHandler(new ExpiredFormHandler()))
                 .httpBasic(Customizer.withDefaults());
         return http.build();
     }

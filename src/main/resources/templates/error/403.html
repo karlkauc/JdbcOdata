@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Access denied · JdbcOdata</title>
+  <link rel="stylesheet" th:href="@{/css/admin.css}">
+</head>
+<body class="login-page">
+<main class="login-box">
+  <div class="brand">
+    <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h8"/></svg></span>
+    <span>JdbcOdata<small>OData feeds for Excel and Power BI</small></span>
+  </div>
+  <h1>Access denied</h1>
+  <p class="muted">Your account may not perform this action. Viewer accounts can only read; changes need an admin account.</p>
+  <p><a class="button" th:href="@{/admin}">Back to the overview</a> <a class="button ghost" th:href="@{/login}">Sign in with another account</a></p>
+</main>
+</body>
+</html>
