@@ -20,6 +20,9 @@ stehen hier im Original, z. B. „Datasources → New datasource“.
   globale Suche (**Ctrl+K** bzw. **⌘K**; Queries, Datenquellen, Service-User, Accounts und Seiten, Auswahl mit
   Pfeiltasten und Enter) und das Benutzermenü mit „Sign out“. `jdbcodata.ui.environment` (z. B. `DEV`, `TEST`,
   `PROD`) blendet ein Umgebungs-Badge ein; `PROD` erscheint rot, `TEST`/`STAGING` gelb.
+- **Dark Mode:** Die Oberfläche folgt dem hellen oder dunklen Modus des Betriebssystems. Das Mond-/Sonnen-Symbol in
+  der Kopfzeile schaltet um; im Benutzermenü lässt sich „System“, „Light“ oder „Dark“ fest wählen. Die Wahl gilt
+  pro Browser (localStorage).
 - **Listen:** Die Query-Liste hat eine Suche (Name, Beschreibung, Datenquelle, SQL), Filter für Datenquelle,
   Modus, Status, Snapshot und Nutzung, die Aufrufe der letzten 14 Tage als Mini-Balken, den letzten Aufruf,
   Zeilenaktionen (Feed-URL kopieren, Ausführungen ansehen) und blättert ab 25 Einträgen. Datenquellen,

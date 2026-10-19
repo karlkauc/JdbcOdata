@@ -2,6 +2,37 @@
   document.documentElement.classList.add('js');
   var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
+  // ---------- Theme: "system" (no data-theme, follows the OS), "light" or "dark"; kept per browser ----------
+  var THEME_KEY = 'jdbcodata-theme';
+  var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  var themeListeners = [];
+  function storedTheme() { try { return localStorage.getItem(THEME_KEY) || 'system'; } catch (e) { return 'system'; } }
+  function isDark() {
+    var attr = document.documentElement.getAttribute('data-theme');
+    return attr ? attr === 'dark' : !!(darkQuery && darkQuery.matches);
+  }
+  function setTheme(choice) {
+    try { if (choice === 'system') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, choice); } catch (e) { /* not persisted */ }
+    if (choice === 'system') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', choice);
+    syncTheme();
+  }
+  function syncTheme() {
+    var choice = storedTheme();
+    document.querySelectorAll('[data-theme-choice]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-theme-choice') === choice);
+      b.setAttribute('aria-pressed', b.getAttribute('data-theme-choice') === choice);
+    });
+    themeListeners.forEach(function (fn) { fn(isDark()); });
+  }
+  document.addEventListener('click', function (e) {
+    var choice = e.target.closest('[data-theme-choice]');
+    if (choice) { setTheme(choice.getAttribute('data-theme-choice')); return; }
+    if (e.target.closest('[data-theme-toggle]')) setTheme(isDark() ? 'light' : 'dark');
+  });
+  if (darkQuery && darkQuery.addEventListener) darkQuery.addEventListener('change', syncTheme);
+  syncTheme();
+
   // ---------- Toasts ----------
   var CHECK_ICON = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
   var ALERT_ICON = '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20zM12 10v4M12 17.5v.5"/></svg>';
@@ -120,7 +151,8 @@
   var cm = null;
   var sqlArea = document.getElementById('sql');
   if (sqlArea && window.CodeMirror) {
-    cm = CodeMirror.fromTextArea(sqlArea, { mode: 'text/x-sql', theme: 'eclipse', lineNumbers: true, viewportMargin: Infinity });
+    cm = CodeMirror.fromTextArea(sqlArea, { mode: 'text/x-sql', theme: isDark() ? 'material-darker' : 'eclipse', lineNumbers: true, viewportMargin: Infinity });
+    themeListeners.push(function (dark) { cm.setOption('theme', dark ? 'material-darker' : 'eclipse'); });
     cm.on('change', function () {
       cm.save();
       sqlArea.dispatchEvent(new Event('input', { bubbles: true }));

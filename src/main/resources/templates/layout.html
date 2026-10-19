@@ -5,9 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title th:text="${title} + ' · JdbcOdata'">JdbcOdata</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h8' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <script>try { var t = localStorage.getItem('jdbcodata-theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) { /* storage blocked: follow the OS */ }</script>
   <link rel="stylesheet" th:href="@{/css/admin.css}">
   <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/lib/codemirror.css}">
   <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/theme/eclipse.css}">
+  <link rel="stylesheet" th:href="@{/webjars/codemirror/5.65.21/theme/material-darker.css}">
   <script th:src="@{/webjars/htmx.org/2.0.11/dist/htmx.min.js}"></script>
   <script th:src="@{/webjars/codemirror/5.65.21/lib/codemirror.js}"></script>
   <script th:src="@{/webjars/codemirror/5.65.21/mode/sql/sql.js}"></script>
@@ -91,10 +93,19 @@
     </div>
     <span th:if="${environment != null and !environment.isEmpty()}" class="badge env-badge" th:classappend="${environmentTone}"
           th:text="${environment}" title="Environment (jdbcodata.ui.environment)">PROD</span>
+    <button type="button" class="icon-button theme-toggle" data-theme-toggle title="Switch between light and dark" aria-label="Switch between light and dark">
+      <span class="theme-icon-dark"><svg th:replace="~{fragments/icons :: icon('moon')}"></svg></span>
+      <span class="theme-icon-light"><svg th:replace="~{fragments/icons :: icon('sun')}"></svg></span></button>
     <details class="menu user-menu" th:if="${currentUser != null}">
       <summary><span class="avatar" th:text="${@fmt.initial(currentUser)}">A</span><span class="user-name" th:text="${currentUser}">admin</span>
         <svg th:replace="~{fragments/icons :: icon('chevron-down')}"></svg></summary>
       <div class="menu-list">
+        <div class="menu-theme" role="group" aria-label="Theme">
+          <span>Theme</span>
+          <button type="button" data-theme-choice="system" title="Follow the operating system"><svg th:replace="~{fragments/icons :: icon('monitor')}"></svg>System</button>
+          <button type="button" data-theme-choice="light"><svg th:replace="~{fragments/icons :: icon('sun')}"></svg>Light</button>
+          <button type="button" data-theme-choice="dark"><svg th:replace="~{fragments/icons :: icon('moon')}"></svg>Dark</button>
+        </div>
         <a th:href="@{/admin/admins}"><svg th:replace="~{fragments/icons :: icon('shield')}"></svg>Admin accounts</a>
         <a th:href="@{/admin/settings}"><svg th:replace="~{fragments/icons :: icon('settings')}"></svg>Settings</a>
         <form th:action="@{/logout}" method="post"><button type="submit"><svg th:replace="~{fragments/icons :: icon('logout')}"></svg>Sign out</button></form>

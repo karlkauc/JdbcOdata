@@ -67,6 +67,10 @@ class AdminUiWorkflowTest extends DemoProfileTest {
         // sidebar counts, service URL, breadcrumb and user menu are part of every page
         assertThat(dashboard).contains("class=\"nav-count\"").contains("id=\"nav-service-root\"").contains("crumb-current")
                 .contains("global-search").contains("Sign out");
+        // theme: applied before the stylesheet (no flash), switch in the top bar, choice in the user menu
+        assertThat(dashboard.indexOf("jdbcodata-theme")).isLessThan(dashboard.indexOf("/css/admin.css"));
+        assertThat(dashboard).contains("data-theme-toggle").contains("data-theme-choice=\"system\"")
+                .contains("data-theme-choice=\"dark\"").contains("theme/material-darker.css");
         assertThat(page("/admin/queries")).contains("<span class=\"crumb-section\">Data</span>");
     }
 

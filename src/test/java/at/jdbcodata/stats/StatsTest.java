@@ -68,8 +68,10 @@ class StatsTest extends DemoProfileTest {
 
         assertThat(new StatsService.Summary(0, 0, 0, 0, 0, 0, 0, 0, 0).cacheHitRatio()).isZero();
 
-        int deleted = log.deleteOlderThan(Duration.ofDays(365));
-        assertThat(deleted).isGreaterThanOrEqualTo(1);
+        // the scheduled retention job may delete the old record first, so check the outcome, not the count
+        log.deleteOlderThan(Duration.ofDays(365));
+        assertThat(stats.executions(new StatsService.Filter(now.minus(Duration.ofDays(3650)), now.minus(Duration.ofDays(365)),
+                q, null, null), 10, 0)).isEmpty();
         log.applyRetention();
         assertThat(log.droppedRecords()).isZero();
     }
