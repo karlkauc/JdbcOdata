@@ -93,6 +93,45 @@ queries:
       username: excel_demo
       password: ${DEMO_READER_PASSWORD}
 
+  - name: Bestellungen
+    description: Bestellungen eines Jahres (Parameter p_jahr) mit Produktkategorien (SQL-Array) und Positionen (JSON) als Collections
+    datasource: demo_postgres
+    sql: |
+      SELECT b.id AS "BestellungId", b.bestelldatum AS "Bestelldatum", b.status AS "Status",
+             b.kunde_id AS "KundeId", k.name AS "KundeName", k.region AS "Region",
+             array_agg(DISTINCT pr.kategorie ORDER BY pr.kategorie) AS "Kategorien",
+             jsonb_agg(jsonb_build_object('PositionId', p.id, 'Produkt', pr.bezeichnung, 'Menge', p.menge,
+                       'Einzelpreis', p.einzelpreis, 'Betrag', p.menge * p.einzelpreis) ORDER BY p.id) AS "Positionen"
+      FROM verkauf.bestellungen b
+      JOIN verkauf.kunden k ON k.id = b.kunde_id
+      JOIN verkauf.bestellpositionen p ON p.bestellung_id = b.id
+      JOIN verkauf.produkte pr ON pr.id = p.produkt_id
+      WHERE EXTRACT(YEAR FROM b.bestelldatum) = :p_jahr
+      GROUP BY b.id, b.bestelldatum, b.status, b.kunde_id, k.name, k.region
+      ORDER BY b.id
+    parameters:
+      - name: p_jahr
+        type: INT
+        required: false
+        default: "2025"
+        description: Geschäftsjahr
+    keyMode: COLUMNS
+    keyColumns: [BestellungId]
+    # Kategorien wird Collection(Edm.String), Positionen eine Collection eines ComplexTypes:
+    # $select=Positionen($filter=Betrag gt 1000;$orderby=Betrag desc;$top=3), $filter=Kategorien/any(k:k eq 'Server')
+    collectionColumns: [Kategorien, Positionen]
+    pushDown: true
+    relations:
+      - name: Kunde
+        target: Kunden
+        columns: {KundeId: KundeId}
+        description: Kunde der Bestellung
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}
+
   - name: UmsatzProMonat
     description: Umsatz je Monat, Region und Kategorie für ein Jahr (Parameter p_jahr), ohne stornierte Bestellungen
     datasource: demo_postgres

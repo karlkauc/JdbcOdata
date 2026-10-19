@@ -140,13 +140,22 @@ public class SeedLoader implements ApplicationRunner {
             log.warn("Seed query '{}' has no schema snapshot and no snapshotCredentials; run POST /api/v1/queries/{}/snapshot",
                     saved.name(), saved.id());
         }
-        // keyColumns: [KundeId] marks snapshot columns as key (requires keyMode COLUMNS and a snapshot).
+        // keyColumns: [KundeId] marks snapshot columns as key (requires keyMode COLUMNS and a snapshot);
+        // collectionColumns: [Tags, Positionen] publishes SQL arrays / JSON columns as collections (primitive when
+        // the snapshot found an element type, else complex).
         List<String> keyColumns = strings(q, "keyColumns");
-        if (!keyColumns.isEmpty() && saved.hasSnapshot()) {
+        List<String> collectionColumns = strings(q, "collectionColumns");
+        if ((!keyColumns.isEmpty() || !collectionColumns.isEmpty()) && saved.hasSnapshot()) {
             List<ColumnSetting> settings = new ArrayList<>();
             for (QueryColumn c : saved.columns()) {
                 boolean key = keyColumns.contains(c.propertyName());
-                settings.add(new ColumnSetting(c.propertyName(), key, c.visible() || key));
+                at.jdbcodata.query.CollectionKind collection = !collectionColumns.contains(c.propertyName()) ? null
+                        : c.canBePrimitiveCollection() ? at.jdbcodata.query.CollectionKind.PRIMITIVE
+                        : c.canBeComplexCollection() ? at.jdbcodata.query.CollectionKind.COMPLEX : null;
+                if (collectionColumns.contains(c.propertyName()) && collection == null) {
+                    log.warn("Seed query '{}': column '{}' is no SQL or JSON array, stays a plain property", saved.name(), c.propertyName());
+                }
+                settings.add(new ColumnSetting(c.propertyName(), key, c.visible() || key, collection));
             }
             queryService.updateColumnSettings(saved.id(), settings);
         }

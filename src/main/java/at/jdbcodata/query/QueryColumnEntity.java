@@ -2,6 +2,8 @@ package at.jdbcodata.query;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -9,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -56,6 +59,21 @@ public class QueryColumnEntity {
     @Column(nullable = false)
     private boolean visible = true;
 
+    @Column(name = "element_type", length = 50)
+    private String elementType;
+
+    /** {@link ComplexField}s as JSON array. */
+    @Column(name = "structure_json", columnDefinition = "TEXT")
+    private String structureJson;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "collection_kind", nullable = false, length = 10)
+    private CollectionKind collection = CollectionKind.NONE;
+
+    private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
+    private static final tools.jackson.core.type.TypeReference<List<ComplexField>> FIELDS = new tools.jackson.core.type.TypeReference<>() {
+    };
+
     static QueryColumnEntity of(QueryDefinitionEntity query, QueryColumn c) {
         QueryColumnEntity e = new QueryColumnEntity();
         e.query = query;
@@ -70,15 +88,20 @@ public class QueryColumnEntity {
         e.nullable = c.nullable();
         e.key = c.key();
         e.visible = c.visible();
+        e.elementType = c.elementType();
+        e.structureJson = c.structure().isEmpty() ? null : JSON.writeValueAsString(c.structure());
+        e.collection = c.collection();
         return e;
     }
 
     String getPropertyName() { return propertyName; }
     void setKey(boolean key) { this.key = key; }
     void setVisible(boolean visible) { this.visible = visible; }
+    void setCollection(CollectionKind collection) { this.collection = collection; }
 
     QueryColumn toRecord() {
         return new QueryColumn(ordinal, columnName, propertyName, jdbcType, jdbcTypeName, edmType, precision, scale,
-                nullable, key, visible);
+                nullable, key, visible, elementType,
+                structureJson == null || structureJson.isBlank() ? List.of() : JSON.readValue(structureJson, FIELDS), collection);
     }
 }

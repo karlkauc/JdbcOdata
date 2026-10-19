@@ -62,8 +62,8 @@ class QueryExecutorTest {
                 .hasMessageContaining("5 rows")
                 .extracting("limit").isEqualTo(5);
         ResultTable probe = executor.probe(q, ds, identity, Map.of(), 10);
-        assertThat(probe.rows()).hasSize(1);
-        assertThat(probe.truncated()).isTrue();
+        assertThat(probe.rows()).hasSize(10); // a sample (up to SNAPSHOT_SAMPLE_ROWS), never a failure
+        assertThat(probe.truncated()).isFalse();
     }
 
     @Test

@@ -204,7 +204,10 @@ final class DynamicResultWriter {
         }
         for (Property p : e.getProperties()) {
             if (!columns.contains(p.getName())) continue;
-            String edmType = edmType(p);
+            String edmType = p.isCollection() ? null : edmType(p);
+            for (org.apache.olingo.commons.api.data.Annotation a : p.getAnnotations()) {
+                if (ODATA_COUNT.equals(a.getTerm()) && a.getValue() instanceof Number n) writeCount(g, p.getName() + "@odata.count", n.longValue());
+            }
             if (full && edmType != null && p.getValue() != null && !IMPLIED_TYPES.contains(edmType)) {
                 g.writeStringProperty(p.getName() + "@odata.type", "#" + edmType.substring("Edm.".length()));
             }
@@ -311,6 +314,9 @@ final class DynamicResultWriter {
         else g.writeNumberProperty(name, count);
     }
 
+    /** Instance annotation term for the number of elements of a collection property ({@code $select=P($count=true)}). */
+    static final String ODATA_COUNT = "odata.count";
+
     /** Types JSON clients infer without a type annotation (full metadata leaves them out, like Olingo). */
     private static final Set<String> IMPLIED_TYPES = Set.of("Edm.String", "Edm.Boolean", "Edm.Int32", "Edm.Double");
 
@@ -340,6 +346,21 @@ final class DynamicResultWriter {
     }
 
     private static void writeValue(JsonGenerator g, Object raw, boolean asString) {
+        if (raw instanceof List<?> list) { // collection-valued property
+            g.writeStartArray();
+            for (Object e : list) writeValue(g, e, asString);
+            g.writeEndArray();
+            return;
+        }
+        if (raw instanceof org.apache.olingo.commons.api.data.ComplexValue cv) {
+            g.writeStartObject();
+            for (Property p : cv.getValue()) {
+                g.writeName(p.getName());
+                writeValue(g, p.getValue(), asString);
+            }
+            g.writeEndObject();
+            return;
+        }
         Object v = raw == null ? null : FilterValues.canonical(raw);
         if (v == null) {
             g.writeNull();

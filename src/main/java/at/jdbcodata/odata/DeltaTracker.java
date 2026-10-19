@@ -126,7 +126,8 @@ public class DeltaTracker {
     static long fingerprint(Entity e) {
         long h = 0xcbf29ce484222325L;
         for (Property p : e.getProperties()) {
-            Object v = FilterValues.canonical(p.getValue());
+            Object v = p.getValue() instanceof List || p.getValue() instanceof org.apache.olingo.commons.api.data.ComplexValue
+                    ? CollectionValues.text(p.getValue()) : FilterValues.canonical(p.getValue());
             String text = p.getName() + "=" + (v instanceof java.math.BigDecimal bd ? bd.stripTrailingZeros().toPlainString()
                     : v instanceof byte[] b ? java.util.Base64.getEncoder().encodeToString(b) : String.valueOf(v)) + "\u0000";
             for (int i = 0; i < text.length(); i++) {

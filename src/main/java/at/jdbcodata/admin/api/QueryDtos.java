@@ -149,9 +149,10 @@ final class QueryDtos {
         }
     }
 
-    record ColumnSettingRequest(@NotBlank String propertyName, boolean key, boolean visible) {
+    /** {@code collection}: NONE, PRIMITIVE or COMPLEX; omitted = unchanged. */
+    record ColumnSettingRequest(@NotBlank String propertyName, boolean key, boolean visible, String collection) {
         ColumnSetting toRecord() {
-            return new ColumnSetting(propertyName, key, visible);
+            return new ColumnSetting(propertyName, key, visible, at.jdbcodata.query.CollectionKind.parse(collection));
         }
     }
 

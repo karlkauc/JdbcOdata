@@ -104,7 +104,9 @@ import org.slf4j.LoggerFactory;
  * One instance per request, because it carries the caller's identity.
  */
 public class QueryEntityCollectionProcessor implements CountEntityCollectionProcessor, EntityProcessor,
-        PrimitiveValueProcessor, BatchProcessor, ReferenceCollectionProcessor, ReferenceProcessor {
+        PrimitiveValueProcessor, BatchProcessor, ReferenceCollectionProcessor, ReferenceProcessor,
+        org.apache.olingo.server.api.processor.PrimitiveCollectionProcessor,
+        org.apache.olingo.server.api.processor.ComplexCollectionProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryEntityCollectionProcessor.class);
     private static final Locale LOCALE = Locale.ENGLISH;
@@ -180,6 +182,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (uriInfo.getExpandOption() != null) {
             expand(collection.getEntities(), r.query(), uriInfo.getExpandOption(), custom, 1);
         }
+        applySelectOptions(collection.getEntities(), custom);
 
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
@@ -257,6 +260,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             requireTyped(page.rows());
             expand(page.rows(), r.query(), uriInfo.getExpandOption(), custom, 1);
         }
+        applySelectOptions(page.rows(), custom);
         java.util.Set<String> select = DynamicResultWriter.selected(uriInfo.getSelectOption());
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
         String context = "$metadata#" + r.entitySet().getName() + "("
@@ -265,6 +269,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         byte[] body = DynamicResultWriter.collection(context, page.rows(), count ? filtered.getCount() : null,
                 page.nextLink(), select, uriInfo.getExpandOption(), null, format);
         respond(req, response, new ByteArrayInputStream(body), format.contentType(), r.root());
+    }
+
+    /** {@code $select=Tags($top=2)}: options of collection-valued select items (see {@link SelectOptions}). */
+    private void applySelectOptions(List<Entity> rows, Map<String, String> custom) throws ODataApplicationException {
+        if (SelectOptions.present(custom)) new SelectOptions(serviceMetadata.getEdm(), odata, aliases).apply(rows, custom);
     }
 
     // --- extended $apply (join, outerjoin, nest, ancestors, descendants, traverse) -----------------------------------
@@ -357,6 +366,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             requireTyped(page.rows());
             expand(page.rows(), r.query(), x.expand(), custom, 1);
         }
+        applySelectOptions(page.rows(), custom);
         java.util.Set<String> select = DynamicResultWriter.selected(x.select());
         boolean count = uriInfo.getCountOption() != null && uriInfo.getCountOption().getValue();
         String context = "$metadata#" + r.entitySet().getName() + "("
@@ -1084,6 +1094,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (uriInfo.getExpandOption() != null) expand(delta.getEntities(), r.query(), uriInfo.getExpandOption(), custom, 1);
         String token = support.deltaTracker().register(owner, scope, current);
         delta.setDeltaLink(java.net.URI.create(deltaLink(req, scope, token)));
+        applySelectOptions(delta.getEntities(), custom); // after the snapshot: it holds the complete values
         EdmEntitySet entitySet = r.entitySet();
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
@@ -1229,6 +1240,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (uriInfo.getExpandOption() != null) {
             expand(List.of(r.single()), r.query(), uriInfo.getExpandOption(), custom, 1);
         }
+        applySelectOptions(List.of(r.single()), custom);
         if (hasNestedApply(uriInfo.getExpandOption())) {
             requireJson(responseFormat);
             java.util.Set<String> select = DynamicResultWriter.selected(uriInfo.getSelectOption());
@@ -1275,6 +1287,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         EvaluationContext navigation = navigationResolver(custom);
         Entity entity = new ApplyEvaluator(navigation).apply(List.of(r.single()), computed.getApplyOption()).get(0);
         if (uriInfo.getExpandOption() != null) expand(List.of(entity), r.query(), uriInfo.getExpandOption(), custom, 1);
+        applySelectOptions(List.of(entity), custom);
         java.util.Set<String> select = DynamicResultWriter.selected(computed.getSelectOption());
         String context = "$metadata#" + entitySet.getName() + "("
                 + DynamicResultWriter.contextSelectList(List.of(entity), select, uriInfo.getExpandOption()) + ")/$entity";
@@ -1316,6 +1329,88 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     }
 
     private record PropertyRead(EdmEntitySet entitySet, String keyPath, EdmProperty edmProperty, Property property) {
+    }
+
+    /** {@code Auftraege(1)/Tags}: the elements, with $filter ($it), $search, $orderby, $skip and $top applied. */
+    @Override
+    public void readPrimitiveCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
+            throws ODataApplicationException, ODataLibraryException {
+        PropertyRead p = readCollectionProperty(uriInfo, req, response);
+        if (p == null) return;
+        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
+                .navOrPropertyPath(p.edmProperty().getName()).build();
+        SerializerResult result = odata.createSerializer(responseFormat).primitiveCollection(serviceMetadata,
+                (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
+                PrimitiveSerializerOptions.with().contextURL(contextUrl).build());
+        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), null);
+    }
+
+    /** {@code Auftraege(1)/Positionen}: like {@link #readPrimitiveCollection}, also with $select of the fields. */
+    @Override
+    public void readComplexCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
+            throws ODataApplicationException, ODataLibraryException {
+        PropertyRead p = readCollectionProperty(uriInfo, req, response);
+        if (p == null) return;
+        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
+                .navOrPropertyPath(p.edmProperty().getName()).build();
+        SerializerResult result = odata.createSerializer(responseFormat).complexCollection(serviceMetadata,
+                (org.apache.olingo.commons.api.edm.EdmComplexType) p.edmProperty().getType(), p.property(),
+                org.apache.olingo.server.api.serializer.ComplexSerializerOptions.with().contextURL(contextUrl)
+                        .select(uriInfo.getSelectOption()).build());
+        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), null);
+    }
+
+    private PropertyRead readCollectionProperty(UriInfo uriInfo, ODataRequest req, ODataResponse response)
+            throws ODataApplicationException {
+        List<UriResource> parts = uriInfo.getUriResourceParts();
+        begin(uriInfo);
+        if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof org.apache.olingo.server.api.uri.UriResourceProperty propPart)) {
+            throw new ODataApplicationException("Not a property", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        Resolved r = resolve(parts.subList(0, parts.size() - 1), customOptions(uriInfo), req);
+        setCacheHeaders(response, r.root());
+        Property property = r.single() == null ? null : r.single().getProperty(propPart.getProperty().getName());
+        if (property == null || property.getValue() == null) {
+            response.setStatusCode(HttpStatusCode.NO_CONTENT.getStatusCode());
+            return null;
+        }
+        List<?> elements = CollectionValues.elements(property);
+        Map<Entity, Object> byRow = new java.util.IdentityHashMap<>();
+        List<Entity> rows = new ArrayList<>();
+        for (Object e : elements) {
+            Entity row = CollectionValues.row(e);
+            byRow.put(row, e);
+            rows.add(row);
+        }
+        List<Object> kept = new ArrayList<>();
+        for (Entity row : QueryOptionsEvaluator.apply(rows, uriInfo, null).getEntities()) kept.add(byRow.get(row));
+        Property result = new Property(property.getType(), property.getName(), property.getValueType(), kept);
+        String id = r.single().getId() == null ? "" : r.single().getId().toString();
+        int open = id.indexOf('(');
+        String keyPath = open >= 0 && id.endsWith(")") ? id.substring(open + 1, id.length() - 1) : id;
+        return new PropertyRead(r.entitySet(), keyPath, propPart.getProperty(), result);
+    }
+
+    @Override
+    public void updatePrimitiveCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                                          ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void deletePrimitiveCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void updateComplexCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                                        ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void deleteComplexCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        throw readOnly();
     }
 
     /** Resolves the entity in front of a property segment; answers 204 itself when entity or value is null. */

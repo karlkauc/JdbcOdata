@@ -40,6 +40,7 @@ final class QueryRewriter {
     /** @param target type of the addressed resource (for case result types), may be null */
     static String rewrite(String query, boolean singleEntity, org.apache.olingo.commons.api.edm.EdmStructuredType target) {
         if (query == null || query.isEmpty()) return query;
+        query = selectOptions(query);
         query = ownSearches(query);
         List<String> parts = new ArrayList<>(List.of(query.split("&", -1)));
         boolean changed = false;
@@ -86,6 +87,113 @@ final class QueryRewriter {
             parts.add("$apply=" + transformation);
         }
         return String.join("&", parts);
+    }
+
+    // --- $select with options (4.01) ---------------------------------------------------------------------------
+
+    /** Custom option prefix for {@code $select} items with options: value {@code Nav/…/Property(options)}. */
+    static final String SELECT_OPTION = "jdbcodata-selectopt";
+    private static final java.util.regex.Pattern SELECT_PATH = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+    /**
+     * {@code $select=Tags($top=2),Positionen($filter=Betrag gt 100;$select=Artikel,Betrag)}: Olingo 5 does not parse
+     * options of select items. Each such item becomes the plain property ({@code Tags}, or the sub-property paths
+     * {@code Positionen/Artikel,Positionen/Betrag} for a nested $select) and a custom option {@link #SELECT_OPTION}N
+     * with its options, prefixed with the navigation path when it sits in an $expand ({@code Umsaetze/Tags(…)}).
+     */
+    static String selectOptions(String query) {
+        if (!query.toLowerCase(Locale.ROOT).contains("select")) return query;
+        List<String> parts = new ArrayList<>(List.of(query.split("&", -1)));
+        List<String> found = new ArrayList<>();
+        for (int i = 0; i < parts.size(); i++) {
+            String name = optionName(parts.get(i));
+            if (!"$select".equals(name) && !"$expand".equals(name)) continue;
+            String decoded = decode(value(parts.get(i)));
+            if (decoded == null || decoded.indexOf('(') < 0) continue;
+            String rewritten = "$select".equals(name) ? selectItems(decoded, "", found) : expandItems(decoded, "", found);
+            if (!rewritten.equals(decoded)) parts.set(i, parts.get(i).substring(0, parts.get(i).indexOf('=') + 1) + encode(rewritten));
+        }
+        if (found.isEmpty()) return query;
+        for (int n = 0; n < found.size(); n++) parts.add(SELECT_OPTION + (n + 1) + "=" + encode(found.get(n)));
+        return String.join("&", parts);
+    }
+
+    private static String selectItems(String select, String prefix, List<String> found) {
+        List<String> out = new ArrayList<>();
+        for (String raw : split(select, ',')) {
+            String item = raw.strip();
+            int open = indexOutsideQuotes(item, "(", 0);
+            String head = open < 0 ? item : item.substring(0, open).strip();
+            if (open < 0 || !item.endsWith(")") || closingParen(item, open) != item.length() - 1
+                    || !SELECT_PATH.matcher(head).matches()) {
+                out.add(raw); // plain path, *, or a bound function with parameters
+                continue;
+            }
+            String options = item.substring(open + 1, item.length() - 1);
+            found.add(prefix + head + "(" + options + ")");
+            List<String> nested = null;
+            for (String o : split(options, ';')) {
+                String t = o.strip();
+                if (t.startsWith("$select=")) nested = split(t.substring("$select=".length()), ',');
+            }
+            if (nested == null || nested.stream().anyMatch(n -> n.strip().equals("*"))) {
+                out.add(head);
+            } else {
+                for (String n : nested) {
+                    String sub = n.strip();
+                    int p = indexOutsideQuotes(sub, "(", 0);
+                    out.add(head + "/" + (p < 0 ? sub : sub.substring(0, p).strip()));
+                }
+            }
+        }
+        return String.join(",", out);
+    }
+
+    /** Closing parenthesis of the one at {@code open}, outside string literals and phrases; -1 if none. */
+    private static int closingParen(String s, int open) {
+        int depth = 0;
+        boolean literal = false;
+        boolean phrase = false;
+        for (int i = open; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (literal) {
+                if (c == '\'') literal = false;
+                continue;
+            }
+            if (phrase) {
+                if (c == '\\') i++;
+                else if (c == '"') phrase = false;
+                continue;
+            }
+            if (c == '\'') literal = true;
+            else if (c == '"') phrase = true;
+            else if (c == '(') depth++;
+            else if (c == ')' && --depth == 0) return i;
+        }
+        return -1;
+    }
+
+    private static String expandItems(String expand, String prefix, List<String> found) {
+        List<String> out = new ArrayList<>();
+        for (String raw : split(expand, ',')) {
+            String item = raw.strip();
+            int open = indexOutsideQuotes(item, "(", 0);
+            if (open < 0 || !item.endsWith(")") || closingParen(item, open) != item.length() - 1) {
+                out.add(raw);
+                continue;
+            }
+            String head = item.substring(0, open).strip();
+            String nav = prefix + head + "/";
+            List<String> options = new ArrayList<>();
+            for (String o : split(item.substring(open + 1, item.length() - 1), ';')) {
+                String t = o.strip();
+                if (t.startsWith("$select=")) options.add("$select=" + selectItems(t.substring("$select=".length()), nav, found));
+                else if (t.startsWith("$expand=")) options.add("$expand=" + expandItems(t.substring("$expand=".length()), nav, found));
+                else options.add(o);
+            }
+            out.add(head + "(" + String.join(";", options) + ")");
+        }
+        return String.join(",", out);
     }
 
     // --- $search beyond Olingo's parser -----------------------------------------------------------------------
@@ -236,6 +344,11 @@ final class QueryRewriter {
 
     /** Options of an expand block, split at {@code ;} on level 0 outside literals and phrases. */
     private static List<String> splitOptions(String block) {
+        return split(block, ';');
+    }
+
+    /** {@code block} split at {@code separator} on level 0 outside literals and phrases. */
+    static List<String> split(String block, char separator) {
         List<String> out = new ArrayList<>();
         int depth = 0;
         int start = 0;
@@ -256,7 +369,7 @@ final class QueryRewriter {
             else if (c == '"') phrase = true;
             else if (c == '(') depth++;
             else if (c == ')') depth--;
-            else if (c == ';' && depth == 0) {
+            else if (c == separator && depth == 0) {
                 out.add(block.substring(start, i));
                 start = i + 1;
             }

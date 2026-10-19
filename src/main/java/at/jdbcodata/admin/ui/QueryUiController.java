@@ -150,16 +150,25 @@ public class QueryUiController {
         return "admin/queries/columns";
     }
 
-    /** Saves key/visible flags; checkbox names are {@code key_<property>} and {@code visible_<property>}. */
+    /**
+     * Saves key/visible flags and the published form; field names are {@code key_<property>},
+     * {@code visible_<property>} and {@code collection_<property>}.
+     */
     @PostMapping("/{id}/columns")
     public String columns(@PathVariable UUID id, @RequestParam Map<String, String> all, RedirectAttributes redirect) {
         QueryDefinition q = queryService.require(id);
         List<ColumnSetting> settings = new ArrayList<>();
         for (QueryColumn c : q.columns()) {
             settings.add(new ColumnSetting(c.propertyName(), all.containsKey("key_" + c.propertyName()),
-                    all.containsKey("visible_" + c.propertyName())));
+                    all.containsKey("visible_" + c.propertyName()),
+                    at.jdbcodata.query.CollectionKind.parse(all.get("collection_" + c.propertyName()))));
         }
-        queryService.updateColumnSettings(id, settings);
+        try {
+            queryService.updateColumnSettings(id, settings);
+        } catch (at.jdbcodata.common.InvalidRequestException e) {
+            redirect.addFlashAttribute("error", e.getMessage());
+            return "redirect:/admin/queries/" + id;
+        }
         redirect.addFlashAttribute("message", "Spalteneinstellungen gespeichert.");
         return "redirect:/admin/queries/" + id;
     }

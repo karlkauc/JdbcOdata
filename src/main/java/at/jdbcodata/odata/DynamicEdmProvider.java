@@ -400,12 +400,66 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             List<CsdlFunction> f = getFunctions(new FullQualifiedName(NAMESPACE, FUNCTION_PREFIX + name));
             if (f != null) functions.addAll(f);
         }
-        CsdlSchema schema = new CsdlSchema().setNamespace(NAMESPACE).setEntityTypes(types).setFunctions(functions)
+        CsdlSchema schema = new CsdlSchema().setNamespace(NAMESPACE).setEntityTypes(types).setComplexTypes(complexTypes())
+                .setFunctions(functions)
                 .setEntityContainer(getEntityContainer());
         return List.of(schema);
     }
 
-    static CsdlEntityType buildType(QueryDefinition q) {
+    // --- collection-valued properties -----------------------------------------------------------------------------
+
+    /**
+     * Name of the complex type of a JSON column published as {@code COMPLEX} collection: {@code <Query>_<Property>},
+     * with suffix {@code _Element} if a query already has that name.
+     */
+    String complexTypeName(QueryDefinition q, QueryColumn c) {
+        String name = q.name() + "_" + c.propertyName();
+        return queries.containsKey(name) ? name + "_Element" : name;
+    }
+
+    @Override
+    public org.apache.olingo.commons.api.edm.provider.CsdlComplexType getComplexType(FullQualifiedName complexTypeName) {
+        if (!NAMESPACE.equals(complexTypeName.getNamespace())) return null;
+        for (QueryDefinition q : queries.values()) {
+            for (QueryColumn c : q.columns()) {
+                if (c.visible() && c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX
+                        && complexTypeName(q, c).equals(complexTypeName.getName())) {
+                    return complexType(q, c);
+                }
+            }
+        }
+        return null;
+    }
+
+    private org.apache.olingo.commons.api.edm.provider.CsdlComplexType complexType(QueryDefinition q, QueryColumn c) {
+        List<CsdlProperty> props = new ArrayList<>();
+        for (at.jdbcodata.query.ComplexField f : c.structure()) {
+            props.add(decimalFacets(new CsdlProperty().setName(f.name())
+                    .setType(EdmPrimitiveTypeKind.valueOfFQN(f.edmType()).getFullQualifiedName())
+                    .setCollection(f.collection()).setNullable(true)));
+        }
+        return new org.apache.olingo.commons.api.edm.provider.CsdlComplexType().setName(complexTypeName(q, c)).setProperties(props);
+    }
+
+    /** Decimal elements without declared facets: Decimal(38,10) like columns of unknown precision (values are rounded). */
+    private static CsdlProperty decimalFacets(CsdlProperty p) {
+        if (EdmPrimitiveTypeKind.Decimal.getFullQualifiedName().equals(p.getTypeAsFQNObject())) {
+            p.setPrecision(at.jdbcodata.query.TypeMapper.DEFAULT_DECIMAL_PRECISION).setScale(at.jdbcodata.query.TypeMapper.DEFAULT_DECIMAL_SCALE);
+        }
+        return p;
+    }
+
+    private List<org.apache.olingo.commons.api.edm.provider.CsdlComplexType> complexTypes() {
+        List<org.apache.olingo.commons.api.edm.provider.CsdlComplexType> out = new ArrayList<>();
+        for (QueryDefinition q : queries.values()) {
+            for (QueryColumn c : q.columns()) {
+                if (c.visible() && c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX) out.add(complexType(q, c));
+            }
+        }
+        return out;
+    }
+
+    CsdlEntityType buildType(QueryDefinition q) {
         List<CsdlProperty> props = new ArrayList<>();
         List<CsdlPropertyRef> keys = new ArrayList<>();
         if (q.keyMode() == KeyMode.ROWID) {
@@ -415,6 +469,16 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         }
         for (QueryColumn c : q.columns()) {
             if (!c.visible()) continue;
+            if (c.collection() == at.jdbcodata.query.CollectionKind.PRIMITIVE) {
+                props.add(decimalFacets(new CsdlProperty().setName(c.propertyName()).setCollection(true).setNullable(true)
+                        .setType(EdmPrimitiveTypeKind.valueOfFQN(c.elementType()).getFullQualifiedName())));
+                continue;
+            }
+            if (c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX) {
+                props.add(new CsdlProperty().setName(c.propertyName()).setCollection(true).setNullable(true)
+                        .setType(new FullQualifiedName(NAMESPACE, complexTypeName(q, c))));
+                continue;
+            }
             CsdlProperty p = new CsdlProperty().setName(c.propertyName())
                     .setType(EdmPrimitiveTypeKind.valueOfFQN(c.edmType()).getFullQualifiedName())
                     .setNullable(!(q.keyMode() == KeyMode.COLUMNS && c.key()));

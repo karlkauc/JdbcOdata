@@ -14,7 +14,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Runs a query once with {@code maxRows = 1} and persists the column metadata. {@code $metadata} is served from
+ * Runs a query once for a few sample rows and persists the column metadata (and what SQL array and JSON columns
+ * could be published as). {@code $metadata} is served from
  * this snapshot without touching the database.
  */
 @Service
@@ -50,8 +51,13 @@ public class SchemaSnapshotService {
             TypeMapper.EdmMapping m = rc.mapping();
             String propertyName = TypeMapper.toPropertyName(rc.name(), ordinal, used);
             boolean visible = m.kind() != EdmPrimitiveTypeKind.Binary;
+            List<Object> samples = new ArrayList<>();
+            int index = ordinal;
+            for (Object[] row : probe.rows()) samples.add(row[index]);
+            CollectionShape.Detected detected = CollectionShape.detect(rc, samples);
             columns.add(new QueryColumn(ordinal++, rc.name(), propertyName, rc.jdbcType(), rc.jdbcTypeName(),
-                    m.fqn(), m.precision(), m.scale(), true, false, visible));
+                    m.fqn(), m.precision(), m.scale(), true, false, visible, detected.elementType(), detected.structure(),
+                    CollectionKind.NONE));
         }
         return columns;
     }

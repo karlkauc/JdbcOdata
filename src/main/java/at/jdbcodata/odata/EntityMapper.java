@@ -43,7 +43,12 @@ final class EntityMapper {
             }
             StringBuilder key = new StringBuilder();
             for (Slot s : slots) {
-                Object value = s.resultIndex() < 0 ? null : convert(row[s.resultIndex()], s);
+                Object raw = s.resultIndex() < 0 ? null : row[s.resultIndex()];
+                if (s.column().collectionValued() || raw instanceof List) {
+                    e.addProperty(CollectionValues.property(s.column(), complexType(q, s.column()), raw));
+                    continue; // never a key
+                }
+                Object value = convert(raw, s);
                 e.addProperty(new Property(s.column().edmType(), s.column().propertyName(), ValueType.PRIMITIVE, value));
                 if (!rowIdKey && s.column().key()) {
                     if (key.length() > 0) key.append(',');
@@ -63,6 +68,11 @@ final class EntityMapper {
         } catch (java.net.URISyntaxException e) {
             throw new IllegalStateException("Cannot build entity id for " + path, e);
         }
+    }
+
+    /** Type name of the elements of a complex collection column (see {@link DynamicEdmProvider#complexTypeName}). */
+    private static String complexType(QueryDefinition q, QueryColumn c) {
+        return DynamicEdmProvider.NAMESPACE + "." + q.name() + "_" + c.propertyName();
     }
 
     private static Object convert(Object value, Slot s) {

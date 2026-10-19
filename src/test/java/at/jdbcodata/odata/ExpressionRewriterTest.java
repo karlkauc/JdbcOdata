@@ -64,4 +64,22 @@ class ExpressionRewriterTest {
         assertThat(QueryRewriter.rewrite("$search=(a%20OR%20b)&$filter=X%20gt%201"))
                 .isEqualTo("$filter=(X%20gt%201)%20and%20cast(@jdbcodata_search1,Edm.Boolean)&jdbcodata-search1=(a%20OR%20b)");
     }
+
+    @Test
+    void selectItemsWithOptionsBecomeCustomOptions() {
+        String q = QueryRewriter.selectOptions("$select=Id,Tags($top=2;$orderby=$this),Pos($filter=B%20gt%201;$select=A,B)&$expand="
+                + QueryRewriter.encode("Nav($select=Tags($skip=1);$expand=Sub($select=X($count=true)))"));
+        assertThat(QueryRewriter.decode(q)).contains("$select=Id,Tags,Pos/A,Pos/B")
+                .contains("$expand=Nav($select=Tags;$expand=Sub($select=X))")
+                .contains("jdbcodata-selectopt1=Tags($top=2;$orderby=$this)")
+                .contains("jdbcodata-selectopt2=Pos($filter=B gt 1;$select=A,B)")
+                .contains("jdbcodata-selectopt3=Nav/Tags($skip=1)")
+                .contains("jdbcodata-selectopt4=Nav/Sub/X($count=true)");
+        // quotes and parentheses inside the options
+        assertThat(QueryRewriter.decode(QueryRewriter.selectOptions("$select=" + QueryRewriter.encode("Tags($filter=$this eq 'a),b')"))))
+                .startsWith("$select=Tags&").contains("selectopt1=Tags($filter=$this eq 'a),b')");
+        // nothing to do
+        assertThat(QueryRewriter.selectOptions("$select=A,B&$expand=Nav($select=C)")).isEqualTo("$select=A,B&$expand=Nav($select=C)");
+        assertThat(SelectOptions.replaceThis("$this eq '$this' and $thisX gt 1")).isEqualTo("jdbcodata_this eq '$this' and $thisX gt 1");
+    }
 }

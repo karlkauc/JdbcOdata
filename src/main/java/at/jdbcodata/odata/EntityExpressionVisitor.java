@@ -121,7 +121,12 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
             if (part instanceof UriResourceLambdaVariable v && i == 0) {
                 current = lambdaVariables.get(v.getVariableName());
                 if (current == null) throw bad("Unknown lambda variable '" + v.getVariableName() + "'");
-                if (last) throw unsupported("Comparing whole entities");
+                if (last) {
+                    // element of a primitive collection (Tags/any(t:t eq 'Neu'))
+                    Property element = current.getProperty(CollectionValues.THIS);
+                    if (element != null) return FilterValues.canonical(element.getValue());
+                    throw unsupported("Comparing whole entities");
+                }
                 continue;
             }
             if (part instanceof UriResourceNavigation nav && i == 0 && lambdaVariables.containsKey(nav.getProperty().getName())) {
@@ -132,6 +137,9 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
             }
             if (part instanceof UriResourceIt && i == 0) {
                 // $it: the entity the expression is evaluated for (also inside lambdas).
+                if (last && entity.getProperty(CollectionValues.THIS) != null) {
+                    return FilterValues.canonical(entity.getProperty(CollectionValues.THIS).getValue()); // Tags?$filter=$it eq 'x'
+                }
                 if (last) throw unsupported("Comparing whole entities");
                 current = entity;
                 continue;
@@ -154,9 +162,13 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                 continue;
             }
             if (part instanceof UriResourcePrimitiveProperty prop) {
-                if (!last) throw unsupported("Paths below a primitive property");
                 Property property = current.getProperty(prop.getProperty().getName());
+                if (prop.isCollection()) return collectionProperty(property, last ? null : parts.get(i + 1));
+                if (!last) throw unsupported("Paths below a primitive property");
                 return property == null ? null : FilterValues.canonical(property.getValue());
+            }
+            if (part instanceof org.apache.olingo.server.api.uri.UriResourceComplexProperty prop && prop.isCollection()) {
+                return collectionProperty(current.getProperty(prop.getProperty().getName()), last ? null : parts.get(i + 1));
             }
             if (part instanceof UriResourceNavigation nav) {
                 if (navigation == null) throw unsupported("Navigation in $filter and $orderby");
@@ -168,24 +180,46 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
                     continue;
                 }
                 if (last) throw unsupported("Comparing collections; use any(), all() or /$count");
-                UriResource next = parts.get(i + 1);
-                if (next instanceof UriResourceLambdaAny any && any.getLambdaVariable().startsWith(ExpressionRewriter.COUNT_VARIABLE)) {
-                    return count(targets, any.getLambdaVariable(), any.getExpression()); // Nav/$count($filter=…)
-                }
-                if (next instanceof UriResourceLambdaAny any) {
-                    return lambda(targets, any.getLambdaVariable(), any.getExpression(), true);
-                }
-                if (next instanceof UriResourceLambdaAll all) {
-                    return lambda(targets, all.getLambdaVariable(), all.getExpression(), false);
-                }
-                if (next instanceof UriResourceCount) {
-                    return BigDecimal.valueOf(targets.size());
-                }
-                throw unsupported("Path segment " + next.getSegmentValue() + " after a collection navigation");
+                return overCollection(targets, parts.get(i + 1));
             }
             throw unsupported("Path segment " + part.getSegmentValue() + " in $filter and $orderby");
         }
         throw bad("Empty member path");
+    }
+
+    /** {@code any}, {@code all}, {@code $count} (also with $filter) after a collection. */
+    private Object overCollection(List<Entity> elements, UriResource next) throws ExpressionVisitException, ODataApplicationException {
+        if (next instanceof UriResourceLambdaAny any && any.getLambdaVariable() != null
+                && any.getLambdaVariable().startsWith(ExpressionRewriter.COUNT_VARIABLE)) {
+            return count(elements, any.getLambdaVariable(), any.getExpression()); // Nav/$count($filter=…)
+        }
+        if (next instanceof UriResourceLambdaAny any) {
+            return lambda(elements, any.getLambdaVariable(), any.getExpression(), true);
+        }
+        if (next instanceof UriResourceLambdaAll all) {
+            return lambda(elements, all.getLambdaVariable(), all.getExpression(), false);
+        }
+        if (next instanceof UriResourceCount) {
+            return BigDecimal.valueOf(elements.size());
+        }
+        throw unsupported("Path segment " + next.getSegmentValue() + " after a collection");
+    }
+
+    /**
+     * A collection-valued property ({@code Tags}, {@code Positionen}): followed by any/all/$count its elements act
+     * as rows; on its own (e.g. a groupby path) the list of canonical values.
+     */
+    private Object collectionProperty(Property property, UriResource next) throws ExpressionVisitException, ODataApplicationException {
+        List<?> elements = CollectionValues.elements(property);
+        if (next == null) {
+            if (property == null || property.getValue() == null) return null;
+            List<Object> out = new ArrayList<>();
+            for (Object e : elements) out.add(e instanceof org.apache.olingo.commons.api.data.ComplexValue ? e : FilterValues.canonical(e));
+            return out;
+        }
+        List<Entity> rows = new ArrayList<>(elements.size());
+        for (Object e : elements) rows.add(CollectionValues.row(e));
+        return overCollection(rows, next);
     }
 
     /**

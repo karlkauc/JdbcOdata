@@ -258,7 +258,7 @@ public class QueryService {
         return updated;
     }
 
-    /** Sets key and visibility flags of snapshot columns; unknown property names are ignored. */
+    /** Sets key, visibility and collection flags of snapshot columns; unknown property names are ignored. */
     @Transactional
     public QueryDefinition updateColumnSettings(UUID id, List<ColumnSetting> settings) {
         QueryDefinitionEntity e = requireEntity(id);
@@ -267,8 +267,22 @@ public class QueryService {
         for (QueryColumnEntity c : e.getColumns()) {
             ColumnSetting s = byName.get(c.getPropertyName());
             if (s != null) {
+                QueryColumn current = c.toRecord();
+                CollectionKind collection = s.collection() == null ? current.collection() : s.collection();
+                if (collection == CollectionKind.PRIMITIVE && !current.canBePrimitiveCollection()) {
+                    throw new InvalidRequestException("Column '" + current.propertyName()
+                            + "' holds no SQL or JSON array of values and cannot be a primitive collection");
+                }
+                if (collection == CollectionKind.COMPLEX && !current.canBeComplexCollection()) {
+                    throw new InvalidRequestException("Column '" + current.propertyName()
+                            + "' holds no JSON array of objects and cannot be a complex collection");
+                }
+                if (collection != CollectionKind.NONE && s.key()) {
+                    throw new InvalidRequestException("Collection column '" + current.propertyName() + "' cannot be a key");
+                }
                 c.setKey(s.key());
                 c.setVisible(s.visible() || s.key());
+                c.setCollection(collection);
             }
         }
         e.setUpdatedAt(Instant.now());

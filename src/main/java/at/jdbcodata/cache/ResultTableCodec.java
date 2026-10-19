@@ -24,7 +24,7 @@ public final class ResultTableCodec {
 
     private static final int VERSION = 1;
     private static final byte T_NULL = 0, T_STRING = 1, T_INT = 2, T_LONG = 3, T_DECIMAL = 4, T_DOUBLE = 5,
-            T_BOOLEAN = 6, T_DATE = 7, T_TIME = 8, T_TIMESTAMP = 9, T_BYTES = 10, T_UUID = 11;
+            T_BOOLEAN = 6, T_DATE = 7, T_TIME = 8, T_TIMESTAMP = 9, T_BYTES = 10, T_UUID = 11, T_LIST = 12;
 
     private ResultTableCodec() {
     }
@@ -107,6 +107,11 @@ public final class ResultTableCodec {
             case Time t -> { out.writeByte(T_TIME); out.writeLong(t.getTime()); }
             case byte[] b -> { out.writeByte(T_BYTES); out.writeInt(b.length); out.write(b); }
             case UUID u -> { out.writeByte(T_UUID); out.writeLong(u.getMostSignificantBits()); out.writeLong(u.getLeastSignificantBits()); }
+            case List<?> l -> { // SQL arrays
+                out.writeByte(T_LIST);
+                out.writeInt(l.size());
+                for (Object e : l) writeValue(out, e);
+            }
             default -> { out.writeByte(T_STRING); writeString(out, v.toString()); }
         }
     }
@@ -134,6 +139,12 @@ public final class ResultTableCodec {
                 yield b;
             }
             case T_UUID -> new UUID(in.readLong(), in.readLong());
+            case T_LIST -> {
+                int n = in.readInt();
+                List<Object> l = new ArrayList<>(n);
+                for (int i = 0; i < n; i++) l.add(readValue(in));
+                yield java.util.Collections.unmodifiableList(l);
+            }
             default -> throw new IOException("Unknown value tag " + tag);
         };
     }

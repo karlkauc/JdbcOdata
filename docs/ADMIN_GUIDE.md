@@ -24,6 +24,17 @@ Queries → Neue Query:
    SQL-Änderung muss der Snapshot erneuert werden.
 5. **Spalten**: Spalten ausblenden oder als Schlüssel markieren (Schlüsselmodus „Spalten“); sonst liefert der
    Feed einen synthetischen `RowId`.
+   SQL-Arrays (PostgreSQL `text[]`, `int[]`, H2 `ARRAY`) und JSON-Spalten mit Arrays (`json`/`jsonb`, MySQL
+   `JSON` oder Text) lassen sich unter **Veröffentlichen als** als Collection anbieten: Arrays von Werten als
+   `Collection(Edm.String)`, `Collection(Edm.Int32)` usw., Arrays von JSON-Objekten als Collection eines
+   ComplexTypes `<Query>_<Spalte>`. Elementtyp und Felder ermittelt der Snapshot aus bis zu 100 Beispielzeilen
+   (Feldtypen: Text, ganze Zahl, Dezimalzahl, Wahrheitswert, Datum, Zeitstempel, Listen von Werten;
+   verschachtelte Objekte bleiben JSON-Text). Danach gehen `$filter=Tags/any(t:t eq 'Neu')`,
+   `Positionen/any(p:p/Betrag gt 1000)`, `Positionen/$count gt 2`, `/odata/Bestellungen(1)/Positionen` und
+   `$select` mit Optionen: `$select=Tags($orderby=$this;$top=3),Positionen($filter=Betrag gt 100;$orderby=Betrag desc;$select=Produkt,Betrag;$count=true)`.
+   Standard bleibt „Text“ wie bisher (`{a,b}` bzw. der JSON-Text), weil Excel Collections nur als Liste zeigt;
+   Power BI und OData-Clients können sie aufklappen. Collection-Spalten sind keine Schlüssel und werden nie in
+   der Datenbank gefiltert.
 6. **Beziehungen** (optional): Verknüpfung zu einer anderen Query, z. B. `Umsatz.Kunde → Kunden` über
    `KundeId = KundeId`. Die Gegenrichtung (`Kunden.Umsaetze`, Häkchen „Viele“) wird bei der Ziel-Query
    eingetragen; mit **Partner** verweisen beide aufeinander. Beziehungen erscheinen im `$metadata` als
@@ -100,4 +111,5 @@ Datenquellen und Queries lassen sich versioniert als YAML pflegen (`contrib/seed
 Schema-Snapshot beim Start erzeugt; die Zugangsdaten werden nicht gespeichert. `keyColumns` markiert
 Snapshot-Spalten als Schlüssel, `relations` deklariert Beziehungen (`name`, `target`, `columns`
 als `eigene: ziel`, `toMany`, `partner`); fehlt `relations` in der Datei, bleiben vorhandene Beziehungen
-erhalten. `pushDown: true` schaltet den Push-Down ein.
+erhalten. `pushDown: true` schaltet den Push-Down ein. `collectionColumns: [Kategorien, Positionen]` veröffentlicht
+SQL-Arrays und JSON-Spalten als Collection (Werte oder ComplexType, je nachdem, was der Snapshot erkannt hat).

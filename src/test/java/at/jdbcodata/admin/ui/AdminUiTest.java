@@ -176,13 +176,30 @@ class AdminUiTest extends DemoProfileTest {
         assertThat(q.columns().get(0).key()).isTrue();
         assertThat(q.columns().get(1).visible()).isFalse();
 
+        // SQL arrays and JSON arrays may be published as collections
+        mvc.perform(post("/admin/queries/" + id).with(admin()).with(csrf()).param("name", name).param("datasourceId", demoId)
+                        .param("sql", "SELECT customer, ARRAY[region, 'x'] AS tags, CAST('[{\"a\":1}]' AS VARCHAR) AS pos FROM sales")
+                        .param("executionMode", "CALLER").param("keyMode", "ROWID").param("enabled", "true").param("cacheTtlSec", "3600"))
+                .andExpect(status().is3xxRedirection());
+        String collections = body(mvc.perform(post("/admin/queries/" + id + "/snapshot").with(admin()).with(csrf())
+                .param("dbUser", "demo").param("dbPassword", "demo")).andExpect(status().isOk()).andReturn());
+        assertThat(collections).contains("collection_tags").contains("Collection(Edm.String)").contains("collection_pos")
+                .contains("Collection(" + name + "_pos)").contains("Struktur");
+        mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf()).param("visible_customer", "on")
+                        .param("visible_tags", "on").param("collection_tags", "PRIMITIVE").param("visible_pos", "on").param("collection_pos", "COMPLEX"))
+                .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
+        q = queryService.require(UUID.fromString(id));
+        assertThat(q.columns()).extracting(c -> c.collection().name()).containsExactly("NONE", "PRIMITIVE", "COMPLEX");
+        mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf()).param("collection_customer", "PRIMITIVE"))
+                .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("error"));
+
         mvc.perform(post("/admin/queries/" + id).with(admin()).with(csrf())
                         .param("name", name).param("datasourceId", demoId)
                         .param("sql", "SELECT customer FROM sales WHERE sale_year = :y")
                         .param("parameters[0].name", "y").param("parameters[0].type", "INT")
                         .param("executionMode", "CALLER").param("keyMode", "ROWID").param("cacheTtlSec", "10"))
                 .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
-        assertThat(queryService.require(UUID.fromString(id)).version()).isEqualTo(2);
+        assertThat(queryService.require(UUID.fromString(id)).version()).isEqualTo(3); // 2 = the collection SQL above
 
         mvc.perform(post("/admin/queries/" + id).with(admin()).with(csrf()).param("name", "Sales").param("datasourceId", demoId).param("sql", "SELECT 1"))
                 .andExpect(status().isOk());
@@ -193,7 +210,7 @@ class AdminUiTest extends DemoProfileTest {
         assertThat(withVersions).contains("Wiederherstellen");
         mvc.perform(post("/admin/queries/" + id + "/versions/1/restore").with(admin()).with(csrf()))
                 .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
-        assertThat(queryService.require(UUID.fromString(id)).version()).isEqualTo(3);
+        assertThat(queryService.require(UUID.fromString(id)).version()).isEqualTo(4);
         mvc.perform(post("/admin/queries/" + id + "/versions/99/restore").with(admin()).with(csrf()))
                 .andExpect(status().isNotFound());
 

@@ -50,6 +50,7 @@ final class SearchEvaluator {
     }
 
     private static String text(Object v) {
+        if (v instanceof List || v instanceof org.apache.olingo.commons.api.data.ComplexValue) return CollectionValues.text(v);
         Object canonical = FilterValues.canonical(v);
         if (canonical instanceof BigDecimal bd) return bd.stripTrailingZeros().toPlainString();
         return String.valueOf(canonical);

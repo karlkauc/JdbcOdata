@@ -47,6 +47,15 @@ class ResultTableCodecTest {
     }
 
     @Test
+    void roundTripsArrays() {
+        ResultTable table = new ResultTable(List.of(col("a", Types.ARRAY, "_text")),
+                List.<Object[]>of(new Object[] {List.of("x", 1, List.of(true))}, new Object[] {java.util.Arrays.asList("y", null)}), false);
+        ResultTable back = ResultTableCodec.decode(ResultTableCodec.encode(table));
+        assertThat(back.rows().get(0)[0]).isEqualTo(List.of("x", 1, List.of(true)));
+        assertThat(back.rows().get(1)[0]).isEqualTo(java.util.Arrays.asList("y", null));
+    }
+
+    @Test
     void rejectsGarbage() {
         assertThatThrownBy(() -> ResultTableCodec.decode(new byte[] {1, 2, 3})).isInstanceOf(IllegalStateException.class);
     }

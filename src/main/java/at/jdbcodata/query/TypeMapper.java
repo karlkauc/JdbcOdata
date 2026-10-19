@@ -8,8 +8,8 @@ import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
 public final class TypeMapper {
 
     public static final int TEMPORAL_PRECISION = 9;
-    private static final int DEFAULT_DECIMAL_PRECISION = 38;
-    private static final int DEFAULT_DECIMAL_SCALE = 10;
+    public static final int DEFAULT_DECIMAL_PRECISION = 38;
+    public static final int DEFAULT_DECIMAL_SCALE = 10;
 
     public record EdmMapping(EdmPrimitiveTypeKind kind, Integer precision, Integer scale) {
         public String fqn() {
@@ -54,6 +54,38 @@ public final class TypeMapper {
             return new EdmMapping(EdmPrimitiveTypeKind.Decimal, DEFAULT_DECIMAL_PRECISION, DEFAULT_DECIMAL_SCALE);
         }
         return new EdmMapping(EdmPrimitiveTypeKind.Decimal, precision, scale);
+    }
+
+    /**
+     * Element type of an SQL array from the column type name: PostgreSQL {@code _int4}, H2 {@code INTEGER ARRAY},
+     * {@code NUMERIC(10, 2) ARRAY}; {@code null} when the name tells nothing.
+     */
+    public static EdmPrimitiveTypeKind arrayElementType(String typeName) {
+        if (typeName == null) return null;
+        String t = typeName.strip().toLowerCase(java.util.Locale.ROOT);
+        if (t.startsWith("_")) t = t.substring(1);
+        else if (t.endsWith(" array")) t = t.substring(0, t.length() - " array".length());
+        else if (t.endsWith("[]")) t = t.substring(0, t.length() - 2);
+        else return null;
+        int paren = t.indexOf('(');
+        if (paren >= 0) t = t.substring(0, paren);
+        t = t.strip();
+        return switch (t) {
+            case "int2", "int4", "integer", "int", "smallint", "tinyint" -> EdmPrimitiveTypeKind.Int32;
+            case "int8", "bigint" -> EdmPrimitiveTypeKind.Int64;
+            case "numeric", "decimal", "number" -> EdmPrimitiveTypeKind.Decimal;
+            case "float4", "float8", "real", "double precision", "double", "float", "decfloat" -> EdmPrimitiveTypeKind.Double;
+            case "bool", "boolean" -> EdmPrimitiveTypeKind.Boolean;
+            case "date" -> EdmPrimitiveTypeKind.Date;
+            case "uuid" -> EdmPrimitiveTypeKind.Guid;
+            default -> t.startsWith("timestamp") ? EdmPrimitiveTypeKind.DateTimeOffset
+                    : t.startsWith("time") ? EdmPrimitiveTypeKind.TimeOfDay : EdmPrimitiveTypeKind.String;
+        };
+    }
+
+    /** PostgreSQL {@code json}/{@code jsonb}, MySQL and H2 {@code JSON}. */
+    public static boolean isJson(String typeName) {
+        return typeName != null && (typeName.equalsIgnoreCase("json") || typeName.equalsIgnoreCase("jsonb"));
     }
 
     private static EdmMapping of(EdmPrimitiveTypeKind kind) {

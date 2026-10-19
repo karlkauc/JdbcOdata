@@ -58,6 +58,8 @@ final class SqlFilterTranslator {
 
     private final SqlDialect dialect;
     private final Map<String, QueryColumn> columns = new HashMap<>();
+    /** Visible columns SQL cannot compare (collections, SQL arrays): $search may still match their elements. */
+    private final List<QueryColumn> opaque = new ArrayList<>();
     private final EvaluationContext context;
 
     SqlFilterTranslator(QueryDefinition query, SqlDialect dialect, EvaluationContext context) {
@@ -69,7 +71,8 @@ final class SqlFilterTranslator {
         this.dialect = dialect;
         this.context = context;
         for (QueryColumn c : resultColumns) {
-            if (c.visible()) columns.put(c.propertyName(), c);
+            if (c.visible() && c.sqlComparable()) columns.put(c.propertyName(), c); // collections stay in memory
+            else if (c.visible()) opaque.add(c);
         }
     }
 
@@ -360,6 +363,7 @@ final class SqlFilterTranslator {
                     others.add(col + " IS NOT NULL");
                 }
             }
+            for (QueryColumn c : opaque) others.add("jdbcodata_q." + dialect.quote(c.name()) + " IS NOT NULL");
             if (!likeExact || !others.isEmpty()) exact[0] = false;
             if (upper) {
                 List<String> all = new ArrayList<>(parts);
