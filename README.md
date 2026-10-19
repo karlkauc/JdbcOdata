@@ -70,7 +70,12 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 - **Beziehungen:** Queries können aufeinander verweisen (`Umsatz.Kunde → Kunden`); das `$metadata` enthält
   dann NavigationProperties, `$expand` lädt die verknüpften Zeilen mit (`/odata/Umsatz?$expand=Kunde`), und
   `$filter`/`$orderby` können ihnen folgen (`Kunde/Region eq 'Nord'`, `Umsaetze/any(u:u/Betrag gt 1000)`);
-  Navigationspfade wie `Umsatz(1)/Kunde` funktionieren ebenso.
+  Navigationspfade wie `Umsatz(1)/Kunde` funktionieren ebenso. Die Ziel-Query darf in einer **anderen Datenbank**
+  liegen (jede Query läuft auf ihrer Datenquelle, die Zeilen werden im Service zugeordnet). Live-Beispiel auf
+  odata.status20.net, wo `Produktstamm` aus der Datenbank `produktstamm` und `Umsatz`/`Produkte` aus `demo` kommen:
+  [`/odata/Umsatz?$expand=Produktstamm($select=Hersteller,EAN)`](https://odata.status20.net/odata/Umsatz?$top=5&$expand=Produktstamm($select=Hersteller,EAN)),
+  [`/odata/Produkte(3)/Stammdaten`](https://odata.status20.net/odata/Produkte(3)/Stammdaten),
+  [`/odata/Umsatz?$filter=Produktstamm/Hersteller eq 'Cisco'`](https://odata.status20.net/odata/Umsatz?$top=5&$filter=Produktstamm/Hersteller%20eq%20'Cisco').
 - **Protokoll:** serverseitiges Paging (`page-size`, `Prefer: odata.maxpagesize`), ETags mit 304, Parameter-Aliase
   und `$batch` (nur Lesen).
 - **Suche und Aggregation:** `$search`, `$apply` (`groupby` mit `rollup`, `aggregate` mit `from` und Inline-Aggregaten,
@@ -109,8 +114,8 @@ docker compose up -d --build    # Caddy (TLS, Port 443) + JdbcOdata + PostgreSQL
 docker compose -f docker-compose.demo.yml up -d   # nur Demo: ein Container, H2, Port 8080
 ```
 
-Hinter einem vorhandenen Apache mit Let's Encrypt und einer Demo-PostgreSQL mit Beispieldaten: siehe
-`deploy/odata.status20.net/README.md`.
+Hinter einem vorhandenen Apache mit Let's Encrypt und einer Demo-PostgreSQL mit Beispieldaten (zwei Datenbanken
+`demo` und `produktstamm`, per Beziehung verknüpft): siehe `deploy/odata.status20.net/README.md`.
 
 ### Tests
 
