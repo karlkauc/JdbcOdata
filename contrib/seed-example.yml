@@ -25,7 +25,8 @@ queries:
     # optional: credentials used once for the schema snapshot at start (not stored)
     # snapshotCredentials: {username: report_ro, password: secret}
     # optional: key columns (sets keyMode COLUMNS semantics after the snapshot) and relations to other
-    # queries, published as navigation properties in $metadata (metadata only, no $expand)
+    # queries, published as navigation properties in $metadata and usable with $expand and navigation paths;
+    # the target query may run on another datasource (rows are joined in memory)
     # keyColumns: [PositionId]
     # relations:
     #   - name: Kunde            # navigation property name

@@ -50,6 +50,17 @@ Queries → Neue Query:
    `/odata/Kunden?$filter=Umsaetze/any(u:u/Betrag gt 10000)` oder `$filter=Umsaetze/$count gt 50`.
    Navigationspfade gehen direkt in der URL: `/odata/Umsatz(1)/Kunde`, `/odata/Kunden(1)/Umsaetze?$top=5`.
 
+   **Über Datenbanken hinweg:** Ziel-Query und eigene Query dürfen auf verschiedenen Datenquellen liegen,
+   z. B. `Umsatz` (ERP-Datenbank) mit `Umsatz.Produkt → Produkte` (eigene Produkt-Datenbank) über
+   `ProduktID = ProduktID`. Jede Query läuft auf ihrer Datenquelle, die Zeilen werden im Server zugeordnet.
+   Zu beachten:
+   - *Anmeldung:* Bei Durchreichen der Benutzeranmeldung muss diese auf beiden Datenbanken gültig sein;
+     beim Service-User braucht jede Datenquelle eigene hinterlegte Zugangsdaten.
+   - *Datentypen:* Zahlen werden typtolerant verglichen (`1` = `1.00`), Zahl und Text aber nicht
+     (`'0042'` ≠ `42`) – dann in einer der beiden SQL-Abfragen casten.
+   - *Datenmenge:* Die Ziel-Query wird pro Request einmal vollständig ausgeführt (höchstens 200.000
+     expandierte Datensätze); große Stammdaten-Queries daher möglichst eng fassen.
+
 Volltextsuche und Aggregation laufen auf jedem Feed: `/odata/Kunden?$search=Wien` oder
 `/odata/Umsatz?$apply=groupby((Region),aggregate(Betrag with sum as Summe))&$orderby=Summe desc`.
 Weitere Möglichkeiten: `$compute=Betrag mul 1.2 as Brutto`, `$apply=groupby((rollup(Region,Land)),aggregate($count as N))`,

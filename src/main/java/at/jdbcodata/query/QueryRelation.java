@@ -5,10 +5,11 @@ import java.util.List;
 /**
  * A relation from this query to another query, published as an OData navigation property.
  *
- * <p>Relations are metadata only: {@code $metadata} gains a {@code NavigationProperty} (with a
- * {@code ReferentialConstraint} for to-one relations whose columns exist) and the entity set a
- * {@code NavigationPropertyBinding}, so OData explorers, Excel and Power BI show how the feeds hang together.
- * Navigation paths and {@code $expand} are not evaluated; clients join on the columns themselves.
+ * <p>{@code $metadata} gains a {@code NavigationProperty} (with a {@code ReferentialConstraint} for to-one relations
+ * whose columns exist) and the entity set a {@code NavigationPropertyBinding}, so OData explorers, Excel and Power BI
+ * show how the feeds hang together. {@code $expand}, navigation paths and navigation in {@code $filter}/{@code $orderby}
+ * are evaluated: the target query runs on its own datasource and rows are joined in memory on the column pairs, so the
+ * target may live in another database.
  *
  * @param name          navigation property name ({@code [A-Za-z][A-Za-z0-9_]*}), unique among the query's properties
  * @param targetQuery   name of the target query (entity set); a missing or invisible target hides the relation
