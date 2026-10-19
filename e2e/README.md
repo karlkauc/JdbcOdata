@@ -42,6 +42,11 @@ Live-Deployment `https://odata.status20.net` (siehe `deploy/odata.status20.net/`
   `…/Kundendaten/Land/$value`, Push-Down-Header und `$apply`.
 - Row-Level-Security (`excel_nord`) und anonymer Zugang.
 
+`tests/security.spec.ts` prüft die Härtung der Admin-UI, ebenfalls nur lesend: CSP-, Frame- und HSTS-Header,
+Session-Cookie (`Secure`, `HttpOnly`, `SameSite=Lax`), alle Seiten der Navigation plus Query-Editor ohne
+CSP-Verstöße oder Skriptfehler in der Konsole, Lösch-Rückfrage über `data-confirm` (wird abgebrochen, es geht kein
+POST raus), automatisches Absenden des Statistik-Zeitraums und Dark Mode über `theme.js` nach einem Reload.
+
 ```bash
 cd e2e && npm install && npx playwright install chromium
 set -a && . ../deploy/odata.status20.net/.env && set +a
