@@ -159,9 +159,20 @@ public class QueryUiController {
         QueryDefinition q = queryService.require(id);
         List<ColumnSetting> settings = new ArrayList<>();
         for (QueryColumn c : q.columns()) {
+            List<at.jdbcodata.query.ComplexField> structure = null;
+            String text = all.get("structure_" + c.propertyName());
+            if (text != null && !normalizeLines(text).equals(normalizeLines(c.structureLines()))) {
+                try {
+                    structure = parseStructure(text);
+                } catch (at.jdbcodata.common.InvalidRequestException e) {
+                    redirect.addFlashAttribute("error", c.propertyName() + ": " + e.getMessage());
+                    return "redirect:/admin/queries/" + id;
+                }
+            }
             settings.add(new ColumnSetting(c.propertyName(), all.containsKey("key_" + c.propertyName()),
                     all.containsKey("visible_" + c.propertyName()),
-                    at.jdbcodata.query.CollectionKind.parse(all.get("collection_" + c.propertyName()))));
+                    at.jdbcodata.query.CollectionKind.parse(all.get("collection_" + c.propertyName())),
+                    c.structured() ? Boolean.valueOf(all.containsKey("textcopy_" + c.propertyName())) : null, structure));
         }
         try {
             queryService.updateColumnSettings(id, settings);
@@ -171,6 +182,26 @@ public class QueryUiController {
         }
         redirect.addFlashAttribute("message", "Spalteneinstellungen gespeichert.");
         return "redirect:/admin/queries/" + id;
+    }
+
+    static List<at.jdbcodata.query.ComplexField> parseStructure(String text) {
+        List<at.jdbcodata.query.ComplexField> fields = new ArrayList<>();
+        for (String line : text.split("\\R")) {
+            String l = line.strip();
+            if (l.isEmpty()) continue;
+            String[] parts = l.split("\\s+", 3);
+            if (parts.length < 2) throw new at.jdbcodata.common.InvalidRequestException("Zeile '" + l + "': erwartet 'Name Typ [JSON-Schlüssel]'");
+            String type = parts[1];
+            boolean collection = type.startsWith("Collection(") && type.endsWith(")");
+            if (collection) type = type.substring("Collection(".length(), type.length() - 1);
+            if (!type.startsWith("Edm.")) type = "Edm." + type;
+            fields.add(new at.jdbcodata.query.ComplexField(parts.length > 2 ? parts[2].strip() : parts[0], parts[0], type, collection));
+        }
+        return fields;
+    }
+
+    private static String normalizeLines(String text) {
+        return String.join("\n", text.strip().lines().map(String::strip).filter(l -> !l.isEmpty()).toList());
     }
 
     /** Grants of a FIXED query: checkbox {@code all}, {@code user_<id>} and {@code group_<id>}. */

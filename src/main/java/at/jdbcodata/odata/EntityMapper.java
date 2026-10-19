@@ -46,6 +46,8 @@ final class EntityMapper {
                 Object raw = s.resultIndex() < 0 ? null : row[s.resultIndex()];
                 if (s.column().collectionValued() || raw instanceof List) {
                     e.addProperty(CollectionValues.property(s.column(), complexType(q, s.column()), raw));
+                    String copy = DynamicEdmProvider.textCopyName(q, s.column());
+                    if (copy != null) e.addProperty(new Property("Edm.String", copy, ValueType.PRIMITIVE, CollectionValues.rawText(raw)));
                     continue; // never a key
                 }
                 Object value = convert(raw, s);

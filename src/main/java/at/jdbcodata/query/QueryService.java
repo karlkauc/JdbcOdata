@@ -248,6 +248,7 @@ public class QueryService {
     @Transactional
     public QueryDefinition replaceSnapshot(UUID id, List<QueryColumn> columns) {
         QueryDefinitionEntity e = requireEntity(id);
+        columns = keepSettings(e.getColumns().stream().map(QueryColumnEntity::toRecord).toList(), columns);
         e.getColumns().clear();
         repository.flush();
         e.replaceColumns(columns);
@@ -258,7 +259,79 @@ public class QueryService {
         return updated;
     }
 
-    /** Sets key, visibility and collection flags of snapshot columns; unknown property names are ignored. */
+    /**
+     * A new snapshot of the same SQL keeps the admin's settings of columns that still exist with the same type: key,
+     * visibility, text copy, the published form (if still possible) and the edited structure, to which fields the new
+     * samples show are appended.
+     */
+    static List<QueryColumn> keepSettings(List<QueryColumn> before, List<QueryColumn> after) {
+        if (before.isEmpty()) return after;
+        java.util.Map<String, QueryColumn> old = new java.util.HashMap<>();
+        for (QueryColumn c : before) old.put(c.name(), c);
+        List<QueryColumn> out = new java.util.ArrayList<>();
+        for (QueryColumn n : after) {
+            QueryColumn o = old.get(n.name());
+            if (o == null || o.jdbcType() != n.jdbcType()) {
+                out.add(n);
+                continue;
+            }
+            List<ComplexField> structure = n.structure();
+            if (!o.structure().isEmpty() && o.singleObject() == n.singleObject()) {
+                List<ComplexField> merged = new java.util.ArrayList<>(o.structure());
+                java.util.Set<String> keys = new java.util.HashSet<>();
+                java.util.Set<String> names = new java.util.HashSet<>();
+                for (ComplexField f : merged) {
+                    keys.add(f.key());
+                    names.add(f.name());
+                }
+                for (ComplexField f : n.structure()) {
+                    if (keys.contains(f.key())) continue;
+                    merged.add(new ComplexField(f.key(), TypeMapper.toPropertyName(f.key(), merged.size(), names), f.edmType(), f.collection()));
+                }
+                structure = merged;
+            }
+            QueryColumn candidate = new QueryColumn(n.ordinal(), n.name(), n.propertyName(), n.jdbcType(), n.jdbcTypeName(),
+                    n.edmType(), n.precision(), n.scale(), n.nullable(), o.key(), o.visible(), n.elementType(), structure,
+                    CollectionKind.NONE, n.singleObject(), o.textCopy());
+            CollectionKind kind = allowed(candidate, o.collection()) ? o.collection() : CollectionKind.NONE;
+            out.add(new QueryColumn(n.ordinal(), n.name(), n.propertyName(), n.jdbcType(), n.jdbcTypeName(), n.edmType(),
+                    n.precision(), n.scale(), n.nullable(), o.key() && kind == CollectionKind.NONE, o.visible(), n.elementType(),
+                    structure, kind, n.singleObject(), o.textCopy()));
+        }
+        return out;
+    }
+
+    private static boolean allowed(QueryColumn c, CollectionKind kind) {
+        return switch (kind) {
+            case NONE -> true;
+            case PRIMITIVE -> c.canBePrimitiveCollection();
+            case COMPLEX -> c.canBeComplexCollection();
+            case OBJECT -> c.canBeComplexObject();
+        };
+    }
+
+    private static final java.util.regex.Pattern IDENTIFIER = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,127}");
+    private static final java.util.Set<String> FIELD_TYPES = java.util.Set.of("Edm.String", "Edm.Int32", "Edm.Int64",
+            "Edm.Decimal", "Edm.Double", "Edm.Boolean", "Edm.Date", "Edm.DateTimeOffset", "Edm.TimeOfDay", "Edm.Guid");
+
+    /** Fields of an edited structure: JSON key, unique OData name, a supported primitive type. */
+    private static void validateStructure(String column, List<ComplexField> fields) {
+        if (fields.isEmpty()) throw new InvalidRequestException("The structure of column '" + column + "' needs at least one field");
+        java.util.Set<String> names = new java.util.HashSet<>();
+        for (ComplexField f : fields) {
+            if (f.key() == null || f.key().isBlank()) throw new InvalidRequestException("A field of column '" + column + "' has no JSON key");
+            if (f.name() == null || !IDENTIFIER.matcher(f.name()).matches() || f.name().startsWith("jdbcodata_")) {
+                throw new InvalidRequestException("Field name '" + f.name() + "' of column '" + column + "' is no valid OData name");
+            }
+            if (!names.add(f.name())) throw new InvalidRequestException("Field name '" + f.name() + "' appears twice in column '" + column + "'");
+            if (!FIELD_TYPES.contains(f.edmType())) {
+                throw new InvalidRequestException("Type '" + f.edmType() + "' of field '" + f.name() + "' is not supported ("
+                        + String.join(", ", FIELD_TYPES.stream().sorted().toList()) + ")");
+            }
+        }
+    }
+
+    /** Sets key, visibility, published form, text copy and structure of snapshot columns; unknown names are ignored. */
     @Transactional
     public QueryDefinition updateColumnSettings(UUID id, List<ColumnSetting> settings) {
         QueryDefinitionEntity e = requireEntity(id);
@@ -268,6 +341,14 @@ public class QueryService {
             ColumnSetting s = byName.get(c.getPropertyName());
             if (s != null) {
                 QueryColumn current = c.toRecord();
+                if (s.structure() != null) {
+                    if (current.structure().isEmpty()) {
+                        throw new InvalidRequestException("Column '" + current.propertyName() + "' holds no JSON objects; it has no structure to edit");
+                    }
+                    validateStructure(current.propertyName(), s.structure());
+                    c.setStructure(s.structure());
+                    current = c.toRecord();
+                }
                 CollectionKind collection = s.collection() == null ? current.collection() : s.collection();
                 if (collection == CollectionKind.PRIMITIVE && !current.canBePrimitiveCollection()) {
                     throw new InvalidRequestException("Column '" + current.propertyName()
@@ -277,12 +358,17 @@ public class QueryService {
                     throw new InvalidRequestException("Column '" + current.propertyName()
                             + "' holds no JSON array of objects and cannot be a complex collection");
                 }
+                if (collection == CollectionKind.OBJECT && !current.canBeComplexObject()) {
+                    throw new InvalidRequestException("Column '" + current.propertyName()
+                            + "' holds no JSON objects and cannot be a complex value");
+                }
                 if (collection != CollectionKind.NONE && s.key()) {
-                    throw new InvalidRequestException("Collection column '" + current.propertyName() + "' cannot be a key");
+                    throw new InvalidRequestException("Structured column '" + current.propertyName() + "' cannot be a key");
                 }
                 c.setKey(s.key());
                 c.setVisible(s.visible() || s.key());
                 c.setCollection(collection);
+                if (s.textCopy() != null) c.setTextCopy(s.textCopy());
             }
         }
         e.setUpdatedAt(Instant.now());

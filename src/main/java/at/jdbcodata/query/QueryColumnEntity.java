@@ -70,6 +70,12 @@ public class QueryColumnEntity {
     @Column(name = "collection_kind", nullable = false, length = 10)
     private CollectionKind collection = CollectionKind.NONE;
 
+    @Column(name = "structure_single", nullable = false)
+    private boolean singleObject;
+
+    @Column(name = "text_copy", nullable = false)
+    private boolean textCopy;
+
     private static final tools.jackson.databind.json.JsonMapper JSON = tools.jackson.databind.json.JsonMapper.builder().build();
     private static final tools.jackson.core.type.TypeReference<List<ComplexField>> FIELDS = new tools.jackson.core.type.TypeReference<>() {
     };
@@ -91,6 +97,8 @@ public class QueryColumnEntity {
         e.elementType = c.elementType();
         e.structureJson = c.structure().isEmpty() ? null : JSON.writeValueAsString(c.structure());
         e.collection = c.collection();
+        e.singleObject = c.singleObject();
+        e.textCopy = c.textCopy();
         return e;
     }
 
@@ -98,10 +106,15 @@ public class QueryColumnEntity {
     void setKey(boolean key) { this.key = key; }
     void setVisible(boolean visible) { this.visible = visible; }
     void setCollection(CollectionKind collection) { this.collection = collection; }
+    void setTextCopy(boolean textCopy) { this.textCopy = textCopy; }
+    void setStructure(List<ComplexField> structure) {
+        this.structureJson = structure == null || structure.isEmpty() ? null : JSON.writeValueAsString(structure);
+    }
 
     QueryColumn toRecord() {
         return new QueryColumn(ordinal, columnName, propertyName, jdbcType, jdbcTypeName, edmType, precision, scale,
                 nullable, key, visible, elementType,
-                structureJson == null || structureJson.isBlank() ? List.of() : JSON.readValue(structureJson, FIELDS), collection);
+                structureJson == null || structureJson.isBlank() ? List.of() : JSON.readValue(structureJson, FIELDS), collection,
+                singleObject, textCopy);
     }
 }

@@ -142,20 +142,24 @@ public class SeedLoader implements ApplicationRunner {
         }
         // keyColumns: [KundeId] marks snapshot columns as key (requires keyMode COLUMNS and a snapshot);
         // collectionColumns: [Tags, Positionen] publishes SQL arrays / JSON columns as collections (primitive when
-        // the snapshot found an element type, else complex).
+        // the snapshot found an element type, else complex, or one complex value for JSON objects);
+        // textCopyColumns: [Kategorien] additionally as text property KategorienText.
         List<String> keyColumns = strings(q, "keyColumns");
         List<String> collectionColumns = strings(q, "collectionColumns");
-        if ((!keyColumns.isEmpty() || !collectionColumns.isEmpty()) && saved.hasSnapshot()) {
+        List<String> textCopyColumns = strings(q, "textCopyColumns");
+        if ((!keyColumns.isEmpty() || !collectionColumns.isEmpty() || !textCopyColumns.isEmpty()) && saved.hasSnapshot()) {
             List<ColumnSetting> settings = new ArrayList<>();
             for (QueryColumn c : saved.columns()) {
                 boolean key = keyColumns.contains(c.propertyName());
                 at.jdbcodata.query.CollectionKind collection = !collectionColumns.contains(c.propertyName()) ? null
                         : c.canBePrimitiveCollection() ? at.jdbcodata.query.CollectionKind.PRIMITIVE
-                        : c.canBeComplexCollection() ? at.jdbcodata.query.CollectionKind.COMPLEX : null;
+                        : c.canBeComplexCollection() ? at.jdbcodata.query.CollectionKind.COMPLEX
+                        : c.canBeComplexObject() ? at.jdbcodata.query.CollectionKind.OBJECT : null;
                 if (collectionColumns.contains(c.propertyName()) && collection == null) {
                     log.warn("Seed query '{}': column '{}' is no SQL or JSON array, stays a plain property", saved.name(), c.propertyName());
                 }
-                settings.add(new ColumnSetting(c.propertyName(), key, c.visible() || key, collection));
+                settings.add(new ColumnSetting(c.propertyName(), key, c.visible() || key, collection,
+                        textCopyColumns.contains(c.propertyName()) ? Boolean.TRUE : null, null));
             }
             queryService.updateColumnSettings(saved.id(), settings);
         }

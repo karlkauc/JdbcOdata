@@ -37,8 +37,12 @@ public final class CollectionShape {
     }
 
     /** What the snapshot found: element type of a value collection, or fields of an object collection. */
-    public record Detected(String elementType, List<ComplexField> structure) {
-        static final Detected NOTHING = new Detected(null, List.of());
+    public record Detected(String elementType, List<ComplexField> structure, boolean singleObject) {
+        static final Detected NOTHING = new Detected(null, List.of(), false);
+
+        Detected(String elementType, List<ComplexField> structure) {
+            this(elementType, structure, false);
+        }
     }
 
     /**
@@ -49,6 +53,10 @@ public final class CollectionShape {
     static Detected detect(ResultColumn column, List<Object> samples) {
         boolean array = column.jdbcType() == java.sql.Types.ARRAY;
         if (!array && column.mapping().kind() != EdmPrimitiveTypeKind.String) return Detected.NOTHING;
+        if (!array) {
+            Detected objects = objects(samples);
+            if (objects != null) return objects;
+        }
         List<Object> elements = new ArrayList<>();
         boolean any = false;
         for (Object s : samples) {
@@ -72,6 +80,41 @@ public final class CollectionShape {
             return new Detected(fqn(kindOf(elements)), List.of());
         }
         return Detected.NOTHING;
+    }
+
+    /** Every non-null sample a JSON object: their fields as structure of one complex value; else null. */
+    private static Detected objects(List<Object> samples) {
+        List<Object> objects = new ArrayList<>();
+        for (Object s : samples) {
+            if (s == null) continue;
+            Object o = jsonObject(s);
+            if (o == null) return null;
+            objects.add(o);
+        }
+        if (objects.isEmpty()) return null;
+        List<ComplexField> fields = structure(objects);
+        return fields.isEmpty() ? null : new Detected(null, fields, true);
+    }
+
+    /** A JSON object as map, or null. */
+    public static Map<String, Object> jsonObject(Object raw) {
+        if (raw == null) return null;
+        if (raw instanceof Map<?, ?> m) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) m;
+            return map;
+        }
+        String text = raw.toString().strip();
+        if (!text.startsWith("{")) return null;
+        try {
+            JsonNode node = JSON.readTree(text);
+            if (node == null || !node.isObject()) return null;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = (Map<String, Object>) value(node);
+            return map;
+        } catch (JacksonException e) {
+            return null;
+        }
     }
 
     private static List<ComplexField> structure(List<Object> objects) {

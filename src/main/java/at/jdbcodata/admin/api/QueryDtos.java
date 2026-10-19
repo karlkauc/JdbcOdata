@@ -149,10 +149,14 @@ final class QueryDtos {
         }
     }
 
-    /** {@code collection}: NONE, PRIMITIVE or COMPLEX; omitted = unchanged. */
-    record ColumnSettingRequest(@NotBlank String propertyName, boolean key, boolean visible, String collection) {
+    /**
+     * {@code collection}: NONE, PRIMITIVE, COMPLEX or OBJECT; {@code textCopy}: additional text property;
+     * {@code structure}: fields of the JSON objects (key, name, edmType, collection). Omitted = unchanged.
+     */
+    record ColumnSettingRequest(@NotBlank String propertyName, boolean key, boolean visible, String collection,
+                                Boolean textCopy, List<at.jdbcodata.query.ComplexField> structure) {
         ColumnSetting toRecord() {
-            return new ColumnSetting(propertyName, key, visible, at.jdbcodata.query.CollectionKind.parse(collection));
+            return new ColumnSetting(propertyName, key, visible, at.jdbcodata.query.CollectionKind.parse(collection), textCopy, structure);
         }
     }
 

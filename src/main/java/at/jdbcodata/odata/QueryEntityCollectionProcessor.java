@@ -105,8 +105,9 @@ import org.slf4j.LoggerFactory;
  */
 public class QueryEntityCollectionProcessor implements CountEntityCollectionProcessor, EntityProcessor,
         PrimitiveValueProcessor, BatchProcessor, ReferenceCollectionProcessor, ReferenceProcessor,
-        org.apache.olingo.server.api.processor.PrimitiveCollectionProcessor,
-        org.apache.olingo.server.api.processor.ComplexCollectionProcessor {
+        org.apache.olingo.server.api.processor.CountPrimitiveCollectionProcessor,
+        org.apache.olingo.server.api.processor.CountComplexCollectionProcessor,
+        org.apache.olingo.server.api.processor.ComplexProcessor {
 
     private static final Logger log = LoggerFactory.getLogger(QueryEntityCollectionProcessor.class);
     private static final Locale LOCALE = Locale.ENGLISH;
@@ -1303,7 +1304,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         PropertyRead p = readProperty(uriInfo, req, response);
         if (p == null) return;
         ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
-                .navOrPropertyPath(p.edmProperty().getName()).build();
+                .navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).primitive(serviceMetadata,
                 (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
                 PrimitiveSerializerOptions.with().contextURL(contextUrl).build());
@@ -1328,7 +1329,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 ContentType.TEXT_PLAIN.toContentTypeString(), null);
     }
 
-    private record PropertyRead(EdmEntitySet entitySet, String keyPath, EdmProperty edmProperty, Property property) {
+    private record PropertyRead(EdmEntitySet entitySet, String keyPath, EdmProperty edmProperty, Property property, String path) {
     }
 
     /** {@code Auftraege(1)/Tags}: the elements, with $filter ($it), $search, $orderby, $skip and $top applied. */
@@ -1338,7 +1339,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         PropertyRead p = readCollectionProperty(uriInfo, req, response);
         if (p == null) return;
         ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
-                .navOrPropertyPath(p.edmProperty().getName()).build();
+                .navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).primitiveCollection(serviceMetadata,
                 (EdmPrimitiveType) p.edmProperty().getType(), p.property(),
                 PrimitiveSerializerOptions.with().contextURL(contextUrl).build());
@@ -1352,7 +1353,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         PropertyRead p = readCollectionProperty(uriInfo, req, response);
         if (p == null) return;
         ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath())
-                .navOrPropertyPath(p.edmProperty().getName()).build();
+                .navOrPropertyPath(p.path()).build();
         SerializerResult result = odata.createSerializer(responseFormat).complexCollection(serviceMetadata,
                 (org.apache.olingo.commons.api.edm.EdmComplexType) p.edmProperty().getType(), p.property(),
                 org.apache.olingo.server.api.serializer.ComplexSerializerOptions.with().contextURL(contextUrl)
@@ -1362,19 +1363,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     private PropertyRead readCollectionProperty(UriInfo uriInfo, ODataRequest req, ODataResponse response)
             throws ODataApplicationException {
-        List<UriResource> parts = uriInfo.getUriResourceParts();
-        begin(uriInfo);
-        if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof org.apache.olingo.server.api.uri.UriResourceProperty propPart)) {
-            throw new ODataApplicationException("Not a property", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
-        }
-        Resolved r = resolve(parts.subList(0, parts.size() - 1), customOptions(uriInfo), req);
-        setCacheHeaders(response, r.root());
-        Property property = r.single() == null ? null : r.single().getProperty(propPart.getProperty().getName());
-        if (property == null || property.getValue() == null) {
-            response.setStatusCode(HttpStatusCode.NO_CONTENT.getStatusCode());
-            return null;
-        }
-        List<?> elements = CollectionValues.elements(property);
+        PropertyRead p = collectionElements(uriInfo, req, response);
+        if (p == null) return null;
+        List<?> elements = (List<?>) p.property().getValue();
         Map<Entity, Object> byRow = new java.util.IdentityHashMap<>();
         List<Entity> rows = new ArrayList<>();
         for (Object e : elements) {
@@ -1384,11 +1375,72 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         List<Object> kept = new ArrayList<>();
         for (Entity row : QueryOptionsEvaluator.apply(rows, uriInfo, null).getEntities()) kept.add(byRow.get(row));
-        Property result = new Property(property.getType(), property.getName(), property.getValueType(), kept);
-        String id = r.single().getId() == null ? "" : r.single().getId().toString();
-        int open = id.indexOf('(');
-        String keyPath = open >= 0 && id.endsWith(")") ? id.substring(open + 1, id.length() - 1) : id;
-        return new PropertyRead(r.entitySet(), keyPath, propPart.getProperty(), result);
+        Property result = new Property(p.property().getType(), p.property().getName(), p.property().getValueType(), kept);
+        return new PropertyRead(p.entitySet(), p.keyPath(), p.edmProperty(), result, p.path());
+    }
+
+    /** The collection property a path ends with (before an optional {@code /$count}). */
+    private PropertyRead collectionElements(UriInfo uriInfo, ODataRequest req, ODataResponse response)
+            throws ODataApplicationException {
+        List<UriResource> parts = new ArrayList<>(uriInfo.getUriResourceParts());
+        if (!parts.isEmpty() && parts.get(parts.size() - 1) instanceof UriResourceCount) parts.remove(parts.size() - 1);
+        if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof org.apache.olingo.server.api.uri.UriResourceProperty)) {
+            throw new ODataApplicationException("Not a property", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
+        return walkProperty(uriInfo, parts, req, response);
+    }
+
+    /** {@code Bestellungen(1)/Kategorien/$count}: number of elements after $filter and $search. */
+    @Override
+    public void countPrimitiveCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo)
+            throws ODataApplicationException, ODataLibraryException {
+        countCollection(req, response, uriInfo);
+    }
+
+    @Override
+    public void countComplexCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo)
+            throws ODataApplicationException, ODataLibraryException {
+        countCollection(req, response, uriInfo);
+    }
+
+    private void countCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        PropertyRead p = collectionElements(uriInfo, req, response);
+        long n = 0;
+        if (p != null) {
+            List<Entity> rows = new ArrayList<>();
+            for (Object e : (List<?>) p.property().getValue()) rows.add(CollectionValues.row(e));
+            n = QueryOptionsEvaluator.apply(rows, uriInfo.getSearchOption(), uriInfo.getFilterOption(), null, null, null, null).getCount();
+            response.setStatusCode(HttpStatusCode.OK.getStatusCode());
+        } else {
+            response.setStatusCode(HttpStatusCode.OK.getStatusCode()); // a null collection has no elements
+        }
+        respond(req, response, new ByteArrayInputStream(String.valueOf(n).getBytes(StandardCharsets.UTF_8)),
+                ContentType.TEXT_PLAIN.toContentTypeString(), null);
+    }
+
+    /** {@code Bestellungen(1)/Kundendaten}: one complex value, with $select of its fields. */
+    @Override
+    public void readComplex(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType responseFormat)
+            throws ODataApplicationException, ODataLibraryException {
+        PropertyRead p = walkProperty(uriInfo, uriInfo.getUriResourceParts(), req, response);
+        if (p == null) return;
+        ContextURL contextUrl = ContextURL.with().entitySet(p.entitySet()).keyPath(p.keyPath()).navOrPropertyPath(p.path()).build();
+        SerializerResult result = odata.createSerializer(responseFormat).complex(serviceMetadata,
+                (org.apache.olingo.commons.api.edm.EdmComplexType) p.edmProperty().getType(), p.property(),
+                org.apache.olingo.server.api.serializer.ComplexSerializerOptions.with().contextURL(contextUrl)
+                        .select(uriInfo.getSelectOption()).build());
+        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), null);
+    }
+
+    @Override
+    public void updateComplex(ODataRequest req, ODataResponse response, UriInfo uriInfo, ContentType requestFormat,
+                              ContentType responseFormat) throws ODataApplicationException {
+        throw readOnly();
+    }
+
+    @Override
+    public void deleteComplex(ODataRequest req, ODataResponse response, UriInfo uriInfo) throws ODataApplicationException {
+        throw readOnly();
     }
 
     @Override
@@ -1420,22 +1472,47 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         if (!parts.isEmpty() && parts.get(parts.size() - 1).getKind() == UriResourceKind.value) {
             parts.remove(parts.size() - 1);
         }
-        begin(uriInfo);
-        if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof UriResourcePrimitiveProperty propPart)) {
+        if (parts.isEmpty() || !(parts.get(parts.size() - 1) instanceof UriResourcePrimitiveProperty)) {
             throw new ODataApplicationException("Only primitive properties can be read",
                     HttpStatusCode.NOT_IMPLEMENTED.getStatusCode(), LOCALE);
         }
-        Resolved r = resolve(parts.subList(0, parts.size() - 1), customOptions(uriInfo), req);
+        return walkProperty(uriInfo, parts, req, response);
+    }
+
+    /**
+     * {@code Set(key)/P}, also through complex values ({@code Bestellungen(1)/Kundendaten/Land}): the entity is
+     * resolved from the segments before the first property, then the properties are followed; 204 when the entity or
+     * a value on the way is null.
+     */
+    private PropertyRead walkProperty(UriInfo uriInfo, List<UriResource> parts, ODataRequest req, ODataResponse response)
+            throws ODataApplicationException {
+        begin(uriInfo);
+        int first = parts.size() - 1;
+        while (first > 0 && parts.get(first - 1) instanceof org.apache.olingo.server.api.uri.UriResourceComplexProperty) first--;
+        Resolved r = resolve(parts.subList(0, first), customOptions(uriInfo), req);
         setCacheHeaders(response, r.root());
-        Property property = r.single() == null ? null : r.single().getProperty(propPart.getProperty().getName());
-        if (property == null || property.getValue() == null) {
+        Entity current = r.single();
+        Property property = null;
+        StringBuilder path = new StringBuilder();
+        for (int i = first; i < parts.size() && current != null; i++) {
+            org.apache.olingo.server.api.uri.UriResourceProperty segment = (org.apache.olingo.server.api.uri.UriResourceProperty) parts.get(i);
+            if (path.length() > 0) path.append('/');
+            path.append(segment.getProperty().getName());
+            property = current.getProperty(segment.getProperty().getName());
+            if (i < parts.size() - 1) {
+                current = property != null && property.getValue() instanceof org.apache.olingo.commons.api.data.ComplexValue cv
+                        ? CollectionValues.row(cv) : null;
+            }
+        }
+        if (current == null || property == null || property.getValue() == null) {
             response.setStatusCode(HttpStatusCode.NO_CONTENT.getStatusCode());
             return null;
         }
         String id = r.single().getId() == null ? "" : r.single().getId().toString();
         int open = id.indexOf('(');
         String keyPath = open >= 0 && id.endsWith(")") ? id.substring(open + 1, id.length() - 1) : id;
-        return new PropertyRead(r.entitySet(), keyPath, propPart.getProperty(), property);
+        EdmProperty edmProperty = ((org.apache.olingo.server.api.uri.UriResourceProperty) parts.get(parts.size() - 1)).getProperty();
+        return new PropertyRead(r.entitySet(), keyPath, edmProperty, property, path.toString());
     }
 
     /**

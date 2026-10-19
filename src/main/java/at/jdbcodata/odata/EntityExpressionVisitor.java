@@ -170,6 +170,15 @@ final class EntityExpressionVisitor implements ExpressionVisitor<Object> {
             if (part instanceof org.apache.olingo.server.api.uri.UriResourceComplexProperty prop && prop.isCollection()) {
                 return collectionProperty(current.getProperty(prop.getProperty().getName()), last ? null : parts.get(i + 1));
             }
+            if (part instanceof org.apache.olingo.server.api.uri.UriResourceComplexProperty prop) {
+                // one complex value (Kundendaten/Land): its fields like the properties of a row
+                Property property = current.getProperty(prop.getProperty().getName());
+                Object value = property == null ? null : property.getValue();
+                if (last) return value == null ? null : RELATED_ENTITY; // only meaningful against null
+                if (!(value instanceof org.apache.olingo.commons.api.data.ComplexValue cv)) return null;
+                current = CollectionValues.row(cv);
+                continue;
+            }
             if (part instanceof UriResourceNavigation nav) {
                 if (navigation == null) throw unsupported("Navigation in $filter and $orderby");
                 List<Entity> targets = navigation.navigate(current, nav.getProperty().getName());

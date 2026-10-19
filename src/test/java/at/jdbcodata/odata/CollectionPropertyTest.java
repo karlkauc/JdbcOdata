@@ -52,25 +52,26 @@ class CollectionPropertyTest extends DemoProfileTest {
 
     @BeforeAll
     void defineModel() throws Exception {
-        sql("CREATE TABLE auftraege (auftrag_id INT PRIMARY KEY, kunde VARCHAR(40), tags VARCHAR(20) ARRAY, mengen INT ARRAY, positionen JSON)",
+        sql("CREATE TABLE auftraege (auftrag_id INT PRIMARY KEY, kunde VARCHAR(40), tags VARCHAR(20) ARRAY, mengen INT ARRAY, positionen JSON, info JSON)",
                 """
                 INSERT INTO auftraege VALUES
-                (1, 'Alpha', ARRAY['neu','eilig'], ARRAY[3,1,2], JSON '[{"Artikel":"Schraube","Menge":10,"Betrag":12.50,"Seriennummern":["S1","S2"]},{"Artikel":"Monitor","Menge":1,"Betrag":249.00,"Seriennummern":["M9"]}]'),
-                (2, 'Beta', ARRAY['alt'], ARRAY[5], JSON '[{"Artikel":"Maus","Menge":2,"Betrag":30.00,"Seriennummern":[]}]'),
-                (3, 'Gamma', ARRAY[]::VARCHAR ARRAY, NULL, JSON '[]'),
-                (4, 'Delta', NULL, ARRAY[7,0], NULL)
+                (1, 'Alpha', ARRAY['neu','eilig'], ARRAY[3,1,2], JSON '[{"Artikel":"Schraube","Menge":10,"Betrag":12.50,"Seriennummern":["S1","S2"]},{"Artikel":"Monitor","Menge":1,"Betrag":249.00,"Seriennummern":["M9"]}]', JSON '{"Ort":"Wien","Land":"AT","Plz":1010}'),
+                (2, 'Beta', ARRAY['alt'], ARRAY[5], JSON '[{"Artikel":"Maus","Menge":2,"Betrag":30.00,"Seriennummern":[]}]', JSON '{"Ort":"Graz","Land":"AT","Plz":8010}'),
+                (3, 'Gamma', ARRAY[]::VARCHAR ARRAY, NULL, JSON '[]', JSON '{"Ort":"Berlin","Land":"DE"}'),
+                (4, 'Delta', NULL, ARRAY[7,0], NULL, NULL)
                 """);
         String ds = null;
         for (JsonNode n : json.readTree(get("/api/v1/queries", ADMIN, ADMIN_PASSWORD).body())) {
             if ("Sales".equals(n.get("name").asString())) ds = n.get("datasourceId").asString();
         }
-        String sql = "SELECT auftrag_id, kunde, tags, mengen, positionen FROM auftraege ORDER BY auftrag_id";
+        String sql = "SELECT auftrag_id, kunde, tags, mengen, positionen, info FROM auftraege ORDER BY auftrag_id";
         query("""
                 {"name":"Auftraege","datasourceId":"%s","keyMode":"COLUMNS","pushDown":true,"cacheEnabled":true,"sql":"%s"}
                 """.formatted(ds, sql),
                 """
                 {"propertyName":"auftrag_id","key":true,"visible":true},
-                {"propertyName":"tags","key":false,"visible":true,"collection":"PRIMITIVE"},
+                {"propertyName":"tags","key":false,"visible":true,"collection":"PRIMITIVE","textCopy":true},
+                {"propertyName":"info","key":false,"visible":true,"collection":"OBJECT"},
                 {"propertyName":"mengen","key":false,"visible":true,"collection":"PRIMITIVE"},
                 {"propertyName":"positionen","key":false,"visible":true,"collection":"COMPLEX"}
                 """);
@@ -238,6 +239,88 @@ class CollectionPropertyTest extends DemoProfileTest {
         assertThat(pos.get("value").size()).isEqualTo(1);
         assertThat(pos.get("value").get(0).get("Artikel").asString()).isEqualTo("Monitor");
         assertThat(get("/odata/Auftraege(4)/positionen", "demo", "demo").statusCode()).isEqualTo(204);
+    }
+
+    @Test
+    void jsonObjectsAsComplexValues() throws Exception {
+        String md = get("/odata/$metadata", "demo", "demo").body();
+        assertThat(md).contains("<Property Name=\"info\" Type=\"JdbcOdata.Auftraege_info\"")
+                .contains("<ComplexType Name=\"Auftraege_info\">").contains("<Property Name=\"tagsText\" Type=\"Edm.String\"");
+        JsonNode first = body("Auftraege(1)");
+        assertThat(first.get("info").get("Ort").asString()).isEqualTo("Wien");
+        assertThat(first.get("info").get("Plz").asInt()).isEqualTo(1010);
+        assertThat(first.get("tagsText").asString()).isEqualTo("{neu,eilig}");
+        assertThat(ids("Auftraege?$filter=" + enc("info/Land eq 'AT'") + "&$orderby=" + enc("info/Plz desc"))).containsExactly(2, 1);
+        assertThat(ids("Auftraege?$filter=" + enc("info eq null"))).containsExactly(4);
+        assertThat(ids("Auftraege?$filter=" + enc("info/Plz eq null and info ne null"))).containsExactly(3);
+        JsonNode selected = body("Auftraege?$select=auftrag_id,info/Ort&$filter=" + enc("auftrag_id eq 2"));
+        assertThat(selected.get("value").get(0).get("info").get("Ort").asString()).isEqualTo("Graz");
+        assertThat(selected.get("value").get(0).get("info").has("Plz")).isFalse();
+        assertThat(ids("Auftraege?$search=Berlin")).containsExactly(3);
+        // as resources
+        assertThat(body("Auftraege(1)/info").get("Ort").asString()).isEqualTo("Wien");
+        assertThat(body("Auftraege(2)/info/Plz").get("value").asInt()).isEqualTo(8010);
+        assertThat(get("/odata/Auftraege(3)/info/Plz", "demo", "demo").statusCode()).isEqualTo(204);
+        assertThat(get("/odata/Auftraege(2)/info/Ort/$value", "demo", "demo").body()).isEqualTo("Graz");
+        // $select options only on collections
+        assertThat(get("/odata/Auftraege?$select=" + enc("info($top=1)"), "demo", "demo").statusCode()).isEqualTo(400);
+    }
+
+    @Test
+    void countOfCollectionProperties() throws Exception {
+        assertThat(get("/odata/Auftraege(1)/tags/$count", "demo", "demo").body()).isEqualTo("2");
+        assertThat(get("/odata/Auftraege(1)/positionen/$count?$filter=" + enc("Betrag gt 100"), "demo", "demo").body()).isEqualTo("1");
+        assertThat(get("/odata/Auftraege(1)/mengen/$count?$filter=" + enc("$it ge 2"), "demo", "demo").body()).isEqualTo("2");
+        assertThat(get("/odata/Auftraege(4)/positionen/$count", "demo", "demo").body()).isEqualTo("0");
+    }
+
+    @Test
+    void structureCanBeEditedAndSurvivesANewSnapshot() throws Exception {
+        sql("CREATE TABLE merge_items (id INT PRIMARY KEY, data JSON)",
+                "INSERT INTO merge_items VALUES (1, JSON '{\"b\":2,\"a\":\"x\"}')");
+        String ds = null;
+        for (JsonNode n : json.readTree(get("/api/v1/queries", ADMIN, ADMIN_PASSWORD).body())) {
+            if ("Sales".equals(n.get("name").asString())) ds = n.get("datasourceId").asString();
+        }
+        UUID id = query("""
+                {"name":"MergeItems","datasourceId":"%s","keyMode":"COLUMNS","sql":"SELECT id, data FROM merge_items ORDER BY id"}
+                """.formatted(ds), """
+                {"propertyName":"id","key":true,"visible":true},
+                {"propertyName":"data","key":false,"visible":true,"collection":"OBJECT","textCopy":true,
+                 "structure":[{"key":"a","name":"Name","edmType":"Edm.String","collection":false},
+                              {"key":"b","name":"Wert","edmType":"Edm.Decimal","collection":false}]}
+                """);
+        JsonNode row = body("MergeItems(1)");
+        assertThat(row.get("data").get("Name").asString()).isEqualTo("x");
+        assertThat(row.get("data").get("Wert").decimalValue()).isEqualByComparingTo("2");
+        assertThat(get("/odata/$metadata", "demo", "demo").body())
+                .containsPattern("<ComplexType Name=\"MergeItems_data\"><Property Name=\"Name\" Type=\"Edm.String\"></Property><Property Name=\"Wert\" Type=\"Edm.Decimal\"");
+
+        // a new field appears; a new snapshot keeps key, form, text copy and the edited fields and appends it
+        sql("INSERT INTO merge_items VALUES (2, JSON '{\"a\":\"y\",\"c\":true}')");
+        assertThat(send("POST", "/api/v1/queries/" + id + "/snapshot", "{\"username\":\"demo\",\"password\":\"demo\"}", ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(200);
+        JsonNode q = json.readTree(get("/api/v1/queries/" + id, ADMIN, ADMIN_PASSWORD).body());
+        JsonNode data = q.get("columns").get(1);
+        assertThat(q.get("columns").get(0).get("key").asBoolean()).isTrue();
+        assertThat(data.get("collection").asString()).isEqualTo("OBJECT");
+        assertThat(data.get("textCopy").asBoolean()).isTrue();
+        List<String> names = new ArrayList<>();
+        for (JsonNode f : data.get("structure")) names.add(f.get("name").asString());
+        assertThat(names).containsExactly("Name", "Wert", "c");
+        assertThat(body("MergeItems(2)").get("data").get("c").asBoolean()).isTrue();
+        assertThat(body("MergeItems(2)").get("dataText").asString()).contains("\"c\":true");
+
+        // invalid structures
+        assertThat(send("PUT", "/api/v1/queries/" + id + "/columns", """
+                {"columns":[{"propertyName":"data","key":false,"visible":true,"structure":[{"key":"a","name":"1x","edmType":"Edm.String","collection":false}]}]}
+                """, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(400);
+        assertThat(send("PUT", "/api/v1/queries/" + id + "/columns", """
+                {"columns":[{"propertyName":"data","key":false,"visible":true,"structure":[{"key":"a","name":"A","edmType":"Edm.Nope","collection":false}]}]}
+                """, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(400);
+        assertThat(send("PUT", "/api/v1/queries/" + id + "/columns", """
+                {"columns":[{"propertyName":"data","key":false,"visible":true,"collection":"COMPLEX"}]}
+                """, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(400);
+        sql("DROP TABLE merge_items");
     }
 
     @Test

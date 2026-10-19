@@ -190,6 +190,16 @@ class AdminUiTest extends DemoProfileTest {
                 .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
         q = queryService.require(UUID.fromString(id));
         assertThat(q.columns()).extracting(c -> c.collection().name()).containsExactly("NONE", "PRIMITIVE", "COMPLEX");
+        mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf()).param("visible_customer", "on")
+                        .param("visible_tags", "on").param("collection_tags", "PRIMITIVE").param("textcopy_tags", "on")
+                        .param("visible_pos", "on").param("collection_pos", "COMPLEX").param("structure_pos", "Anzahl Int64 a\n"))
+                .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
+        q = queryService.require(UUID.fromString(id));
+        assertThat(q.columns().get(1).textCopy()).isTrue();
+        assertThat(q.columns().get(2).structure()).extracting(at.jdbcodata.query.ComplexField::name).containsExactly("Anzahl");
+        assertThat(q.columns().get(2).structure().get(0).edmType()).isEqualTo("Edm.Int64");
+        mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf()).param("structure_pos", "kaputt"))
+                .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("error"));
         mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf()).param("collection_customer", "PRIMITIVE"))
                 .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("error"));
 

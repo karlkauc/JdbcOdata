@@ -94,11 +94,12 @@ queries:
       password: ${DEMO_READER_PASSWORD}
 
   - name: Bestellungen
-    description: Bestellungen eines Jahres (Parameter p_jahr) mit Produktkategorien (SQL-Array) und Positionen (JSON) als Collections
+    description: Bestellungen eines Jahres (Parameter p_jahr) mit Produktkategorien (SQL-Array), Positionen (JSON-Array) und Kundendaten (JSON-Objekt)
     datasource: demo_postgres
     sql: |
       SELECT b.id AS "BestellungId", b.bestelldatum AS "Bestelldatum", b.status AS "Status",
              b.kunde_id AS "KundeId", k.name AS "KundeName", k.region AS "Region",
+             jsonb_build_object('Name', k.name, 'Land', k.land, 'Branche', k.branche, 'KundeSeit', k.kunde_seit) AS "Kundendaten",
              array_agg(DISTINCT pr.kategorie ORDER BY pr.kategorie) AS "Kategorien",
              jsonb_agg(jsonb_build_object('PositionId', p.id, 'Produkt', pr.bezeichnung, 'Menge', p.menge,
                        'Einzelpreis', p.einzelpreis, 'Betrag', p.menge * p.einzelpreis) ORDER BY p.id) AS "Positionen"
@@ -107,7 +108,7 @@ queries:
       JOIN verkauf.bestellpositionen p ON p.bestellung_id = b.id
       JOIN verkauf.produkte pr ON pr.id = p.produkt_id
       WHERE EXTRACT(YEAR FROM b.bestelldatum) = :p_jahr
-      GROUP BY b.id, b.bestelldatum, b.status, b.kunde_id, k.name, k.region
+      GROUP BY b.id, b.bestelldatum, b.status, b.kunde_id, k.name, k.region, k.land, k.branche, k.kunde_seit
       ORDER BY b.id
     parameters:
       - name: p_jahr
@@ -117,9 +118,11 @@ queries:
         description: Geschäftsjahr
     keyMode: COLUMNS
     keyColumns: [BestellungId]
-    # Kategorien wird Collection(Edm.String), Positionen eine Collection eines ComplexTypes:
-    # $select=Positionen($filter=Betrag gt 1000;$orderby=Betrag desc;$top=3), $filter=Kategorien/any(k:k eq 'Server')
-    collectionColumns: [Kategorien, Positionen]
+    # Kategorien wird Collection(Edm.String), Positionen eine Collection eines ComplexTypes, Kundendaten ein
+    # ComplexType: $select=Positionen($filter=Betrag gt 1000;$orderby=Betrag desc;$top=3),
+    # $filter=Kategorien/any(k:k eq 'Server') and Kundendaten/Land eq 'AT'; KategorienText zusätzlich als Text (Excel)
+    collectionColumns: [Kategorien, Positionen, Kundendaten]
+    textCopyColumns: [Kategorien]
     pushDown: true
     relations:
       - name: Kunde

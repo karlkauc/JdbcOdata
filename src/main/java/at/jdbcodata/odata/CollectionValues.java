@@ -30,6 +30,7 @@ final class CollectionValues {
             case PRIMITIVE -> new Property(c.elementType(), c.propertyName(), ValueType.COLLECTION_PRIMITIVE,
                     primitives(raw, EdmPrimitiveTypeKind.valueOfFQN(c.elementType())));
             case COMPLEX -> new Property(complexType, c.propertyName(), ValueType.COLLECTION_COMPLEX, complex(raw, c.structure()));
+            case OBJECT -> new Property(complexType, c.propertyName(), ValueType.COMPLEX, object(CollectionShape.jsonObject(raw), c.structure()));
             case NONE -> new Property(c.edmType(), c.propertyName(), ValueType.PRIMITIVE,
                     raw instanceof List<?> l ? CollectionShape.literal(l) : raw);
         };
@@ -48,22 +49,28 @@ final class CollectionValues {
         List<Object> list = CollectionShape.asList(raw);
         if (list == null) return null;
         List<ComplexValue> out = new ArrayList<>(list.size());
-        for (Object element : list) {
-            if (!(element instanceof Map<?, ?> m)) {
-                out.add(null);
-                continue;
-            }
-            ComplexValue cv = new ComplexValue();
-            for (ComplexField f : fields) {
-                Object v = m.get(f.key());
-                EdmPrimitiveTypeKind kind = EdmPrimitiveTypeKind.valueOfFQN(f.edmType());
-                cv.getValue().add(f.collection()
-                        ? new Property(f.edmType(), f.name(), ValueType.COLLECTION_PRIMITIVE, v == null ? null : primitives(v, kind))
-                        : new Property(f.edmType(), f.name(), ValueType.PRIMITIVE, CollectionShape.convert(v, kind)));
-            }
-            out.add(cv);
-        }
+        for (Object element : list) out.add(element instanceof Map<?, ?> m ? object(m, fields) : null);
         return out;
+    }
+
+    /** One JSON object as complex value with the fields of the structure (missing keys are null). */
+    static ComplexValue object(Map<?, ?> m, List<ComplexField> fields) {
+        if (m == null) return null;
+        ComplexValue cv = new ComplexValue();
+        for (ComplexField f : fields) {
+            Object v = m.get(f.key());
+            EdmPrimitiveTypeKind kind = EdmPrimitiveTypeKind.valueOfFQN(f.edmType());
+            cv.getValue().add(f.collection()
+                    ? new Property(f.edmType(), f.name(), ValueType.COLLECTION_PRIMITIVE, v == null ? null : primitives(v, kind))
+                    : new Property(f.edmType(), f.name(), ValueType.PRIMITIVE, CollectionShape.convert(v, kind)));
+        }
+        return cv;
+    }
+
+    /** Text of a raw column value for the text copy: as the plain property would show it. */
+    static String rawText(Object raw) {
+        if (raw == null) return null;
+        return raw instanceof List<?> l ? CollectionShape.literal(l) : raw.toString();
     }
 
     /** The elements of a collection property ({@code List} of values or of {@link ComplexValue}), never null. */

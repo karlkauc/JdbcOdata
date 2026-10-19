@@ -88,6 +88,10 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         for (QueryColumn c : q.columns()) {
             if (c.visible()) names.add(c.propertyName());
         }
+        for (QueryColumn c : q.columns()) {
+            String copy = textCopyName(q, c);
+            if (copy != null) names.add(copy);
+        }
         if (q.keyMode() == KeyMode.ROWID || q.columns().stream().noneMatch(c -> c.visible() && c.key())) {
             names.add(ROW_ID);
         }
@@ -409,7 +413,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
     // --- collection-valued properties -----------------------------------------------------------------------------
 
     /**
-     * Name of the complex type of a JSON column published as {@code COMPLEX} collection: {@code <Query>_<Property>},
+     * Name of the complex type of a JSON column published as {@code COMPLEX} collection or {@code OBJECT}: {@code <Query>_<Property>},
      * with suffix {@code _Element} if a query already has that name.
      */
     String complexTypeName(QueryDefinition q, QueryColumn c) {
@@ -422,8 +426,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         if (!NAMESPACE.equals(complexTypeName.getNamespace())) return null;
         for (QueryDefinition q : queries.values()) {
             for (QueryColumn c : q.columns()) {
-                if (c.visible() && c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX
-                        && complexTypeName(q, c).equals(complexTypeName.getName())) {
+                if (c.visible() && complex(c) && complexTypeName(q, c).equals(complexTypeName.getName())) {
                     return complexType(q, c);
                 }
             }
@@ -441,6 +444,28 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         return new org.apache.olingo.commons.api.edm.provider.CsdlComplexType().setName(complexTypeName(q, c)).setProperties(props);
     }
 
+    private static boolean complex(QueryColumn c) {
+        return c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX || c.collection() == at.jdbcodata.query.CollectionKind.OBJECT;
+    }
+
+    /**
+     * Name of the additional text property of a structured column ({@code <Property>Text}, with {@code _} appended
+     * until it is unique), or null when the column has none.
+     */
+    static String textCopyName(QueryDefinition q, QueryColumn c) {
+        if (!c.visible() || !c.textCopy() || !c.collectionValued()) return null;
+        Set<String> taken = new HashSet<>();
+        taken.add(ROW_ID);
+        for (QueryColumn o : q.columns()) if (o.visible()) taken.add(o.propertyName());
+        for (QueryColumn o : q.columns()) {
+            if (!o.visible() || !o.textCopy() || !o.collectionValued()) continue;
+            String name = o.propertyName() + "Text";
+            while (!taken.add(name)) name += "_";
+            if (o == c) return name;
+        }
+        return null;
+    }
+
     /** Decimal elements without declared facets: Decimal(38,10) like columns of unknown precision (values are rounded). */
     private static CsdlProperty decimalFacets(CsdlProperty p) {
         if (EdmPrimitiveTypeKind.Decimal.getFullQualifiedName().equals(p.getTypeAsFQNObject())) {
@@ -453,7 +478,7 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
         List<org.apache.olingo.commons.api.edm.provider.CsdlComplexType> out = new ArrayList<>();
         for (QueryDefinition q : queries.values()) {
             for (QueryColumn c : q.columns()) {
-                if (c.visible() && c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX) out.add(complexType(q, c));
+                if (c.visible() && complex(c)) out.add(complexType(q, c));
             }
         }
         return out;
@@ -474,8 +499,9 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
                         .setType(EdmPrimitiveTypeKind.valueOfFQN(c.elementType()).getFullQualifiedName())));
                 continue;
             }
-            if (c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX) {
-                props.add(new CsdlProperty().setName(c.propertyName()).setCollection(true).setNullable(true)
+            if (complex(c)) {
+                props.add(new CsdlProperty().setName(c.propertyName())
+                        .setCollection(c.collection() == at.jdbcodata.query.CollectionKind.COMPLEX).setNullable(true)
                         .setType(new FullQualifiedName(NAMESPACE, complexTypeName(q, c))));
                 continue;
             }
@@ -488,6 +514,10 @@ public class DynamicEdmProvider extends CsdlAbstractEdmProvider {
             if (q.keyMode() == KeyMode.COLUMNS && c.key()) {
                 keys.add(new CsdlPropertyRef().setName(c.propertyName()));
             }
+        }
+        for (QueryColumn c : q.columns()) {
+            String copy = textCopyName(q, c);
+            if (copy != null) props.add(new CsdlProperty().setName(copy).setType(EdmPrimitiveTypeKind.String.getFullQualifiedName()));
         }
         if (keys.isEmpty()) {
             props.add(0, new CsdlProperty().setName(ROW_ID)

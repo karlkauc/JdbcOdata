@@ -15,24 +15,30 @@
         <td><input type="checkbox" th:name="'key_' + ${c.propertyName}" th:checked="${c.key}"></td>
         <td><input type="checkbox" th:name="'visible_' + ${c.propertyName}" th:checked="${c.visible}"></td>
         <td>
-          <select th:if="${c.canBePrimitiveCollection() or c.canBeComplexCollection()}" th:name="'collection_' + ${c.propertyName}">
+          <select th:if="${c.structured()}" th:name="'collection_' + ${c.propertyName}">
             <option value="NONE" th:selected="${c.collection.name() == 'NONE'}" th:text="${c.edmType} + ' (Text)'"></option>
             <option th:if="${c.canBePrimitiveCollection()}" value="PRIMITIVE" th:selected="${c.collection.name() == 'PRIMITIVE'}"
                     th:text="'Collection(' + ${c.elementType} + ')'"></option>
             <option th:if="${c.canBeComplexCollection()}" value="COMPLEX" th:selected="${c.collection.name() == 'COMPLEX'}"
                     th:text="'Collection(' + ${query.name} + '_' + ${c.propertyName} + ')'"></option>
+            <option th:if="${c.canBeComplexObject()}" value="OBJECT" th:selected="${c.collection.name() == 'OBJECT'}"
+                    th:text="${query.name} + '_' + ${c.propertyName} + ' (ComplexType)'"></option>
           </select>
-          <details th:if="${c.canBeComplexCollection()}"><summary class="muted">Struktur</summary>
-            <ul class="mono"><li th:each="f : ${c.structure}" th:text="${f.name} + ': ' + (${f.collection} ? 'Collection(' + ${f.edmType} + ')' : ${f.edmType}) + (${f.key != f.name} ? ' ← ' + ${f.key} : '')"></li></ul>
+          <label th:if="${c.structured()}" class="muted"><input type="checkbox" th:name="'textcopy_' + ${c.propertyName}" th:checked="${c.textCopy}">
+            zusätzlich als Text (<span th:text="${c.propertyName} + 'Text'"></span>)</label>
+          <details th:if="${!c.structure.isEmpty()}"><summary class="muted">Struktur</summary>
+            <textarea class="mono" rows="6" cols="48" th:name="'structure_' + ${c.propertyName}" th:text="${c.structureLines()}"></textarea>
+            <div class="hint">Eine Zeile je Feld: <code>Name Typ [JSON-Schlüssel]</code>, z. B. <code>Betrag Edm.Decimal</code> oder
+              <code>Nummern Collection(Edm.String) serials</code>. Reihenfolge, Namen und Typen sind änderbar.</div>
           </details>
-          <span th:unless="${c.canBePrimitiveCollection() or c.canBeComplexCollection()}" class="muted">Property</span>
+          <span th:unless="${c.structured()}" class="muted">Property</span>
         </td>
       </tr>
       </tbody>
     </table>
     <div class="actions"><button type="submit" class="small">Spalteneinstellungen speichern</button>
       <span class="hint">Schlüsselspalten wirken nur bei Schlüsselmodus „Spalten“. Unsichtbare Spalten fehlen im Feed.
-        SQL-Arrays und JSON-Spalten mit Arrays können als Collection veröffentlicht werden (Filter mit <code>any</code>/<code>all</code>, <code>$select=Spalte($top=…)</code>);
-        Excel zeigt Collections nur als Liste – für Excel-Feeds Text lassen. Die Struktur ermittelt der Snapshot aus bis zu 100 Beispielzeilen.</span></div>
+        SQL-Arrays und JSON-Spalten mit Arrays oder Objekten können als Collection bzw. ComplexType veröffentlicht werden (Filter mit <code>any</code>/<code>all</code>, <code>$select=Spalte($top=…)</code>);
+        Excel zeigt Collections nur als Liste – für Excel-Feeds Text lassen. Die Struktur ermittelt der Snapshot aus bis zu 100 Beispielzeilen; ein neuer Snapshot behält die Einstellungen und ergänzt neue Felder.</span></div>
   </form>
 </div>

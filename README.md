@@ -82,8 +82,9 @@ erscheint die Query als EntitySet im Feed. Alternativ: YAML-Datei nach dem Muste
 - **Delta-Links:** `Prefer: odata.track-changes` liefert einen `@odata.deltaLink`; dessen Abruf meldet neue, geänderte
   und gelöschte Entitäten (Vergleich mit einem Schnappschuss in der Metadaten-DB, übersteht Neustarts).
 - **Asynchron:** `Prefer: respond-async` liefert 202 und einen Status-Monitor (`/odata/$async/<id>`).
-- **Collections:** SQL-Arrays und JSON-Spalten auf Wunsch als `Collection(Edm.X)` bzw. Collection eines ComplexTypes
-  (Struktur aus dem Snapshot), mit `any`/`all`, `/$count`, `$search` und `$select` mit Optionen
+- **Collections und ComplexTypes:** SQL-Arrays und JSON-Spalten auf Wunsch als `Collection(Edm.X)`, Collection eines
+  ComplexTypes oder ComplexType (Struktur aus dem Snapshot, im Admin bearbeitbar, optional zusätzlich als Text), mit
+  `any`/`all`, `/$count`, Pfaden wie `Kundendaten/Land`, `$search` und `$select` mit Optionen
   (`$select=Positionen($filter=Betrag gt 100;$orderby=Betrag desc;$top=3;$count=true)`).
 - **Weitere `$apply`-Transformationen:** `join`/`outerjoin`, `nest`, Hierarchien (`ancestors`, `descendants`, `traverse`), die
   Transformation `expand` und eigene Aggregationsmethoden (`JdbcOdata.median`, `stddev`, `variance`).

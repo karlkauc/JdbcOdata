@@ -57,7 +57,7 @@ public class SchemaSnapshotService {
             CollectionShape.Detected detected = CollectionShape.detect(rc, samples);
             columns.add(new QueryColumn(ordinal++, rc.name(), propertyName, rc.jdbcType(), rc.jdbcTypeName(),
                     m.fqn(), m.precision(), m.scale(), true, false, visible, detected.elementType(), detected.structure(),
-                    CollectionKind.NONE));
+                    CollectionKind.NONE, detected.singleObject(), false));
         }
         return columns;
     }
