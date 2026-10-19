@@ -73,6 +73,9 @@ Der Feed ist zusätzlich **ohne Login** lesbar, damit OData-Werkzeuge wie der
 jede Anfrage ohne `Authorization`-Header als Service-User `demo`
 (`JDBCODATA_ODATA_ANONYMOUS_USER: demo` in `docker-compose.yml`, siehe `docs/CONFIG.md`). Anfragen mit
 Login verhalten sich unverändert; im Ausführungsprotokoll steht der Aufrufer `anonymous`.
+Weil ohne Login kein 401 kommt, fragen Browser (und Clients, die Zugangsdaten erst auf eine 401-Aufforderung
+senden) nie nach einem Login und sehen den Feed als `demo`, also alle Regionen. Wer mit `excel_nord` testen will,
+muss die Zugangsdaten direkt mitschicken (`curl -u`, Excel „Standard“, OData-Viewer mit Login).
 
 Der Service-User wird **einmalig** angelegt (Admin-UI → Service-User, oder per API). Er bekommt die
 hinterlegten DB-Credentials von `excel_demo`, sieht also genau das, was `excel_demo` sieht:

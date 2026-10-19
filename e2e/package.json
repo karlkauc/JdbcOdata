@@ -2,6 +2,12 @@
   "name": "jdbcodata-e2e",
   "private": true,
   "type": "module",
-  "scripts": { "check": "node check.mjs" },
-  "devDependencies": { "playwright": "^1.63.0" }
+  "description": "Playwright end-to-end tests of a running JdbcOdata (admin UI and OData feed), e.g. https://odata.status20.net",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.0",
+    "@types/node": "^22.10.0"
+  }
 }
