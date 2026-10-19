@@ -1,24 +1,28 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Service-User', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Service users', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><h1>Service-User</h1>
-      <p class="lead">Service-User melden sich in Excel mit eigenem Passwort an; pro Datenquelle können DB-Zugangsdaten hinterlegt werden. Empfohlenes Präfix: <code th:text="${prefix}">svc_</code>. Ohne Service-User gilt reines Pass-Through.</p></div>
-    <div class="head-actions"><a class="button" th:href="@{/admin/groups}">Gruppen</a><a class="button primary" th:href="@{/admin/users/new}">Neuer Service-User</a></div>
+    <div><h1>Service users</h1>
+      <p class="lead">Service users sign in from Excel with their own password; database credentials can be stored per datasource. Recommended prefix: <code th:text="${prefix}">svc_</code>. Without service users, sign-ins are passed through to the database.</p></div>
+    <div class="head-actions"><a class="button" th:href="@{/admin/groups}">Groups</a><a class="button primary" th:href="@{/admin/users/new}"><svg th:replace="~{fragments/icons :: icon('plus')}"></svg>New service user</a></div>
   </div>
-  <table class="list">
-    <thead><tr><th>Benutzer</th><th>Anzeige</th><th>Gruppen</th><th>Pass-Through</th><th>Letzter Login</th><th>Status</th></tr></thead>
+  <div class="toolbar list-filter">
+    <label class="search-field"><svg th:replace="~{fragments/icons :: icon('search')}"></svg>
+      <input type="search" data-filter-table="#user-table" placeholder="User name, display name …" aria-label="Filter list"></label>
+  </div>
+  <table class="list" id="user-table">
+    <thead><tr><th>User</th><th>Display name</th><th>Groups</th><th>Pass-through</th><th>Last sign-in</th><th>Status</th></tr></thead>
     <tbody>
     <tr th:each="u : ${users}">
       <td><a th:href="@{/admin/users/{id}(id=${u.id})}" th:text="${u.username}">svc_x</a></td>
       <td th:text="${u.displayName}"></td>
       <td th:text="${#strings.listJoin(u.groups.![name], ', ')}"></td>
-      <td><span class="badge warn" th:if="${u.forcePassthrough}">erzwungen</span></td>
-      <td th:text="${u.lastLoginAt != null} ? ${#temporals.format(u.lastLoginAt, 'dd.MM.yyyy HH:mm')} : '–'"></td>
-      <td><span th:class="${u.enabled} ? 'badge ok' : 'badge off'" th:text="${u.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
+      <td><span class="badge warn" th:if="${u.forcePassthrough}">forced</span></td>
+      <td th:text="${u.lastLoginAt != null} ? ${#temporals.format(u.lastLoginAt, 'yyyy-MM-dd HH:mm')} : '–'"></td>
+      <td><span th:class="${u.enabled} ? 'badge ok' : 'badge off'" th:text="${u.enabled} ? 'enabled' : 'disabled'"></span></td>
     </tr>
-    <tr th:if="${users.isEmpty()}"><td colspan="6" class="empty">Noch keine Service-User. <a th:href="@{/admin/users/new}">Ersten Service-User anlegen</a>.</td></tr>
+    <tr th:if="${users.isEmpty()}"><td colspan="6" class="empty">No service users yet. <a th:href="@{/admin/users/new}">Create the first service user</a>.</td></tr>
     </tbody>
   </table>
 </main>

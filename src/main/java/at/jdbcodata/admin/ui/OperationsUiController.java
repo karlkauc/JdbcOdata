@@ -65,7 +65,7 @@ public class OperationsUiController {
     public String invalidate(@RequestParam(required = false) UUID queryId, @RequestParam(required = false) String dbUser,
                              RedirectAttributes redirect) {
         long n = queryId == null ? cache.invalidateAllByAdmin() : cache.invalidateByAdmin(queryId, dbUser);
-        redirect.addFlashAttribute("message", n + " Cache-Eintrag/-Einträge invalidiert.");
+        redirect.addFlashAttribute("message", n + (n == 1 ? " cache entry" : " cache entries") + " invalidated.");
         return "redirect:/admin/cache";
     }
 
@@ -113,7 +113,7 @@ public class OperationsUiController {
                               @RequestParam(defaultValue = "ADMIN") AdminRole role, RedirectAttributes redirect) {
         try {
             admins.create(new AdminUserService.AdminUserSpec(username, password, role, true));
-            redirect.addFlashAttribute("message", "Admin-Konto '" + username + "' angelegt.");
+            redirect.addFlashAttribute("message", "Admin account '" + username + "' created.");
         } catch (ConflictException | InvalidRequestException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -126,7 +126,7 @@ public class OperationsUiController {
                               RedirectAttributes redirect) {
         try {
             admins.update(id, new AdminUserService.AdminUserSpec(null, password, role, enabled != null && enabled));
-            redirect.addFlashAttribute("message", "Admin-Konto gespeichert.");
+            redirect.addFlashAttribute("message", "Admin account saved.");
         } catch (ConflictException | InvalidRequestException | NotFoundException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -137,7 +137,7 @@ public class OperationsUiController {
     public String deleteAdmin(@PathVariable UUID id, RedirectAttributes redirect) {
         try {
             admins.delete(id);
-            redirect.addFlashAttribute("message", "Admin-Konto gelöscht.");
+            redirect.addFlashAttribute("message", "Admin account deleted.");
         } catch (ConflictException | NotFoundException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }

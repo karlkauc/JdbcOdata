@@ -1,28 +1,28 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Gruppen', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Groups', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><p class="hint"><a th:href="@{/admin/users}">Service-User</a></p><h1>Gruppen</h1>
-      <p class="lead">Gruppen bündeln Service-User für Freigaben auf FIXED-Queries.</p></div>
+    <div><h1>Groups</h1>
+      <p class="lead">Groups bundle service users for grants on FIXED queries.</p></div>
   </div>
   <table class="list">
-    <thead><tr><th>Name</th><th>Beschreibung</th><th>Mitglieder</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Description</th><th>Members</th><th></th></tr></thead>
     <tbody>
     <tr th:each="g : ${groups}">
       <td th:text="${g.name}"></td>
       <td th:text="${g.description}"></td>
       <td th:text="${#strings.listJoin(users.?[groups.![id].contains(#root.g.id)].![username], ', ')}"></td>
-      <td><form th:action="@{/admin/groups/{id}/delete(id=${g.id})}" method="post" onsubmit="return confirm('Gruppe löschen?')"><button type="submit" class="small">Löschen</button></form></td>
+      <td><form th:action="@{/admin/groups/{id}/delete(id=${g.id})}" method="post" onsubmit="return confirm('Delete this group?')"><button type="submit" class="small">Delete</button></form></td>
     </tr>
-    <tr th:if="${groups.isEmpty()}"><td colspan="4" class="empty">Noch keine Gruppen.</td></tr>
+    <tr th:if="${groups.isEmpty()}"><td colspan="4" class="empty">No groups yet.</td></tr>
     </tbody>
   </table>
-  <h2>Neue Gruppe</h2>
+  <h2>New group</h2>
   <form th:action="@{/admin/groups}" method="post" class="card inline-form">
     <label>Name <input type="text" name="name" required></label>
-    <label>Beschreibung <input type="text" name="description"></label>
-    <button type="submit" class="primary">Gruppe anlegen</button>
+    <label>Description <input type="text" name="description"></label>
+    <button type="submit" class="primary">Create group</button>
   </form>
 </main>
 </body>

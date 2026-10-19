@@ -1,24 +1,38 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Datenquellen', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Datasources', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><h1>Datenquellen</h1><p class="lead">JDBC-Verbindungen, auf denen Queries laufen. Limits gelten als Standard für alle Queries der Datenquelle.</p></div>
-    <a class="button primary" th:href="@{/admin/datasources/new}">Neue Datenquelle</a>
+    <div><h1>Datasources</h1><p class="lead">JDBC connections the queries run on. Limits are the defaults for all queries of the datasource.</p></div>
+    <a class="button primary" th:href="@{/admin/datasources/new}"><svg th:replace="~{fragments/icons :: icon('plus')}"></svg>New datasource</a>
   </div>
-  <table class="list">
-    <thead><tr><th>Name</th><th>JDBC-URL</th><th>Timeout</th><th>Max. Zeilen</th><th>Parallel</th><th>Status</th></tr></thead>
+  <div class="toolbar list-filter">
+    <label class="search-field"><svg th:replace="~{fragments/icons :: icon('search')}"></svg>
+      <input type="search" data-filter-table="#datasource-table" placeholder="Name, JDBC URL …" aria-label="Filter datasources"></label>
+  </div>
+  <table class="list" id="datasource-table">
+    <thead><tr><th>Name</th><th>JDBC URL</th><th>Timeout</th><th>Max. rows</th><th>Parallel</th><th>Reachability</th><th>Status</th></tr></thead>
     <tbody>
     <tr th:each="d : ${datasources}">
       <td><a th:href="@{/admin/datasources/{id}(id=${d.id})}" th:text="${d.name}">demo</a>
         <div class="muted" th:text="${d.description}"></div></td>
       <td class="mono" th:text="${d.jdbcUrl}"></td>
       <td th:text="${d.defaultTimeoutSec} + ' s'"></td>
-      <td th:text="${#numbers.formatInteger(d.maxRows, 1, 'POINT')}"></td>
+      <td th:text="${#numbers.formatInteger(d.maxRows, 1, 'COMMA')}"></td>
       <td th:text="${d.maxConcurrent}"></td>
-      <td><span th:class="${d.enabled} ? 'badge ok' : 'badge off'" th:text="${d.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
+      <td th:with="h=${health.get(d.id)}">
+        <span class="with-icon" th:if="${h != null}" th:title="${h.source != null} ? ${h.source} + (${h.checkedAt != null} ? ' · ' + ${@fmt.ago(h.checkedAt)} : '') : ${h.detail}">
+          <span class="status-dot" th:classappend="${#strings.toLowerCase(h.state)}"></span>
+          <span th:switch="${h.state.name()}">
+            <span th:case="'OK'" th:text="${h.latencyMs != null} ? ${h.latencyMs} + ' ms' : 'reachable'">4 ms</span>
+            <span th:case="'DOWN'" class="text-err">unreachable</span>
+            <span th:case="'WARN'" class="text-warn">error</span>
+            <span th:case="'DISABLED'" class="muted">–</span>
+            <span th:case="*" class="muted">unknown</span>
+          </span></span></td>
+      <td><span th:class="${d.enabled} ? 'badge ok' : 'badge off'" th:text="${d.enabled} ? 'enabled' : 'disabled'"></span></td>
     </tr>
-    <tr th:if="${datasources.isEmpty()}"><td colspan="6" class="empty">Noch keine Datenquellen. <a th:href="@{/admin/datasources/new}">Erste Datenquelle anlegen</a>.</td></tr>
+    <tr th:if="${datasources.isEmpty()}"><td colspan="7" class="empty">No datasources yet. <a th:href="@{/admin/datasources/new}">Create the first datasource</a>.</td></tr>
     </tbody>
   </table>
 </main>

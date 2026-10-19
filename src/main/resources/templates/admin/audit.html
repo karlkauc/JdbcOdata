@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Audit-Log', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Audit log', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><h1>Audit-Log</h1><p class="lead">Änderungen an Konfiguration und Konten durch Administratoren. Secrets werden nie protokolliert.</p></div>
+    <div><h1>Audit log</h1><p class="lead">Changes to configuration and accounts made by administrators. Secrets are never logged.</p></div>
   </div>
   <table class="list">
-    <thead><tr><th>Zeit</th><th>Admin</th><th>Aktion</th><th>Typ</th><th>Objekt</th><th>Details</th></tr></thead>
+    <thead><tr><th>Time</th><th>Admin</th><th>Action</th><th>Type</th><th>Object</th><th>Details</th></tr></thead>
     <tbody>
     <tr th:each="e : ${entries}">
-      <td style="white-space:nowrap" th:text="${#temporals.format(e.occurredAt, 'dd.MM.yyyy HH:mm:ss')}"></td>
+      <td style="white-space:nowrap" th:text="${#temporals.format(e.occurredAt, 'yyyy-MM-dd HH:mm:ss')}"></td>
       <td th:text="${e.adminUser}"></td>
       <td><span class="badge plain" th:text="${e.action}"></span></td>
       <td th:text="${e.entityType}"></td>
       <td th:text="${e.entityName}"></td>
       <td class="mono muted" th:text="${e.details}"></td>
     </tr>
-    <tr th:if="${entries.isEmpty()}"><td colspan="6" class="empty">Noch keine Einträge.</td></tr>
+    <tr th:if="${entries.isEmpty()}"><td colspan="6" class="empty">No entries yet.</td></tr>
     </tbody>
   </table>
 </main>

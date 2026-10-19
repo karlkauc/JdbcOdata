@@ -1,10 +1,12 @@
 <div xmlns:th="http://www.thymeleaf.org" th:fragment="columns">
   <div class="flash ok" th:if="${snapshotMessage}" th:text="${snapshotMessage}"></div>
   <div class="flash err" th:if="${snapshotError}" th:text="${snapshotError}"></div>
-  <p class="muted" th:unless="${query.hasSnapshot()}">Noch kein Schema-Snapshot. Zugangsdaten oben eintragen und „Schema-Snapshot erstellen“ klicken. Erst danach erscheint die Query im Service-Dokument.</p>
-  <form th:if="${query.hasSnapshot()}" th:action="@{/admin/queries/{id}/columns(id=${query.id})}" method="post">
+  <p class="muted" th:unless="${query.hasSnapshot()}">No schema snapshot yet. Enter credentials under “Test” in the Definition tab and click “Take schema snapshot”. Only then does the query appear in the service document.</p>
+  <!-- Part of the editor form (#query-form): saved together with the definition via the save bar. -->
+  <th:block th:if="${query.hasSnapshot()}">
+    <input type="hidden" name="columnsPresent" value="1">
     <table class="list">
-      <thead><tr><th>#</th><th>DB-Spalte</th><th>Property</th><th>JDBC-Typ</th><th>EDM-Typ</th><th>Schlüssel</th><th>Sichtbar</th><th>Veröffentlichen als</th></tr></thead>
+      <thead><tr><th>#</th><th>DB column</th><th>Property</th><th>JDBC type</th><th>EDM type</th><th>Key</th><th>Visible</th><th>Publish as</th></tr></thead>
       <tbody>
       <tr th:each="c : ${query.columns}">
         <td class="muted" th:text="${c.ordinal + 1}"></td>
@@ -16,7 +18,7 @@
         <td><input type="checkbox" th:name="'visible_' + ${c.propertyName}" th:checked="${c.visible}"></td>
         <td>
           <select th:if="${c.structured()}" th:name="'collection_' + ${c.propertyName}">
-            <option value="NONE" th:selected="${c.collection.name() == 'NONE'}" th:text="${c.edmType} + ' (Text)'"></option>
+            <option value="NONE" th:selected="${c.collection.name() == 'NONE'}" th:text="${c.edmType} + ' (text)'"></option>
             <option th:if="${c.canBePrimitiveCollection()}" value="PRIMITIVE" th:selected="${c.collection.name() == 'PRIMITIVE'}"
                     th:text="'Collection(' + ${c.elementType} + ')'"></option>
             <option th:if="${c.canBeComplexCollection()}" value="COMPLEX" th:selected="${c.collection.name() == 'COMPLEX'}"
@@ -25,20 +27,19 @@
                     th:text="${query.name} + '_' + ${c.propertyName} + ' (ComplexType)'"></option>
           </select>
           <label th:if="${c.structured()}" class="muted"><input type="checkbox" th:name="'textcopy_' + ${c.propertyName}" th:checked="${c.textCopy}">
-            zusätzlich als Text (<span th:text="${c.propertyName} + 'Text'"></span>)</label>
-          <details th:if="${!c.structure.isEmpty()}"><summary class="muted">Struktur</summary>
+            additionally as text (<span th:text="${c.propertyName} + 'Text'"></span>)</label>
+          <details th:if="${!c.structure.isEmpty()}"><summary class="muted">Structure</summary>
             <textarea class="mono" rows="6" cols="48" th:name="'structure_' + ${c.propertyName}" th:text="${c.structureLines()}"></textarea>
-            <div class="hint">Eine Zeile je Feld: <code>Name Typ [JSON-Schlüssel]</code>, z. B. <code>Betrag Edm.Decimal</code> oder
-              <code>Nummern Collection(Edm.String) serials</code>. Reihenfolge, Namen und Typen sind änderbar.</div>
+            <div class="hint">One line per field: <code>Name Type [JSON key]</code>, e.g. <code>Amount Edm.Decimal</code> or
+              <code>Numbers Collection(Edm.String) serials</code>. Order, names and types can be changed.</div>
           </details>
           <span th:unless="${c.structured()}" class="muted">Property</span>
         </td>
       </tr>
       </tbody>
     </table>
-    <div class="actions"><button type="submit" class="small">Spalteneinstellungen speichern</button>
-      <span class="hint">Schlüsselspalten wirken nur bei Schlüsselmodus „Spalten“. Unsichtbare Spalten fehlen im Feed.
-        SQL-Arrays und JSON-Spalten mit Arrays oder Objekten können als Collection bzw. ComplexType veröffentlicht werden (Filter mit <code>any</code>/<code>all</code>, <code>$select=Spalte($top=…)</code>);
-        Excel zeigt Collections nur als Liste – für Excel-Feeds Text lassen. Die Struktur ermittelt der Snapshot aus bis zu 100 Beispielzeilen; ein neuer Snapshot behält die Einstellungen und ergänzt neue Felder.</span></div>
-  </form>
+    <p class="hint">Key columns only apply with key mode “Columns”. Hidden columns are missing from the feed.
+        SQL arrays and JSON columns holding arrays or objects can be published as a collection or ComplexType (filter with <code>any</code>/<code>all</code>, <code>$select=Column($top=…)</code>);
+        Excel shows collections only as a list – keep text for Excel feeds. The snapshot derives the structure from up to 100 sample rows; a new snapshot keeps the settings and adds new fields.</p>
+  </th:block>
 </div>

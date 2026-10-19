@@ -1,33 +1,32 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${account == null} ? 'Neuer technischer Account' : 'Account ' + ${account.name}, ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${account == null} ? 'New technical account' : ${account.name}, ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
     <div>
-      <p class="hint"><a th:href="@{/admin/accounts}">Technische Accounts</a></p>
-      <h1 th:text="${account == null} ? 'Neuer technischer Account' : ${account.name}">Account</h1>
+      <h1 th:text="${account == null} ? 'New technical account' : ${account.name}">Account</h1>
       <p class="lead" th:if="${account != null}" th:text="${account.description}"></p>
     </div>
-    <form th:if="${account != null}" th:action="@{/admin/accounts/{id}/delete(id=${account.id})}" method="post" onsubmit="return confirm('Account wirklich löschen?')">
-      <button type="submit" class="danger">Löschen</button>
+    <form th:if="${account != null}" th:action="@{/admin/accounts/{id}/delete(id=${account.id})}" method="post" onsubmit="return confirm('Really delete this account?')">
+      <button type="submit" class="danger">Delete</button>
     </form>
   </div>
   <form th:object="${form}" th:action="${account == null} ? @{/admin/accounts} : @{/admin/accounts/{id}(id=${account.id})}" method="post" class="card">
-    <h2>Konto</h2>
+    <h2>Account</h2>
     <div class="grid2">
       <label>Name <input type="text" th:field="*{name}" required><span class="field-error" th:errors="*{name}"></span></label>
-      <label>Datenquelle <select th:field="*{datasourceId}" required>
+      <label>Datasource <select th:field="*{datasourceId}" required>
         <option th:each="ds : ${datasources}" th:value="${ds.id}" th:text="${ds.name}"></option></select>
         <span class="field-error" th:errors="*{datasourceId}"></span></label>
-      <label class="span2">Beschreibung <input type="text" th:field="*{description}"></label>
-      <label>DB-User <input type="text" th:field="*{dbUsername}" class="mono" required autocomplete="off"><span class="field-error" th:errors="*{dbUsername}"></span></label>
-      <label><span th:text="${account == null} ? 'DB-Passwort' : 'DB-Passwort (leer = unverändert)'">DB-Passwort</span>
+      <label class="span2">Description <input type="text" th:field="*{description}"></label>
+      <label>DB user <input type="text" th:field="*{dbUsername}" class="mono" required autocomplete="off"><span class="field-error" th:errors="*{dbUsername}"></span></label>
+      <label><span th:text="${account == null} ? 'DB password' : 'DB password (empty = unchanged)'">DB password</span>
         <input type="password" th:field="*{dbPassword}" autocomplete="new-password"></label>
     </div>
     <div class="actions">
-      <button type="submit" class="primary">Speichern</button>
-      <a class="button" th:href="@{/admin/accounts}">Zurück</a>
-      <button type="button" th:if="${account != null}" th:attr="hx-post=@{/admin/accounts/{id}/test(id=${account.id})}" hx-target="#test-result" hx-swap="innerHTML">Verbindung testen</button>
+      <button type="submit" class="primary">Save</button>
+      <a class="button" th:href="@{/admin/accounts}">Back</a>
+      <button type="button" th:if="${account != null}" th:attr="hx-post=@{/admin/accounts/{id}/test(id=${account.id})}" hx-target="#test-result" hx-swap="innerHTML">Test connection</button>
     </div>
     <div id="test-result" style="margin-top:14px"></div>
   </form>

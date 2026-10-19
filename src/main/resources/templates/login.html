@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Anmelden · JdbcOdata</title>
+  <title>Sign in · JdbcOdata</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h8' stroke='%23fff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" th:href="@{/css/admin.css}">
 </head>
@@ -11,16 +11,16 @@
 <main class="login-box">
   <div class="brand">
     <span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h8"/></svg></span>
-    <span>JdbcOdata<small>OData-Feeds für Excel und PowerBI</small></span>
+    <span>JdbcOdata<small>OData feeds for Excel and Power BI</small></span>
   </div>
-  <h1>Anmelden</h1>
-  <p class="muted">Administration des Dienstes.</p>
-  <div class="flash err" th:if="${param.error}">Anmeldung fehlgeschlagen. Bitte Benutzer und Passwort prüfen.</div>
-  <div class="flash ok" th:if="${param.logout}">Sie wurden abgemeldet.</div>
+  <h1>Sign in</h1>
+  <p class="muted">Administration of the service.</p>
+  <div class="flash err" th:if="${param.error}">Sign-in failed. Please check user name and password.</div>
+  <div class="flash ok" th:if="${param.logout}">You have been signed out.</div>
   <form th:action="@{/login}" method="post">
-    <label>Benutzer <input type="text" name="username" autofocus required autocomplete="username"></label>
-    <label>Passwort <input type="password" name="password" required autocomplete="current-password"></label>
-    <button type="submit" class="primary">Anmelden</button>
+    <label>User <input type="text" name="username" autofocus required autocomplete="username"></label>
+    <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
+    <button type="submit" class="primary">Sign in</button>
   </form>
 </main>
 </body>

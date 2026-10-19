@@ -1,9 +1,9 @@
 <div xmlns:th="http://www.thymeleaf.org">
   <div class="flash ok" th:if="${result.ok}">
-    Verbindung erfolgreich: <strong th:text="${result.productName}"></strong> <span th:text="${result.productVersion}"></span>
+    Connection successful: <strong th:text="${result.productName}"></strong> <span th:text="${result.productVersion}"></span>
     <span class="muted">(<span th:text="${result.durationMs}"></span> ms)</span>
   </div>
   <div class="flash err" th:unless="${result.ok}">
-    Verbindung fehlgeschlagen: <span th:text="${result.error}"></span> <span class="muted">(<span th:text="${result.durationMs}"></span> ms)</span>
+    Connection failed: <span th:text="${result.error}"></span> <span class="muted">(<span th:text="${result.durationMs}"></span> ms)</span>
   </div>
 </div>

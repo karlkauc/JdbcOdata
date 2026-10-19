@@ -50,7 +50,7 @@ public class FixedCredentialUiController {
         }
         try {
             FixedCredential created = service.create(form.toSpec());
-            redirect.addFlashAttribute("message", "Technischer Account '" + created.name() + "' angelegt.");
+            redirect.addFlashAttribute("message", "Technical account '" + created.name() + "' created.");
             return "redirect:/admin/accounts/" + created.id();
         } catch (ConflictException | InvalidRequestException | NotFoundException e) {
             model.addAttribute("error", e.getMessage());
@@ -73,7 +73,7 @@ public class FixedCredentialUiController {
         }
         try {
             service.update(id, form.toSpec());
-            redirect.addFlashAttribute("message", "Technischer Account gespeichert.");
+            redirect.addFlashAttribute("message", "Technical account saved.");
             return "redirect:/admin/accounts/" + id;
         } catch (ConflictException | InvalidRequestException | NotFoundException e) {
             model.addAttribute("error", e.getMessage());
@@ -85,7 +85,7 @@ public class FixedCredentialUiController {
     public String delete(@PathVariable UUID id, RedirectAttributes redirect) {
         try {
             service.delete(id);
-            redirect.addFlashAttribute("message", "Technischer Account gelöscht.");
+            redirect.addFlashAttribute("message", "Technical account deleted.");
             return "redirect:/admin/accounts";
         } catch (ConflictException e) {
             redirect.addFlashAttribute("error", e.getMessage());

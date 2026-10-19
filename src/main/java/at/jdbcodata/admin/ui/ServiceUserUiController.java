@@ -53,7 +53,7 @@ public class ServiceUserUiController {
         }
         try {
             ServiceUser created = service.create(form.toSpec());
-            redirect.addFlashAttribute("message", "Service-User '" + created.username() + "' angelegt.");
+            redirect.addFlashAttribute("message", "Service user '" + created.username() + "' created.");
             return "redirect:/admin/users/" + created.id();
         } catch (ConflictException | InvalidRequestException | NotFoundException e) {
             model.addAttribute("error", e.getMessage());
@@ -76,7 +76,7 @@ public class ServiceUserUiController {
         }
         try {
             service.update(id, form.toSpec());
-            redirect.addFlashAttribute("message", "Service-User gespeichert.");
+            redirect.addFlashAttribute("message", "Service user saved.");
             return "redirect:/admin/users/" + id;
         } catch (ConflictException | InvalidRequestException | NotFoundException e) {
             model.addAttribute("error", e.getMessage());
@@ -88,7 +88,7 @@ public class ServiceUserUiController {
     public String delete(@PathVariable UUID id, RedirectAttributes redirect) {
         ServiceUser user = service.require(id);
         service.delete(id);
-        redirect.addFlashAttribute("message", "Service-User '" + user.username() + "' gelöscht.");
+        redirect.addFlashAttribute("message", "Service user '" + user.username() + "' deleted.");
         return "redirect:/admin/users";
     }
 
@@ -97,7 +97,7 @@ public class ServiceUserUiController {
                                   @RequestParam(defaultValue = "") String dbPassword, RedirectAttributes redirect) {
         try {
             service.storeCredential(id, datasourceId, dbUsername, dbPassword);
-            redirect.addFlashAttribute("message", "DB-Zugangsdaten hinterlegt.");
+            redirect.addFlashAttribute("message", "Database credentials stored.");
         } catch (InvalidRequestException | NotFoundException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -108,7 +108,7 @@ public class ServiceUserUiController {
     public String removeCredential(@PathVariable UUID id, @PathVariable UUID datasourceId, RedirectAttributes redirect) {
         try {
             service.removeCredential(id, datasourceId);
-            redirect.addFlashAttribute("message", "DB-Zugangsdaten entfernt.");
+            redirect.addFlashAttribute("message", "Database credentials removed.");
         } catch (NotFoundException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -127,7 +127,7 @@ public class ServiceUserUiController {
                               RedirectAttributes redirect) {
         try {
             service.createGroup(name, description);
-            redirect.addFlashAttribute("message", "Gruppe '" + name + "' angelegt.");
+            redirect.addFlashAttribute("message", "Group '" + name + "' created.");
         } catch (ConflictException | InvalidRequestException e) {
             redirect.addFlashAttribute("error", e.getMessage());
         }
@@ -137,7 +137,7 @@ public class ServiceUserUiController {
     @PostMapping("/groups/{id}/delete")
     public String deleteGroup(@PathVariable UUID id, RedirectAttributes redirect) {
         service.deleteGroup(id);
-        redirect.addFlashAttribute("message", "Gruppe gelöscht.");
+        redirect.addFlashAttribute("message", "Group deleted.");
         return "redirect:/admin/groups";
     }
 

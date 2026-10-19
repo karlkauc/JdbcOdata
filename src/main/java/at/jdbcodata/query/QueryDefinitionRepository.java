@@ -15,4 +15,7 @@ public interface QueryDefinitionRepository extends JpaRepository<QueryDefinition
     long countByDatasourceId(UUID datasourceId);
 
     long countByFixedCredentialId(UUID fixedCredentialId);
+
+    /** Enabled queries without schema snapshot; they are missing from the service document. */
+    long countByEnabledTrueAndColumnsIsEmpty();
 }

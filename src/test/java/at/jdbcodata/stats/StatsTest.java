@@ -75,6 +75,40 @@ class StatsTest extends DemoProfileTest {
     }
 
     @Test
+    void hourlyBucketsUsagePerQueryAndLastDbExecution() {
+        UUID queryId = UUID.randomUUID();
+        UUID datasourceId = UUID.randomUUID();
+        Instant now = Instant.now();
+        log.record(new ExecutionRecord(now.minusSeconds(120), now.minusSeconds(119), queryId, "Usage_q", 1, datasourceId, "ds_x",
+                "u", "u", ExecutionMode.CALLER, ClientKind.EXCEL, "Excel", "127.0.0.1", null, null, CacheStatus.MISS, 5L, 9, 3, null,
+                ExecutionStatus.OK, null));
+        log.record(new ExecutionRecord(now.minusSeconds(60), now.minusSeconds(59), queryId, "Usage_q", 1, datasourceId, "ds_x",
+                "u", "u", ExecutionMode.CALLER, ClientKind.EXCEL, "Excel", "127.0.0.1", null, null, CacheStatus.HIT, null, 1, 3, null,
+                ExecutionStatus.OK, null));
+        log.record(new ExecutionRecord(now.minus(Duration.ofDays(3)), now.minus(Duration.ofDays(3)).plusMillis(4), queryId, "Usage_q", 1,
+                datasourceId, "ds_x", "u", "u", ExecutionMode.CALLER, ClientKind.EXCEL, "Excel", "127.0.0.1", null, null,
+                CacheStatus.MISS, null, 4, null, null, ExecutionStatus.DB_ERROR, "down"));
+
+        List<StatsService.HourStat> hours = stats.perHour(now, 24);
+        assertThat(hours).hasSize(24);
+        assertThat(hours.get(23).hour()).isBeforeOrEqualTo(now);
+        assertThat(hours.stream().mapToLong(StatsService.HourStat::executions).sum()).isGreaterThanOrEqualTo(2);
+
+        StatsService.QueryUsage usage = stats.usageByQuery(14, java.time.LocalDate.now()).get(queryId);
+        assertThat(usage.perDay()).hasSize(14);
+        assertThat(usage.total()).isEqualTo(3);
+        assertThat(usage.perDay().get(13)).isGreaterThanOrEqualTo(1);
+        assertThat(usage.lastCall()).isAfter(now.minusSeconds(61));
+
+        // the cache hit is newer but did not reach the database
+        StatsService.LastDbExecution last = stats.lastDbExecutions(now.minus(Duration.ofDays(7))).get(datasourceId);
+        assertThat(last.status()).isEqualTo("OK");
+        assertThat(last.dbDurationMs()).isEqualTo(5L);
+        assertThat(stats.executions(new StatsService.Filter(now.minus(Duration.ofDays(7)), now.plusSeconds(5), "Usage_q", null,
+                StatsService.FAILED), 10, 0)).singleElement().extracting(StatsService.Execution::status).isEqualTo("DB_ERROR");
+    }
+
+    @Test
     void detectsClients() {
         assertThat(ClientKind.detect(null)).isEqualTo(ClientKind.OTHER);
         assertThat(ClientKind.detect("Microsoft.Data.Mashup (https://go.microsoft.com/fwlink/?LinkID=304225)")).isEqualTo(ClientKind.POWER_QUERY);

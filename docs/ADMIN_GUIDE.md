@@ -1,12 +1,34 @@
 # Administrationsleitfaden
 
 Alle Schritte laufen in der Admin-UI unter `/admin`; jede Funktion gibt es auch in der REST-API (`/api/v1`,
-Basic Auth mit Admin-Konto). Rollen: `ADMIN` ändert, `VIEWER` liest.
+Basic Auth mit Admin-Konto). Rollen: `ADMIN` ändert, `VIEWER` liest. Die Oberfläche ist englisch; Beschriftungen
+stehen hier im Original, z. B. „Datasources → New datasource“.
+
+## 0. Bedienung
+
+- **Overview:** Kennzahlen der letzten 24 Stunden (Ausführungen, Fehlerquote, Cache-Trefferquote, Dauer P50/P95)
+  mit Verlauf pro Stunde und Vergleich zum Vortag; darunter „Needs attention“ (nicht erreichbare
+  Datenquellen, aktive Queries ohne Schema-Snapshot, Fehler der letzten 24 h, Queries ohne Aufruf seit 30 Tagen)
+  mit direkter Aktion, die zuletzt geänderten Queries, die Service-URL mit Excel-Anleitung und der Status der
+  Datenquellen.
+- **Erreichbarkeit der Datenquellen:** Gibt es für eine Datenquelle einen technischen Account, prüft der Dienst
+  jede Minute eine Verbindung dieses Accounts (`jdbcodata.health.interval-ms`, `0` schaltet die Prüfung ab);
+  „Check again“ prüft sofort. Ohne technischen Account gibt es keine Zugangsdaten zum Prüfen, dann zeigt die
+  UI das Ergebnis der letzten Ausführung, die die Datenbank erreicht hat (Cache-Treffer zählen nicht).
+- **Navigation:** Die Sidebar zeigt die Anzahl der Datenquellen, Queries, Service-User und technischen Accounts,
+  einen Warnpunkt bei Problemen und unten die Service-URL zum Kopieren. Die Kopfzeile zeigt den Pfad, die
+  globale Suche (**Ctrl+K** bzw. **⌘K**; Queries, Datenquellen, Service-User, Accounts und Seiten, Auswahl mit
+  Pfeiltasten und Enter) und das Benutzermenü mit „Sign out“. `jdbcodata.ui.environment` (z. B. `DEV`, `TEST`,
+  `PROD`) blendet ein Umgebungs-Badge ein; `PROD` erscheint rot, `TEST`/`STAGING` gelb.
+- **Listen:** Die Query-Liste hat eine Suche (Name, Beschreibung, Datenquelle, SQL), Filter für Datenquelle,
+  Modus, Status, Snapshot und Nutzung, die Aufrufe der letzten 14 Tage als Mini-Balken, den letzten Aufruf,
+  Zeilenaktionen (Feed-URL kopieren, Ausführungen ansehen) und blättert ab 25 Einträgen. Datenquellen,
+  Service-User und technische Accounts lassen sich direkt in der Liste filtern.
 
 ## 1. Datenquelle anlegen
 
-Datenquellen → Neue Datenquelle: Name, JDBC-URL, optional Treiberklasse und Zeitzone, Limits (Timeout,
-Max. Zeilen, parallele Ausführungen). Mit „Verbindung testen“ und eigenen DB-Zugangsdaten prüfen; die
+Datasources → New datasource: Name, JDBC-URL, optional Treiberklasse und Zeitzone, Limits (Timeout,
+Max. Zeilen, parallele Ausführungen). Mit „Test connection“ und eigenen DB-Zugangsdaten prüfen; die
 Zugangsdaten werden nicht gespeichert.
 
 Beispiele: `jdbc:oracle:thin:@//host:1521/SERVICE`, `jdbc:postgresql://host:5432/db`,
@@ -14,34 +36,39 @@ Beispiele: `jdbc:oracle:thin:@//host:1521/SERVICE`, `jdbc:postgresql://host:5432
 
 ## 2. Query anlegen
 
-Queries → Neue Query:
+Queries → New query. Der Editor ist in Tabs gegliedert: **Definition** (Name, Datenquelle, SQL, Testlauf;
+rechts Execution, Cache & Limits und Feed URL), **Parameters**, **Relations**, **Columns**, **Grants** und
+**Versions**. Alle Änderungen – auch Spalteneinstellungen und Freigaben – speichert die Leiste am unteren Rand
+gemeinsam (**Save** oder **Ctrl+S**/**⌘S**). Sie nennt die geänderten Bereiche, sagt, ob eine neue Version
+entsteht, und markiert Tabs mit ungespeicherten Änderungen; beim Verlassen der Seite fragt der Browser nach.
+
 
 1. **Name** ist der EntitySet-Name im Feed (`/odata/<Name>`), nur Buchstaben, Ziffern, `_`.
 2. **SQL**: nur `SELECT` (auch `WITH`, `UNION`). Parameter als `:name` schreiben und in der Parametertabelle
    mit Typ, Pflicht-Flag und Default deklarieren. Sensitive Parameter werden im Protokoll maskiert.
-3. **Testlauf** mit eigenen DB-Zugangsdaten: zeigt bis zu 100 Zeilen, Spaltentypen und Laufzeit.
-4. **Speichern**, dann **Schema-Snapshot erstellen**: erst danach erscheint die Query im Feed. Nach jeder
+3. **Test run** mit eigenen DB-Zugangsdaten: zeigt bis zu 100 Zeilen, Spaltentypen und Laufzeit.
+4. **Save**, dann **Take schema snapshot**: erst danach erscheint die Query im Feed. Nach jeder
    SQL-Änderung muss der Snapshot erneuert werden.
-5. **Spalten**: Spalten ausblenden oder als Schlüssel markieren (Schlüsselmodus „Spalten“); sonst liefert der
+5. **Columns**: Spalten ausblenden oder als Schlüssel markieren (Key „Columns“); sonst liefert der
    Feed einen synthetischen `RowId`.
    SQL-Arrays (PostgreSQL `text[]`, `int[]`, H2 `ARRAY`) und JSON-Spalten (`json`/`jsonb`, MySQL `JSON` oder
-   Text) lassen sich unter **Veröffentlichen als** strukturiert anbieten: Arrays von Werten als
+   Text) lassen sich unter **Publish as** strukturiert anbieten: Arrays von Werten als
    `Collection(Edm.String)`, `Collection(Edm.Int32)` usw., Arrays von JSON-Objekten als Collection eines
    ComplexTypes `<Query>_<Spalte>`, einzelne JSON-Objekte als ComplexType (`$filter=Kundendaten/Land eq 'AT'`,
    `$select=Kundendaten/Land`, `/odata/Bestellungen(1)/Kundendaten/Land`). Elementtyp und Felder ermittelt der
    Snapshot aus bis zu 100 Beispielzeilen (Feldtypen: Text, ganze Zahl, Dezimalzahl, Wahrheitswert, Datum,
-   Zeitstempel, Listen von Werten; verschachtelte Objekte bleiben JSON-Text). Unter **Struktur** sind Reihenfolge,
+   Zeitstempel, Listen von Werten; verschachtelte Objekte bleiben JSON-Text). Unter **Structure** sind Reihenfolge,
    Namen und Typen der Felder änderbar (eine Zeile je Feld: `Name Typ [JSON-Schlüssel]`), etwa weil PostgreSQL
    `jsonb` die Schlüssel umsortiert. Ein neuer Snapshot derselben SQL behält alle Spalteneinstellungen und hängt
    neue Felder hinten an. Danach gehen `$filter=Tags/any(t:t eq 'Neu')`,
    `Positionen/any(p:p/Betrag gt 1000)`, `Positionen/$count gt 2`, `/odata/Bestellungen(1)/Positionen` und
    `$select` mit Optionen: `$select=Tags($orderby=$this;$top=3),Positionen($filter=Betrag gt 100;$orderby=Betrag desc;$select=Produkt,Betrag;$count=true)`.
-   Standard bleibt „Text“ wie bisher (`{a,b}` bzw. der JSON-Text). Excel zeigt strukturierte Werte nur als Liste
-   oder Record; „zusätzlich als Text“ liefert daneben die Property `<Spalte>Text` mit dem Text wie bisher.
+   Standard bleibt „text“ wie bisher (`{a,b}` bzw. der JSON-Text). Excel zeigt strukturierte Werte nur als Liste
+   oder Record; „additionally as text“ liefert daneben die Property `<Spalte>Text` mit dem Text wie bisher.
    `/odata/Bestellungen(1)/Kategorien/$count` zählt Elemente (auch mit `$filter`). Collection-Spalten sind keine Schlüssel und werden nie in
    der Datenbank gefiltert.
-6. **Beziehungen** (optional): Verknüpfung zu einer anderen Query, z. B. `Umsatz.Kunde → Kunden` über
-   `KundeId = KundeId`. Die Gegenrichtung (`Kunden.Umsaetze`, Häkchen „Viele“) wird bei der Ziel-Query
+6. **Relations** (optional): Verknüpfung zu einer anderen Query, z. B. `Umsatz.Kunde → Kunden` über
+   `KundeId = KundeId`. Die Gegenrichtung (`Kunden.Umsaetze`, Häkchen „Many“) wird bei der Ziel-Query
    eingetragen; mit **Partner** verweisen beide aufeinander. Beziehungen erscheinen im `$metadata` als
    NavigationProperties und machen die Zusammenhänge in OData-Werkzeugen, Excel und Power BI sichtbar.
    Clients können sie mit `$expand` mitladen, z. B. `/odata/Umsatz?$expand=Kunde` oder
@@ -78,19 +105,19 @@ wiederherstellen.
 | CALLER mit Service-User | Service-User (`svc_…`) und Service-Passwort | die für die Datenquelle hinterlegten DB-Zugangsdaten |
 | FIXED | beliebiger freigegebener Aufrufer | technischer Account der Query |
 
-- **Service-User** (Service-User → Neu): Präfix `svc_`, Passwort, Gruppen; danach pro Datenquelle
-  DB-Zugangsdaten hinterlegen. „Pass-Through erzwingen“ ignoriert hinterlegte Zugangsdaten.
-- **Technische Accounts** (Technische Accounts → Neuer Account): DB-Konto je Datenquelle, Verbindung testen.
-- **Freigaben** im Query-Editor (nur FIXED): einzelne Service-User, Gruppen oder „alle authentifizierten“.
+- **Service-User** (Service users → New service user): Präfix `svc_`, Passwort, Gruppen; danach pro Datenquelle
+  DB-Zugangsdaten hinterlegen. „force pass-through“ ignoriert hinterlegte Zugangsdaten.
+- **Technische Accounts** (Technical accounts → New account): DB-Konto je Datenquelle, „Test connection“.
+- **Freigaben** im Query-Editor (Tab „Grants“, nur FIXED): einzelne Service-User, Gruppen oder „all authenticated callers“.
   Nicht freigegebene Aufrufer sehen die Query nicht.
 - PowerBI Service über Gateway: nur Service-User mit hinterlegten Zugangsdaten verwenden (PRD FR-32a).
 
 ### Push-Down
 
-Im Query-Editor „Filter in der Datenbank auswerten (Push-Down)“ setzen. Dann laufen `$filter`, `$search`,
+Im Query-Editor „Push-down“ einschalten. Dann laufen `$filter`, `$search`,
 `$orderby`, `$top`, `$skip`, `$count` und `$apply`-Gruppierungen als gekapseltes SQL in der Datenbank, soweit
 sie sich mit gleicher Bedeutung übersetzen lassen; der Rest wird wie bisher im Speicher ausgewertet. Sinnvoll für große Ergebnisse, die
-Clients selten vollständig laden. Voraussetzung: Schlüsselmodus „Spalten“ mit Schlüsselspalte, Datenbank
+Clients selten vollständig laden. Voraussetzung: Key „Columns“ mit Schlüsselspalte, Datenbank
 PostgreSQL, H2, Oracle oder MySQL/MariaDB. Gepushte Abrufe umgehen den Cache. Der Antwort-Header
 `X-Push-Down` zeigt, was in der Datenbank lief. In `seed.yml`: `pushDown: true`.
 
@@ -106,7 +133,7 @@ umgehen den Ergebnis-Cache.
 
 ## 4. Cache
 
-Im Query-Editor „Cache aktiv“ und TTL setzen. Der Cache gilt pro DB-User und Parameterwerten, Nutzer sehen
+Im Query-Editor „Result cache“ und TTL setzen. Der Cache gilt pro DB-User und Parameterwerten, Nutzer sehen
 nie fremde Ergebnisse. Cache → Einträge ansehen, einzeln oder gesamt invalidieren; Clients können mit
 `?refresh=true` erzwingen. Eine SQL-Änderung macht alte Einträge automatisch ungültig.
 
@@ -117,7 +144,7 @@ Rohdaten mit Filter und CSV-Export. Audit: alle Konfigurationsänderungen mit Ad
 
 ## 6. Admin-Konten
 
-Admin-Konten → Konto anlegen (ADMIN oder VIEWER), Passwort ändern, deaktivieren. Mindestens ein aktiver ADMIN bleibt
+Admin accounts → Create account (ADMIN oder VIEWER), Passwort ändern, deaktivieren. Mindestens ein aktiver ADMIN bleibt
 immer bestehen; das eigene Konto kann nicht gelöscht werden.
 
 ## 7. Seed-Datei

@@ -53,13 +53,13 @@ class AdminUiTest extends DemoProfileTest {
 
     @Test
     void loginAndNavigation() throws Exception {
-        assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/login")).andExpect(status().isOk()).andReturn())).contains("Anmelden");
+        assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/login")).andExpect(status().isOk()).andReturn())).contains("Sign in");
         mvc.perform(MockMvcRequestBuilders.get("/admin").accept(MediaType.TEXT_HTML)).andExpect(status().is3xxRedirection()).andExpect(header().string("Location", endsWith("/login")));
         mvc.perform(MockMvcRequestBuilders.get("/").accept(MediaType.TEXT_HTML)).andExpect(status().is3xxRedirection()).andExpect(header().string("Location", endsWith("/login")));
         mvc.perform(MockMvcRequestBuilders.get("/admin").accept(MediaType.APPLICATION_JSON)).andExpect(status().isUnauthorized());
         mvc.perform(MockMvcRequestBuilders.get("/").with(admin())).andExpect(redirectedUrl("/admin"));
         String dashboard = body(mvc.perform(MockMvcRequestBuilders.get("/admin").with(admin())).andExpect(status().isOk()).andReturn());
-        assertThat(dashboard).contains("Übersicht").contains("Sales").contains("admin");
+        assertThat(dashboard).contains("Overview").contains("Sales").contains("admin");
         mvc.perform(MockMvcRequestBuilders.get("/webjars/htmx.org/2.0.11/dist/htmx.min.js")).andExpect(status().isOk());
         mvc.perform(MockMvcRequestBuilders.get("/css/admin.css")).andExpect(status().isOk());
         mvc.perform(MockMvcRequestBuilders.get("/js/admin.js")).andExpect(status().isOk());
@@ -68,7 +68,7 @@ class AdminUiTest extends DemoProfileTest {
     @Test
     void datasourcePages() throws Exception {
         assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/admin/datasources").with(admin())).andExpect(status().isOk()).andReturn())).contains("demo");
-        assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/admin/datasources/new").with(admin())).andExpect(status().isOk()).andReturn())).contains("Neue Datenquelle");
+        assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/admin/datasources/new").with(admin())).andExpect(status().isOk()).andReturn())).contains("New datasource");
 
         String invalid = body(mvc.perform(post("/admin/datasources").with(admin()).with(csrf())
                 .param("name", "").param("jdbcUrl", "")).andExpect(status().isOk()).andReturn());
@@ -87,7 +87,7 @@ class AdminUiTest extends DemoProfileTest {
         assertThat(duplicate).contains("already exists");
 
         String edit = body(mvc.perform(MockMvcRequestBuilders.get("/admin/datasources/" + id).with(admin())).andExpect(status().isOk()).andReturn());
-        assertThat(edit).contains("jdbc:h2:mem:ui").contains("Verbindung testen");
+        assertThat(edit).contains("jdbc:h2:mem:ui").contains("Test connection");
 
         mvc.perform(post("/admin/datasources/" + id).with(admin()).with(csrf())
                         .param("name", name).param("jdbcUrl", "jdbc:h2:mem:ui;DB_CLOSE_DELAY=-1").param("description", "edited")
@@ -102,10 +102,10 @@ class AdminUiTest extends DemoProfileTest {
 
         String ok = body(mvc.perform(post("/admin/datasources/" + id + "/test").with(admin()).with(csrf())
                 .param("dbUser", "sa").param("dbPassword", "")).andExpect(status().isOk()).andReturn());
-        assertThat(ok).contains("Verbindung erfolgreich").contains("H2");
+        assertThat(ok).contains("Connection successful").contains("H2");
         String failed = body(mvc.perform(post("/admin/datasources/" + id + "/test").with(admin()).with(csrf())
                 .param("dbUser", "sa").param("dbPassword", "wrong")).andExpect(status().isOk()).andReturn());
-        assertThat(failed).contains("Verbindung fehlgeschlagen");
+        assertThat(failed).contains("Connection failed");
 
         String demoId = datasourceService.findByName("demo").orElseThrow().id().toString();
         mvc.perform(post("/admin/datasources/" + demoId + "/delete").with(admin()).with(csrf()))
@@ -120,7 +120,7 @@ class AdminUiTest extends DemoProfileTest {
         String demoId = datasourceService.findByName("demo").orElseThrow().id().toString();
         assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/admin/queries").with(admin())).andExpect(status().isOk()).andReturn())).contains("Sales");
         assertThat(body(mvc.perform(MockMvcRequestBuilders.get("/admin/queries/new").with(admin())).andExpect(status().isOk()).andReturn()))
-                .contains("Neue Query").contains("param-template");
+                .contains("New query").contains("param-template");
 
         String name = "Ui_" + UUID.randomUUID().toString().substring(0, 8).replace('-', '_');
         String invalid = body(mvc.perform(post("/admin/queries").with(admin()).with(csrf())
@@ -144,7 +144,7 @@ class AdminUiTest extends DemoProfileTest {
         assertThat(q.parameters().get(0).required()).isTrue();
 
         String editor = body(mvc.perform(MockMvcRequestBuilders.get("/admin/queries/" + id).with(admin())).andExpect(status().isOk()).andReturn());
-        assertThat(editor).contains("/odata/" + name).contains("Noch kein Schema-Snapshot").contains("Versionen")
+        assertThat(editor).contains("/odata/" + name).contains("No schema snapshot yet").contains("Versions")
                 .contains("parameters[0].name").contains("tp_y");
 
         String preview = body(mvc.perform(post("/admin/queries/test").with(admin()).with(csrf())
@@ -152,7 +152,7 @@ class AdminUiTest extends DemoProfileTest {
                 .param("sql", "SELECT customer, amount FROM sales WHERE sale_year = :y")
                 .param("parameters[0].name", "y").param("parameters[0].type", "INT")
                 .param("dbUser", "demo").param("dbPassword", "demo").param("tp_y", "2024")).andExpect(status().isOk()).andReturn());
-        assertThat(preview).contains("<span>12</span> Zeile(n)").contains("Alpha GmbH");
+        assertThat(preview).contains("<span>12</span> row(s)").contains("Alpha GmbH");
         String previewError = body(mvc.perform(post("/admin/queries/test").with(admin()).with(csrf())
                 .param("name", name).param("datasourceId", demoId).param("sql", "SELECT nope FROM sales")
                 .param("dbUser", "demo").param("dbPassword", "demo")).andExpect(status().isOk()).andReturn());
@@ -167,7 +167,7 @@ class AdminUiTest extends DemoProfileTest {
         assertThat(snapshotFailed).contains("flash err");
         String snapshot = body(mvc.perform(post("/admin/queries/" + id + "/snapshot").with(admin()).with(csrf())
                 .param("dbUser", "demo").param("dbPassword", "demo").param("tp_y", "2025")).andExpect(status().isOk()).andReturn());
-        assertThat(snapshot).contains("Snapshot erstellt: 2 Spalten").contains("key_customer");
+        assertThat(snapshot).contains("Snapshot taken: 2 columns").contains("key_customer");
 
         mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf())
                         .param("key_customer", "on").param("visible_customer", "on"))
@@ -184,7 +184,7 @@ class AdminUiTest extends DemoProfileTest {
         String collections = body(mvc.perform(post("/admin/queries/" + id + "/snapshot").with(admin()).with(csrf())
                 .param("dbUser", "demo").param("dbPassword", "demo")).andExpect(status().isOk()).andReturn());
         assertThat(collections).contains("collection_tags").contains("Collection(Edm.String)").contains("collection_pos")
-                .contains("Collection(" + name + "_pos)").contains("Struktur");
+                .contains("Collection(" + name + "_pos)").contains("Structure");
         mvc.perform(post("/admin/queries/" + id + "/columns").with(admin()).with(csrf()).param("visible_customer", "on")
                         .param("visible_tags", "on").param("collection_tags", "PRIMITIVE").param("visible_pos", "on").param("collection_pos", "COMPLEX"))
                 .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
@@ -217,7 +217,7 @@ class AdminUiTest extends DemoProfileTest {
                 .andExpect(status().isOk());
 
         String withVersions = body(mvc.perform(MockMvcRequestBuilders.get("/admin/queries/" + id).with(admin())).andExpect(status().isOk()).andReturn());
-        assertThat(withVersions).contains("Wiederherstellen");
+        assertThat(withVersions).contains("Restore");
         mvc.perform(post("/admin/queries/" + id + "/versions/1/restore").with(admin()).with(csrf()))
                 .andExpect(redirectedUrl("/admin/queries/" + id)).andExpect(flash().attributeExists("message"));
         assertThat(queryService.require(UUID.fromString(id)).version()).isEqualTo(4);

@@ -3,7 +3,10 @@ package at.jdbcodata.stats;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +39,18 @@ public class StatsService {
     public record DayStat(LocalDate day, long executions, long errors, long cacheHits) {
     }
 
+    /** One hour bucket; {@code hour} is the start of the hour. */
+    public record HourStat(Instant hour, long executions, long errors, long cacheHits, double avgTotalMs) {
+    }
+
+    /** Calls of one query: {@code perDay} oldest day first, {@code lastCall} over the whole retained log. */
+    public record QueryUsage(List<Long> perDay, long total, Instant lastCall) {
+    }
+
+    /** Latest execution that reached the database (cache hits excluded). */
+    public record LastDbExecution(Instant startedAt, String status, String errorMessage, Long dbDurationMs) {
+    }
+
     public record Filter(Instant from, Instant to, String queryName, String caller, String status) {
     }
 
@@ -44,6 +59,9 @@ public class StatsService {
                             Long dbDurationMs, long totalDurationMs, Integer rowCount, String status, String errorMessage,
                             String parameters, String odataOptions) {
     }
+
+    /** Pseudo status of {@link Filter#status()}: every execution that did not end with OK. */
+    public static final String FAILED = "FAILED";
 
     private final JdbcTemplate jdbc;
 
@@ -107,6 +125,75 @@ public class StatsService {
                 Timestamp.from(from), Timestamp.from(to));
     }
 
+    /** {@code hours} consecutive hour buckets ending with the hour of {@code to}; hours without executions are zero. */
+    public List<HourStat> perHour(Instant to, int hours) {
+        Instant last = to.truncatedTo(ChronoUnit.HOURS);
+        Instant first = last.minus(hours - 1L, ChronoUnit.HOURS);
+        Map<Instant, HourStat> found = new HashMap<>();
+        jdbc.query("""
+                SELECT DATE_TRUNC('hour', started_at) AS h, COUNT(*) AS n, SUM(CASE WHEN status <> 'OK' THEN 1 ELSE 0 END) AS errors,
+                       SUM(CASE WHEN cache_status = 'HIT' THEN 1 ELSE 0 END) AS hits, AVG(total_duration_ms) AS avg_total
+                FROM execution_log WHERE started_at >= ? AND started_at < ?
+                GROUP BY DATE_TRUNC('hour', started_at)""",
+                rs -> {
+                    Instant h = rs.getTimestamp("h").toInstant().truncatedTo(ChronoUnit.HOURS);
+                    found.put(h, new HourStat(h, rs.getLong("n"), rs.getLong("errors"), rs.getLong("hits"), rs.getDouble("avg_total")));
+                },
+                Timestamp.from(first), Timestamp.from(last.plus(1, ChronoUnit.HOURS)));
+        List<HourStat> result = new ArrayList<>(hours);
+        for (Instant h = first; !h.isAfter(last); h = h.plus(1, ChronoUnit.HOURS)) {
+            result.add(found.getOrDefault(h, new HourStat(h, 0, 0, 0, 0)));
+        }
+        return result;
+    }
+
+    /** Calls per query id over the last {@code days} days (today included) and the last call of every query. */
+    public Map<UUID, QueryUsage> usageByQuery(int days, LocalDate today) {
+        LocalDate first = today.minusDays(days - 1L);
+        Map<UUID, long[]> counts = new HashMap<>();
+        jdbc.query("""
+                SELECT query_id, CAST(started_at AS DATE) AS d, COUNT(*) AS n FROM execution_log
+                WHERE query_id IS NOT NULL AND started_at >= ?
+                GROUP BY query_id, CAST(started_at AS DATE)""",
+                rs -> {
+                    int idx = (int) ChronoUnit.DAYS.between(first, rs.getDate("d").toLocalDate());
+                    if (idx >= 0 && idx < days) {
+                        counts.computeIfAbsent(UUID.fromString(rs.getString("query_id")), k -> new long[days])[idx] += rs.getLong("n");
+                    }
+                },
+                Timestamp.valueOf(first.atStartOfDay()));
+        Map<UUID, Instant> lastCalls = new HashMap<>();
+        jdbc.query("SELECT query_id, MAX(started_at) AS last_call FROM execution_log WHERE query_id IS NOT NULL GROUP BY query_id",
+                rs -> {
+                    lastCalls.put(UUID.fromString(rs.getString("query_id")), rs.getTimestamp("last_call").toInstant());
+                });
+        Map<UUID, QueryUsage> result = new HashMap<>();
+        for (UUID id : lastCalls.keySet()) {
+            long[] c = counts.getOrDefault(id, new long[days]);
+            result.put(id, new QueryUsage(Arrays.stream(c).boxed().toList(), Arrays.stream(c).sum(), lastCalls.get(id)));
+        }
+        return result;
+    }
+
+    /** Latest execution per datasource id that went to the database, within the given window. */
+    public Map<UUID, LastDbExecution> lastDbExecutions(Instant from) {
+        Map<UUID, LastDbExecution> result = new HashMap<>();
+        jdbc.query("""
+                SELECT e.datasource_id, e.started_at, e.status, e.error_message, e.db_duration_ms
+                FROM execution_log e
+                JOIN (SELECT datasource_id, MAX(started_at) AS last_at FROM execution_log
+                      WHERE datasource_id IS NOT NULL AND cache_status <> 'HIT' AND started_at >= ?
+                      GROUP BY datasource_id) x ON x.datasource_id = e.datasource_id AND x.last_at = e.started_at
+                WHERE e.cache_status <> 'HIT'""",
+                rs -> {
+                    UUID id = UUID.fromString(rs.getString("datasource_id"));
+                    result.putIfAbsent(id, new LastDbExecution(rs.getTimestamp("started_at").toInstant(), rs.getString("status"),
+                            rs.getString("error_message"), (Long) rs.getObject("db_duration_ms", Long.class)));
+                },
+                Timestamp.from(from));
+        return result;
+    }
+
     public List<Execution> executions(Filter f, int limit, int offset) {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, started_at, query_name, query_version, datasource_name, caller, effective_db_user, execution_mode,
@@ -121,7 +208,9 @@ public class StatsService {
             sql.append(" AND LOWER(caller) = LOWER(?)");
             args.add(f.caller());
         }
-        if (f.status() != null && !f.status().isBlank()) {
+        if (FAILED.equals(f.status())) {
+            sql.append(" AND status <> 'OK'");
+        } else if (f.status() != null && !f.status().isBlank()) {
             sql.append(" AND status = ?");
             args.add(f.status());
         }

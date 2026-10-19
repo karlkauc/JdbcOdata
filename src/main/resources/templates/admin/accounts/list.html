@@ -1,21 +1,25 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Technische Accounts', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Technical accounts', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><h1>Technische Accounts</h1><p class="lead">DB-Konten, unter denen Queries im Modus FIXED laufen. Passwörter werden verschlüsselt gespeichert.</p></div>
-    <a class="button primary" th:href="@{/admin/accounts/new}">Neuer Account</a>
+    <div><h1>Technical accounts</h1><p class="lead">Database accounts that FIXED queries run as. Passwords are stored encrypted.</p></div>
+    <a class="button primary" th:href="@{/admin/accounts/new}"><svg th:replace="~{fragments/icons :: icon('plus')}"></svg>New account</a>
   </div>
-  <table class="list">
-    <thead><tr><th>Name</th><th>Datenquelle</th><th>DB-User</th><th>Geändert</th></tr></thead>
+  <div class="toolbar list-filter">
+    <label class="search-field"><svg th:replace="~{fragments/icons :: icon('search')}"></svg>
+      <input type="search" data-filter-table="#account-table" placeholder="Name, datasource, DB user …" aria-label="Filter list"></label>
+  </div>
+  <table class="list" id="account-table">
+    <thead><tr><th>Name</th><th>Datasource</th><th>DB user</th><th>Changed</th></tr></thead>
     <tbody>
     <tr th:each="a : ${accounts}">
       <td><a th:href="@{/admin/accounts/{id}(id=${a.id})}" th:text="${a.name}"></a><div class="muted" th:text="${a.description}"></div></td>
       <td th:text="${a.datasourceName}"></td>
       <td class="mono" th:text="${a.dbUsername}"></td>
-      <td th:text="${#temporals.format(a.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
+      <td th:text="${#temporals.format(a.updatedAt, 'yyyy-MM-dd HH:mm')}"></td>
     </tr>
-    <tr th:if="${accounts.isEmpty()}"><td colspan="4" class="empty">Noch keine technischen Accounts. <a th:href="@{/admin/accounts/new}">Ersten Account anlegen</a>.</td></tr>
+    <tr th:if="${accounts.isEmpty()}"><td colspan="4" class="empty">No technical accounts yet. <a th:href="@{/admin/accounts/new}">Create the first account</a>.</td></tr>
     </tbody>
   </table>
 </main>

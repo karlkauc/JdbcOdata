@@ -21,7 +21,7 @@ import java.util.UUID;
 public class QueryForm {
 
     public static class ParameterForm {
-        @NotBlank @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*", message = "Buchstabe, dann Buchstaben/Ziffern/_")
+        @NotBlank @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*", message = "a letter, then letters, digits or _")
         private String name;
         @NotNull
         private ParameterType type = ParameterType.STRING;
@@ -63,7 +63,7 @@ public class QueryForm {
 
     /** One row of the relations table; column lists are entered comma-separated. */
     public static class RelationForm {
-        @Size(max = 100) @Pattern(regexp = "|[A-Za-z][A-Za-z0-9_]*", message = "Buchstabe, dann Buchstaben/Ziffern/_")
+        @Size(max = 100) @Pattern(regexp = "|[A-Za-z][A-Za-z0-9_]*", message = "a letter, then letters, digits or _")
         private String name;
         @Size(max = 100)
         private String targetQuery;
@@ -115,7 +115,7 @@ public class QueryForm {
         public void setDescription(String description) { this.description = description; }
     }
 
-    @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*", message = "Buchstabe, dann Buchstaben/Ziffern/_")
+    @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z][A-Za-z0-9_]*", message = "a letter, then letters, digits or _")
     private String name;
     @Size(max = 1000)
     private String description;

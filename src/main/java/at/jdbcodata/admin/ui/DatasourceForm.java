@@ -10,7 +10,7 @@ import jakarta.validation.constraints.Size;
 
 public class DatasourceForm {
 
-    @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z0-9_-]+", message = "nur Buchstaben, Ziffern, _ und -")
+    @NotBlank @Size(max = 100) @Pattern(regexp = "[A-Za-z0-9_-]+", message = "only letters, digits, _ and -")
     private String name;
     @Size(max = 1000)
     private String description;

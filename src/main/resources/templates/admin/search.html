@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Search', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <div><h1>Search</h1><p class="lead">Queries, datasources, service users, technical accounts and pages.</p></div>
+  </div>
+  <form class="card inline-form" th:action="@{/admin/search}" method="get">
+    <label>Search term <input type="search" name="q" th:value="${q}" autofocus></label>
+    <button type="submit" class="primary">Search</button>
+  </form>
+  <div class="card search-page" th:insert="~{admin/search :: results}"></div>
+
+</main>
+  <div th:fragment="results" class="search-groups">
+    <p class="search-empty" th:if="${groups.isEmpty() and !#strings.isEmpty(q)}">No results for “<span th:text="${q}"></span>”.</p>
+    <p class="search-empty" th:if="${#strings.isEmpty(q)}">Enter a search term – for example the name of a query or datasource.</p>
+    <div class="search-group" th:each="g : ${groups}">
+      <div class="search-group-title" th:text="${g.title}">Queries</div>
+      <a class="search-hit" th:each="h : ${g.hits}" th:href="@{${h.href}}" role="option">
+        <span class="search-hit-icon"><svg th:replace="~{fragments/icons :: icon(${h.icon})}"></svg></span>
+        <span class="search-hit-label" th:text="${h.label}">Sales</span>
+        <span class="search-hit-detail" th:text="${h.detail}">demo</span>
+      </a>
+    </div>
+    <div class="search-foot" th:if="${!#strings.isEmpty(q)}"><kbd>↑</kbd><kbd>↓</kbd> select · <kbd>↵</kbd> open · <kbd>Esc</kbd> close</div>
+  </div>
+</body>
+</html>

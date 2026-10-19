@@ -2,9 +2,9 @@
   <div class="flash err" th:if="${error}" th:text="${error}"></div>
   <th:block th:if="${result != null}">
     <div class="flash ok">
-      <span th:text="${result.rows.size()}"></span> Zeile(n) in <span th:text="${result.durationMs}"></span> ms,
-      <span th:text="${result.columns.size()}"></span> Spalten.
-      <span th:if="${result.truncated}">Vorschau auf die ersten Zeilen begrenzt.</span>
+      <span th:text="${result.rows.size()}"></span> row(s) in <span th:text="${result.durationMs}"></span> ms,
+      <span th:text="${result.columns.size()}"></span> columns.
+      <span th:if="${result.truncated}">Preview limited to the first rows.</span>
     </div>
     <div class="scroll">
       <table class="list preview">

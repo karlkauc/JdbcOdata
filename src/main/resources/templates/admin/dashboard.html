@@ -1,51 +1,94 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Übersicht', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Overview', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><h1>Übersicht</h1><p class="lead">Status des Dienstes und die zuletzt geänderten Queries.</p></div>
+    <div><h1>Overview</h1>
+      <p class="lead" th:if="${attention.isEmpty()}">All good – nothing needs your attention right now.</p>
+      <p class="lead" th:unless="${attention.isEmpty()}"
+         th:text="${attention.size() == 1} ? '1 item needs your attention.' : ${attention.size()} + ' items need your attention.'"></p></div>
     <div class="head-actions">
-      <a class="button" th:href="@{/admin/datasources/new}">Neue Datenquelle</a>
-      <a class="button primary" th:href="@{/admin/queries/new}">Neue Query</a>
+      <a class="button" th:href="@{/admin/datasources/new}"><svg th:replace="~{fragments/icons :: icon('database')}"></svg>New datasource</a>
+      <a class="button primary" th:href="@{/admin/queries/new}"><svg th:replace="~{fragments/icons :: icon('plus')}"></svg>New query</a>
     </div>
   </div>
 
-  <div class="card feed">
-    <strong>Service-URL für Excel / PowerBI</strong>
-    <code id="service-root" th:text="${serviceRoot}">http://localhost:8080/odata/</code>
-    <button type="button" class="small" data-copy="#service-root">Kopieren</button>
+  <div class="kpis">
+    <a class="kpi" th:each="k : ${kpis}" th:href="@{${k.href}}">
+      <span class="kpi-label" th:text="${k.label}">Executions</span>
+      <span class="kpi-row">
+        <span class="kpi-value" th:text="${k.value}">0</span>
+        <svg class="spark" viewBox="0 0 96 30" preserveAspectRatio="none" role="img" th:attr="aria-label=${k.sparkTitle}" th:classappend="${k.tone}">
+          <title th:text="${k.sparkTitle} + ' (last 24 h)'">Trend</title>
+          <polyline th:attr="points=${k.sparkPoints}" fill="none" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+      </span>
+      <span class="kpi-delta" th:classappend="${k.tone}" th:text="${k.delta}">±0</span>
+    </a>
   </div>
 
-  <div class="tiles">
-    <a class="tile" th:href="@{/admin/datasources}"><span class="label">Datenquellen</span><span class="num" th:text="${datasourceCount}">0</span></a>
-    <a class="tile" th:href="@{/admin/queries}"><span class="label">Queries</span><span class="num" th:text="${queryCount}">0</span></a>
-    <a class="tile" th:href="@{/admin/users}"><span class="label">Service-User</span><span class="num" th:text="${serviceUserCount}">0</span></a>
-    <a class="tile" th:href="@{/admin/accounts}"><span class="label">Technische Accounts</span><span class="num" th:text="${accountCount}">0</span></a>
-    <a class="tile" th:href="@{/admin/stats(period='24h')}"><span class="label">Ausführungen 24 h</span><span class="num" th:text="${summary.executions}">0</span>
-      <small th:text="${summary.errors} + ' Fehler, ' + ${#numbers.formatPercent(summary.cacheHitRatio(), 1, 0)} + ' aus Cache'"></small></a>
-    <a class="tile" th:href="@{/admin/cache}"><span class="label">Cache</span><span class="num" th:text="${cacheStats.entries}">0</span>
-      <small th:text="${#numbers.formatDecimal(cacheStats.bytes / 1048576.0, 1, 1)} + ' MB belegt'"></small></a>
-    <a class="tile warn" th:href="@{/admin/queries}" th:if="${!queriesWithoutSnapshot.isEmpty()}">
-      <span class="label">Ohne Schema-Snapshot</span><span class="num" th:text="${queriesWithoutSnapshot.size()}">0</span>
-      <small th:text="${#strings.listJoin(queriesWithoutSnapshot, ', ')}"></small></a>
-  </div>
+  <div class="dash-cols">
+    <div class="dash-main">
+      <section class="card list-card">
+        <div class="card-head"><h2>Needs attention</h2>
+          <span th:if="${!attention.isEmpty()}" class="badge warn" th:text="${attention.size()} + ' open'">3 open</span></div>
+        <div class="empty-state" th:if="${attention.isEmpty()}">
+          <span class="empty-icon ok"><svg th:replace="~{fragments/icons :: icon('check')}"></svg></span>
+          All datasources reachable, every enabled query has a schema snapshot, no errors in the last 24 hours.
+        </div>
+        <div class="list-item" th:each="a : ${attention}">
+          <span class="item-icon" th:classappend="${a.tone}"><svg th:replace="~{fragments/icons :: icon(${a.icon})}"></svg></span>
+          <span class="item-text"><strong th:text="${a.title}">Title</strong><small th:text="${a.detail}">Detail</small></span>
+          <form th:if="${a.post}" th:action="@{${a.href}}" method="post"><button type="submit" class="small" th:text="${a.action}">Action</button></form>
+          <a th:unless="${a.post}" class="button small" th:href="@{${a.href}}" th:text="${a.action}">Action</a>
+        </div>
+      </section>
 
-  <h2>Zuletzt geändert</h2>
-  <table class="list">
-    <thead><tr><th>Query</th><th>Datenquelle</th><th>Modus</th><th>Version</th><th>Snapshot</th><th>Geändert</th></tr></thead>
-    <tbody>
-    <tr th:each="q : ${recentQueries}">
-      <td><a th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a>
-        <div class="muted" th:text="${q.description}"></div></td>
-      <td th:text="${q.datasourceName}">demo</td>
-      <td><span class="badge plain" th:text="${q.executionMode}"></span></td>
-      <td th:text="${q.version}">1</td>
-      <td><span th:class="${q.hasSnapshot()} ? 'badge ok' : 'badge warn'" th:text="${q.hasSnapshot()} ? ${q.columns.size()} + ' Spalten' : 'fehlt'"></span></td>
-      <td th:text="${#temporals.format(q.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
-    </tr>
-    <tr th:if="${recentQueries.isEmpty()}"><td colspan="6" class="empty">Noch keine Queries. <a th:href="@{/admin/queries/new}">Erste Query anlegen</a>.</td></tr>
-    </tbody>
-  </table>
+      <section class="card list-card">
+        <div class="card-head"><h2>Recently changed</h2><a th:href="@{/admin/queries}">All queries →</a></div>
+        <div class="empty-state" th:if="${recentQueries.isEmpty()}">No queries yet. <a th:href="@{/admin/queries/new}">Create the first query</a>.</div>
+        <a class="list-item link-item" th:each="q : ${recentQueries}" th:href="@{/admin/queries/{id}(id=${q.id})}">
+          <span class="item-icon plain"><svg th:replace="~{fragments/icons :: icon('code')}"></svg></span>
+          <span class="item-text"><strong th:text="${q.name}">Sales</strong>
+            <small th:text="${#strings.isEmpty(q.description)} ? ${q.datasourceName} : ${q.description} + ' · ' + ${q.datasourceName}">demo</small></span>
+          <span class="badge plain" th:text="${q.executionMode}">CALLER</span>
+          <span th:class="${q.hasSnapshot()} ? 'badge ok' : 'badge warn'" th:text="${q.hasSnapshot()} ? ${q.columns.size()} + ' columns' : 'no snapshot'"></span>
+          <span class="item-meta" th:text="${@fmt.ago(q.updatedAt)}" th:title="${#temporals.format(q.updatedAt, 'yyyy-MM-dd HH:mm')}">1 h ago</span>
+        </a>
+      </section>
+    </div>
+
+    <div class="dash-side">
+      <section class="card feed-card">
+        <div class="feed-card-head"><svg th:replace="~{fragments/icons :: icon('sheet')}"></svg><strong>Connect from Excel / Power BI</strong></div>
+        <div class="copy-field">
+          <code id="service-root" th:text="${serviceRoot}">http://localhost:8080/odata/</code>
+          <button type="button" class="small primary" data-copy="#service-root"><svg th:replace="~{fragments/icons :: icon('copy')}"></svg>Copy</button>
+        </div>
+        <p>Excel: <em>Data → Get Data → From Other Sources → From OData Feed</em>. Sign in with <em>Basic</em> as a service user.</p>
+      </section>
+
+      <section class="card list-card">
+        <div class="card-head"><h2>Datasources</h2><a th:href="@{/admin/datasources}">All →</a></div>
+        <div class="empty-state" th:if="${health.isEmpty()}">No datasources yet. <a th:href="@{/admin/datasources/new}">Create one</a>.</div>
+        <a class="list-item link-item health-item" th:each="h : ${health}" th:href="@{/admin/datasources/{id}(id=${h.datasourceId})}"
+           th:title="${h.source != null} ? ${h.source} + (${h.checkedAt != null} ? ' · ' + ${@fmt.ago(h.checkedAt)} : '') : ${h.detail}">
+          <span class="status-dot" th:classappend="${#strings.toLowerCase(h.state)}"></span>
+          <span class="item-text"><strong th:text="${h.name}">demo</strong><small class="mono" th:text="${h.jdbcUrl}">jdbc:…</small></span>
+          <span class="item-meta right">
+            <span th:switch="${h.state.name()}">
+              <span th:case="'OK'" th:text="${h.latencyMs != null} ? ${h.latencyMs} + ' ms' : 'reachable'">4 ms</span>
+              <span th:case="'DOWN'" class="text-err">unreachable</span>
+              <span th:case="'WARN'" class="text-warn">error</span>
+              <span th:case="'DISABLED'">disabled</span>
+              <span th:case="*">unknown</span>
+            </span>
+            <small th:text="${h.active} ? 'actively checked' : 'from executions'">actively checked</small>
+          </span>
+        </a>
+      </section>
+    </div>
+  </div>
 </main>
 </body>
 </html>

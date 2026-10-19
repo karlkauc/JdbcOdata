@@ -1,28 +1,81 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Queries', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Queries', ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
-    <div><h1>Queries</h1><p class="lead">Jede aktive Query mit Schema-Snapshot erscheint als EntitySet im OData-Service-Dokument.</p></div>
-    <a class="button primary" th:href="@{/admin/queries/new}">Neue Query</a>
+    <div><h1>Queries</h1><p class="lead">Every enabled query with a schema snapshot appears as an EntitySet in the OData service document.</p></div>
+    <a class="button primary" th:href="@{/admin/queries/new}"><svg th:replace="~{fragments/icons :: icon('plus')}"></svg>New query</a>
   </div>
-  <table class="list">
-    <thead><tr><th>Name</th><th>Datenquelle</th><th>Modus</th><th>Parameter</th><th>Cache</th><th>Version</th><th>Snapshot</th><th>Status</th></tr></thead>
-    <tbody>
-    <tr th:each="q : ${queries}">
-      <td><a th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a>
-        <div class="muted" th:text="${q.description}"></div></td>
-      <td th:text="${q.datasourceName}"></td>
-      <td><span class="badge plain" th:text="${q.executionMode}"></span></td>
-      <td th:text="${q.parameters.size()}"></td>
-      <td th:text="${q.cacheEnabled} ? ${q.cacheTtlSec} + ' s' : '–'"></td>
-      <td th:text="${q.version}"></td>
-      <td><span th:class="${q.hasSnapshot()} ? 'badge ok' : 'badge warn'" th:text="${q.hasSnapshot()} ? ${q.columns.size()} + ' Spalten' : 'fehlt'"></span></td>
-      <td><span th:class="${q.enabled} ? 'badge ok' : 'badge off'" th:text="${q.enabled} ? 'aktiv' : 'inaktiv'"></span></td>
-    </tr>
-    <tr th:if="${queries.isEmpty()}"><td colspan="8" class="empty">Noch keine Queries. <a th:href="@{/admin/queries/new}">Erste Query anlegen</a>.</td></tr>
-    </tbody>
-  </table>
+
+  <form class="toolbar" th:action="@{/admin/queries}" method="get" data-autosubmit>
+    <label class="search-field"><svg th:replace="~{fragments/icons :: icon('search')}"></svg>
+      <input type="search" name="q" th:value="${q}" placeholder="Search …" aria-label="Search queries"></label>
+    <label class="chip" th:classappend="${!#strings.isEmpty(ds)} ? 'active'"><span>Datasource</span>
+      <select name="ds"><option value="">all</option>
+        <option th:each="n : ${datasourceNames}" th:value="${n}" th:text="${n}" th:selected="${n == ds}"></option></select></label>
+    <label class="chip" th:classappend="${!#strings.isEmpty(mode)} ? 'active'"><span>Mode</span>
+      <select name="mode"><option value="">all</option>
+        <option value="CALLER" th:selected="${mode == 'CALLER'}">CALLER</option>
+        <option value="FIXED" th:selected="${mode == 'FIXED'}">FIXED</option></select></label>
+    <label class="chip" th:classappend="${!#strings.isEmpty(status)} ? 'active'"><span>Status</span>
+      <select name="status"><option value="">all</option>
+        <option value="enabled" th:selected="${status == 'enabled'}">enabled</option>
+        <option value="disabled" th:selected="${status == 'disabled'}">disabled</option></select></label>
+    <label class="chip" th:classappend="${!#strings.isEmpty(snapshot)} ? 'active'"><span>Snapshot</span>
+      <select name="snapshot"><option value="">all</option>
+        <option value="present" th:selected="${snapshot == 'present'}">present</option>
+        <option value="missing" th:selected="${snapshot == 'missing'}">missing</option></select></label>
+    <label class="chip" th:classappend="${!#strings.isEmpty(usage)} ? 'active'"><span>Usage</span>
+      <select name="usage"><option value="">all</option>
+        <option value="used" th:selected="${usage == 'used'}">used (30 d)</option>
+        <option value="unused" th:selected="${usage == 'unused'}">unused (30 d)</option></select></label>
+    <a th:if="${filtered}" class="reset-link" th:href="@{/admin/queries}">Reset filters</a>
+    <noscript><button type="submit" class="small">Filter</button></noscript>
+    <span class="toolbar-count" th:text="${filtered} ? ${matches} + ' of ' + ${total} + ' queries' : ${total} + ' queries'">12 queries</span>
+  </form>
+
+  <div class="table-card">
+    <table class="list">
+      <thead><tr><th>Name</th><th>Datasource</th><th>Mode</th>
+        <th th:text="'Calls ' + ${usageDays} + ' d'">Calls</th><th>Last call</th><th>Snapshot</th><th>Status</th><th class="actions-col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>
+      <tr th:each="r : ${rows}" th:with="q=${r.query}">
+        <td><a class="row-title" th:href="@{/admin/queries/{id}(id=${q.id})}" th:text="${q.name}">Sales</a>
+          <div class="muted" th:text="${q.description}"></div></td>
+        <td><span class="with-icon"><svg th:replace="~{fragments/icons :: icon('database')}"></svg><span th:text="${q.datasourceName}">demo</span></span></td>
+        <td><span class="with-icon muted" th:title="${q.executionMode.name() == 'FIXED'} ? 'Runs as a technical account' : 'Runs as the caller'">
+          <svg th:replace="~{fragments/icons :: icon(${q.executionMode.name() == 'FIXED'} ? 'lock' : 'users')}"></svg><span th:text="${q.executionMode}">CALLER</span></span></td>
+        <td>
+          <span class="usage" th:if="${r.usage != null and r.usage.total > 0}" th:title="${r.usage.total} + ' calls in ' + ${usageDays} + ' days'">
+            <span class="usage-bars"><i th:each="hgt : ${@fmt.bars(r.usage.perDay, 20)}" th:style="'height:' + ${hgt} + 'px'" th:classappend="${hgt == 2} ? 'zero'"></i></span>
+            <span class="usage-total" th:text="${@fmt.num(r.usage.total)}">0</span></span>
+          <span class="faint" th:unless="${r.usage != null and r.usage.total > 0}">–</span>
+        </td>
+        <td><span th:if="${r.usage != null}" th:text="${@fmt.ago(r.usage.lastCall)}" th:title="${#temporals.format(r.usage.lastCall, 'yyyy-MM-dd HH:mm')}">2 min ago</span>
+          <span class="faint" th:if="${r.usage == null}">never</span></td>
+        <td><span th:class="${q.hasSnapshot()} ? 'badge ok' : 'badge warn'" th:text="${q.hasSnapshot()} ? ${q.columns.size()} + ' columns' : 'missing'"></span></td>
+        <td><span th:class="${q.enabled} ? 'badge ok' : 'badge off'" th:text="${q.enabled} ? 'enabled' : 'disabled'"></span></td>
+        <td class="row-actions">
+          <button type="button" class="icon-button" th:attr="data-copy-text=${feedUrl} + ${q.name}" title="Copy feed URL" aria-label="Copy feed URL">
+            <svg th:replace="~{fragments/icons :: icon('copy')}"></svg></button>
+          <a class="icon-button" th:href="@{/admin/stats(period='7d', queryName=${q.name})}" title="View executions" aria-label="View executions">
+            <svg th:replace="~{fragments/icons :: icon('chart')}"></svg></a>
+          <a class="icon-button" th:href="@{/admin/queries/{id}(id=${q.id})}" title="Edit" aria-label="Edit">
+            <svg th:replace="~{fragments/icons :: icon('chevron-right')}"></svg></a>
+        </td>
+      </tr>
+      <tr th:if="${rows.isEmpty() and !filtered}"><td colspan="8" class="empty">No queries yet. <a th:href="@{/admin/queries/new}">Create the first query</a>.</td></tr>
+      <tr th:if="${rows.isEmpty() and filtered}"><td colspan="8" class="empty">No query matches the filters. <a th:href="@{/admin/queries}">Reset filters</a>.</td></tr>
+      </tbody>
+    </table>
+    <div class="table-foot" th:if="${pages > 1}">
+      <span th:text="'Showing ' + ${pageFrom} + '–' + ${pageTo} + ' of ' + ${matches}">Showing 1–25 of 40</span>
+      <a class="button small" th:classappend="${page <= 1} ? 'disabled'"
+         th:href="@{/admin/queries(q=${q}, ds=${ds}, mode=${mode}, status=${status}, snapshot=${snapshot}, usage=${usage}, page=${page - 1})}">Previous</a>
+      <a class="button small" th:classappend="${page >= pages} ? 'disabled'"
+         th:href="@{/admin/queries(q=${q}, ds=${ds}, mode=${mode}, status=${status}, snapshot=${snapshot}, usage=${usage}, page=${page + 1})}">Next</a>
+    </div>
+  </div>
 </main>
 </body>
 </html>

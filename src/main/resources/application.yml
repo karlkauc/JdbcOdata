@@ -17,6 +17,9 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  web:
+    locale: en             # admin UI is English only (validation messages, date formats)
+    locale-resolver: fixed
 
 server:
   port: 8080
@@ -51,6 +54,10 @@ jdbcodata:
   stats:
     retention-days: 90     # execution log retention
     async: true            # write execution log records off the request thread
+  health:
+    interval-ms: 60000     # active check of datasources with a technical account (admin UI status); 0 = off
+  ui:
+    environment: ""        # label of this deployment in the admin top bar, e.g. DEV, TEST, PROD; empty = no badge
   security:
     allow-plain-http: false   # true only behind a TLS reverse proxy or for local demos (Basic Auth needs TLS)
     rate-limit-per-minute: 20 # failed logins per IP / username before 429

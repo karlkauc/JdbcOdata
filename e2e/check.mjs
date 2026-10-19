@@ -27,22 +27,30 @@ await shot('01-login');
 await page.fill('input[name=username]', 'admin');
 await page.fill('input[name=password]', 'wrong');
 await page.click('button[type=submit]');
-await expectText('Anmeldung fehlgeschlagen', 'Login mit falschem Passwort');
+await expectText('Sign-in failed', 'Login mit falschem Passwort');
 await page.fill('input[name=username]', 'admin');
 await page.fill('input[name=password]', 'playwright-pw');
 await Promise.all([page.waitForNavigation(), page.click('button[type=submit]')]);
 if (!/\/admin(\?continue)?$/.test(page.url())) throw new Error("Nach Login nicht auf /admin: " + page.url());
-await expectText('Übersicht', 'Dashboard');
+await expectText('Overview', 'Dashboard');
+await expectText('Needs attention', 'Dashboard-Hinweise');
 await shot('02-dashboard');
 
+// 1b. Global search (Ctrl+K) with keyboard selection
+await page.keyboard.press('Control+k');
+await page.keyboard.type('sal');
+await page.waitForSelector('.search-results.open .search-hit.selected');
+log('Globale Suche: Treffer mit Strg+K');
+await page.keyboard.press('Escape');
+
 // 2. Datasource connection test (htmx)
-await page.click('nav >> text=Datenquellen');
+await page.click('nav >> text=Datasources');
 await page.click('a:has-text("demo")');
-await expectText('Verbindung testen', 'Datenquelle demo');
+await expectText('Test connection', 'Datenquelle demo');
 await page.fill('input[name=dbUser]', 'demo');
 await page.fill('input[name=dbPassword]', 'demo');
-await page.click('button:has-text("Testen")');
-await expectText('Verbindung erfolgreich', 'htmx-Verbindungstest');
+await page.click('button:text-is("Test")');
+await expectText('Connection successful', 'htmx-Verbindungstest');
 await shot('03-datasource');
 
 // 3. Query editor: CodeMirror, parameter rows, test run, snapshot
@@ -50,6 +58,9 @@ await page.click('nav >> text=Queries');
 await page.click('a:has-text("Sales")');
 await page.waitForSelector('.CodeMirror');
 log('CodeMirror-Editor gerendert');
+await page.fill('input[name=cacheTtlSec]', '1800');
+await expectText('Unsaved changes: Cache TTL', 'Speichern-Leiste zeigt Änderung');
+await page.click('[data-tab=parameter]');
 const rowsBefore = await page.locator('tr.param-row').count();
 await page.click('#add-param');
 const rowsAfter = await page.locator('tr.param-row').count();
@@ -60,67 +71,70 @@ if (testName !== 'tp_p_new') throw new Error('Testwert-Feld nicht synchronisiert
 await page.locator('tr.param-row').last().locator('.remove-param').click();
 if ((await page.locator('tr.param-row').count()) !== rowsBefore) throw new Error('Parameterzeile nicht entfernt');
 log('Parameterzeilen hinzufügen/entfernen funktioniert');
+await page.fill('input[name=tp_p_year]', '2024');
+await page.click('[data-tab=definition]');
 await page.fill('#query-form input[name=dbUser]', 'demo');
 await page.fill('#query-form input[name=dbPassword]', 'demo');
-await page.fill('input[name=tp_p_year]', '2024');
-await page.click('button:has-text("Testlauf")');
-await expectText('Zeile(n)', 'htmx-Testlauf');
-await page.click('button:has-text("Schema-Snapshot erstellen")');
-await expectText('Snapshot erstellt', 'htmx-Schema-Snapshot');
+await page.click('#test-card button:has-text("Test run")');
+await expectText('row(s)', 'htmx-Testlauf');
 await shot('04-query-editor');
-await page.click('#query-form button[type=submit]');
-await expectText('Query gespeichert', 'Query speichern');
+await page.click('button:has-text("Take schema snapshot")');
+await expectText('Snapshot taken', 'htmx-Schema-Snapshot');
+if (!(await page.locator('[data-tab=spalten].active').count())) throw new Error('Nach dem Snapshot nicht im Tab Spalten');
+await page.click('.savebar button[type=submit]');
+await expectText('Query saved', 'Query speichern');
 
 // 4. New query via UI
 await page.click('nav >> text=Queries');
-await page.click('a:has-text("Neue Query")');
+await page.click('a:has-text("New query")');
 await page.waitForSelector('.CodeMirror');
 await page.fill('input[name=name]', 'PwQuery');
 await page.evaluate(() => { document.querySelector('.CodeMirror').CodeMirror.setValue('SELECT id, customer, amount FROM sales WHERE sale_year = 2025'); });
-await page.click('#query-form button[type=submit]');
-await expectText('angelegt', 'Neue Query anlegen');
+await page.click('.savebar button[type=submit]');
+await expectText('created', 'Neue Query anlegen');
 await page.fill('#query-form input[name=dbUser]', 'demo');
 await page.fill('#query-form input[name=dbPassword]', 'demo');
-await page.click('button:has-text("Schema-Snapshot erstellen")');
-await expectText('Snapshot erstellt: 3 Spalten', 'Snapshot der neuen Query');
+await page.click('button:has-text("Take schema snapshot")');
+await expectText('Snapshot taken: 3 columns', 'Snapshot der neuen Query');
 const pwQueryUrl = page.url();
 
 // 5. Service user with stored credentials
-await page.click('nav >> text=Service-User');
-await page.click('a:has-text("Neuer Service-User")');
+await page.click('nav >> text=Service users');
+await page.click('a:has-text("New service user")');
 await page.fill('input[name=username]', 'svc_pw');
 await page.fill('input[name=displayName]', 'Playwright');
 await page.fill('input[name=password]', 'playwright-user');
 await page.click('form.card button[type=submit]');
-await expectText('angelegt', 'Service-User anlegen');
+await expectText('created', 'Service-User anlegen');
 await page.selectOption('select[name=datasourceId]', { label: 'demo' });
 await page.fill('input[name=dbUsername]', 'demo');
 await page.fill('input[name=dbPassword]', 'demo');
-await page.click('button:has-text("Hinterlegen")');
-await expectText('DB-Zugangsdaten hinterlegt', 'Credentials hinterlegen');
+await page.click('button:text-is("Store")');
+await expectText('Database credentials stored', 'Credentials hinterlegen');
 await shot('05-service-user');
 
 // 6. Technical account
-await page.click('nav >> text=Technische Accounts');
-await page.click('a:has-text("Neuer Account")');
+await page.click('nav >> text=Technical accounts');
+await page.click('a:has-text("New account")');
 await page.fill('input[name=name]', 'tech_pw');
 await page.selectOption('select[name=datasourceId]', { label: 'demo' });
 await page.fill('input[name=dbUsername]', 'demo');
 await page.fill('input[name=dbPassword]', 'demo');
 await page.click('form.card button[type=submit]');
-await expectText('angelegt', 'Technischen Account anlegen');
-await page.click('button:has-text("Verbindung testen")');
-await expectText('Verbindung erfolgreich', 'Verbindungstest technischer Account');
+await expectText('created', 'Technischen Account anlegen');
+await page.click('button:has-text("Test connection")');
+await expectText('Connection successful', 'Verbindungstest technischer Account');
 
 // 7. FIXED mode + grants on PwQuery, then OData access as service user
-await page.goto(pwQueryUrl);
-await page.selectOption('select[name=executionMode]', 'FIXED');
+await page.goto(pwQueryUrl.split('#')[0] + '#definition');
+await page.click('.segmented label:has-text("FIXED")');
 await page.selectOption('select[name=fixedCredentialId]', { index: 1 });
-await page.click('#query-form button[type=submit]');
-await expectText('Query gespeichert', 'FIXED-Modus speichern');
+await page.click('.savebar button[type=submit]');
+await expectText('Query saved', 'FIXED-Modus speichern');
+await page.click('[data-tab=freigaben]');
 await page.check('input[name=all]');
-await page.click('button:has-text("Freigaben speichern")');
-await expectText('Freigaben gespeichert', 'Freigaben');
+await page.click('.savebar button[type=submit]');
+await expectText('Query saved', 'Freigaben über die Speichern-Leiste');
 await shot('06-fixed-query');
 
 const api = await request.newContext({ baseURL: base });
@@ -139,38 +153,44 @@ log(`ohne Auth: HTTP ${noauth.status()}, WWW-Authenticate=${noauth.headers()['ww
 // 8. Operations pages
 await page.click('nav >> text=Queries');
 await expectText('PwQuery', 'Query-Liste');
+await page.selectOption('select[name=mode]', 'FIXED');
+await page.waitForURL(/mode=FIXED/);
+if (await page.locator('a.row-title:has-text("Sales")').count()) throw new Error('Filter Modus=FIXED zeigt CALLER-Query');
+log('Filter-Chips filtern die Query-Liste');
+await page.goto(`${base}/admin/queries`);
 await shot('09-queries');
 await page.click('nav >> text=Cache');
-await expectText('Ergebnis-Cache', 'Cache-Seite');
+await expectText('Result cache', 'Cache-Seite');
 await shot('10-cache');
-await page.click('nav >> text=Statistik');
-await expectText('Letzte Ausführungen', 'Statistik-Seite');
+await page.click('nav >> text=Statistics');
+await expectText('Recent executions', 'Statistik-Seite');
 await expectText('PwQuery', 'Statistik enthält PwQuery-Ausführung');
 await shot('07-stats');
 await page.click('nav >> text=Audit');
 await expectText('SET_GRANTS', 'Audit-Log enthält Freigabe');
 await shot('11-audit');
-await page.click('nav >> text=Admin-Konten');
+await page.click('nav >> text=Admin accounts');
 await page.fill('form.card input[name=username]', 'pw_viewer');
 await page.fill('form.card input[name=password]', 'viewer-pass-1');
 await page.selectOption('form.card select[name=role]', 'VIEWER');
 await page.click('form.card button[type=submit]');
-await expectText('angelegt', 'Admin-Konto anlegen');
+await expectText('created', 'Admin-Konto anlegen');
 await shot('12-admins');
-await page.click('nav >> text=Einstellungen');
-await expectText('Master-Key', 'Einstellungen');
+await page.click('nav >> text=Settings');
+await expectText('Master key', 'Einstellungen');
 await shot('08-settings');
 const active = await page.locator('nav a.active').innerText();
-if (!/Einstellungen/.test(active)) throw new Error('Aktiver Navigationseintrag falsch: ' + active);
+if (!/Settings/.test(active)) throw new Error('Aktiver Navigationseintrag falsch: ' + active);
 log('Aktiver Navigationseintrag markiert');
 await page.setViewportSize({ width: 420, height: 860 });
 await page.goto(`${base}/admin`);
-await expectText('Übersicht', 'Dashboard (schmal)');
+await expectText('Overview', 'Dashboard (schmal)');
 await shot('13-mobile-dashboard');
 await page.setViewportSize({ width: 1280, height: 900 });
 
 // 9. Logout and viewer login
-await Promise.all([page.waitForNavigation(), page.click('button:has-text("Abmelden")')]);
+await page.click('.user-menu summary');
+await Promise.all([page.waitForNavigation(), page.click('button:has-text("Sign out")')]);
 if (!/\/login/.test(page.url())) throw new Error('Nach Logout nicht auf /login: ' + page.url());
 await page.fill('input[name=username]', 'pw_viewer');
 await page.fill('input[name=password]', 'viewer-pass-1');

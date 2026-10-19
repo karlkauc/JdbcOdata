@@ -308,12 +308,18 @@ Audit: Änderungen an Queries, Datenquellen, Service-Usern, Gruppen, technischen
 
 ## 8. Admin-UI und REST-API
 
-**UI** unter `/admin`, server-gerendert (Thymeleaf), Interaktivität über htmx, SQL-Editor mit CodeMirror (gebündelt). Seiten:
+**UI** unter `/admin`, server-gerendert (Thymeleaf), Interaktivität über htmx, SQL-Editor mit CodeMirror (gebündelt).
+Jede Seite hat eine Kopfzeile mit Pfad, globaler Suche (`/admin/search`, htmx-Fragment, Strg/⌘+K) und optionalem
+Umgebungs-Badge (`jdbcodata.ui.environment`); die Sidebar zeigt Zähler und Warnpunkte (`UiModelAdvice`).
+`DatasourceHealthService` prüft Datenquellen mit technischem Account periodisch über dessen Pool
+(`jdbcodata.health.interval-ms`) und leitet den Zustand der übrigen aus der letzten Ausführung im
+`execution_log` ab, die die Datenbank erreicht hat. Seiten:
 
 | Seite | Funktionen |
 |---|---|
-| Datenquellen | Anlegen/Bearbeiten/Löschen, Verbindungstest, Limits (Timeout, Max-Zeilen, Pool-Größe) |
-| Queries | Liste, Editor (Name, Datenquelle, SQL, Parameter, Modus, Cache-Einstellungen, Key-Spalten), Testlauf mit Vorschau, Schema-Snapshot aktualisieren, Freigaben, Versionshistorie |
+| Übersicht | Kennzahlen der letzten 24 h mit Stundenverlauf und Vortagsvergleich, „Braucht Aufmerksamkeit“, zuletzt geänderte Queries, Service-URL, Erreichbarkeit der Datenquellen |
+| Datenquellen | Anlegen/Bearbeiten/Löschen, Verbindungstest, Limits (Timeout, Max-Zeilen, Pool-Größe), Erreichbarkeit |
+| Queries | Liste mit Suche, Filtern, Nutzung (14 Tage) und Blättern; Editor in Tabs (Definition, Parameter, Beziehungen, Spalten, Freigaben, Versionen) mit einer gemeinsamen Speichern-Leiste, Testlauf mit Vorschau, Schema-Snapshot |
 | Service-User | Anlegen, Passwort setzen, DB-Credentials pro Datenquelle hinterlegen, Gruppen |
 | Cache | Einträge pro Query/User, Größe, Alter, Invalidieren |
 | Statistiken | siehe Abschnitt 7 |

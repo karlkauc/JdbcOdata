@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!-- Line icons (24px grid, 2px stroke, currentColor). Usage: th:replace="~{fragments/icons :: icon('database')}" -->
+<svg th:fragment="icon(name)" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" th:switch="${name}">
+  <path th:case="'home'" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>
+  <g th:case="'database'"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></g>
+  <path th:case="'code'" d="m8 8-4 4 4 4M16 8l4 4-4 4M14 4l-4 16"/>
+  <g th:case="'users'"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2.4.6 3.5 2.6 3.5 6"/></g>
+  <g th:case="'key'"><circle cx="8" cy="15" r="4.5"/><path d="M11.5 11.5 20 3m-3 3 3 3m-6 0 2.5 2.5"/></g>
+  <path th:case="'layers'" d="m12 3 9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5"/>
+  <path th:case="'chart'" d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
+  <g th:case="'audit'"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h3"/></g>
+  <g th:case="'shield'"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></g>
+  <g th:case="'settings'"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g>
+  <g th:case="'search'"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></g>
+  <path th:case="'plus'" d="M12 5v14M5 12h14"/>
+  <g th:case="'copy'"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></g>
+  <path th:case="'play'" d="M7 4v16l13-8z"/>
+  <path th:case="'alert'" d="M12 3 2 20h20zM12 10v4M12 17.5v.5"/>
+  <path th:case="'check'" d="M20 6 9 17l-5-5"/>
+  <g th:case="'clock'"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></g>
+  <g th:case="'table'"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></g>
+  <path th:case="'link'" d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>
+  <g th:case="'more'"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></g>
+  <path th:case="'x'" d="M18 6 6 18M6 6l12 12"/>
+  <path th:case="'chevron-down'" d="m6 9 6 6 6-6"/>
+  <path th:case="'chevron-right'" d="m9 18 6-6-6-6"/>
+  <path th:case="'refresh'" d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>
+  <g th:case="'sheet'"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></g>
+  <path th:case="'save'" d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 3v6h8M7 21v-7h10v7"/>
+  <path th:case="'logout'" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+  <g th:case="'lock'"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></g>
+  <path th:case="'trash'" d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/>
+  <circle th:case="*" cx="12" cy="12" r="3"/>
+</svg>
+</body>
+</html>

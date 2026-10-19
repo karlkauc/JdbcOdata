@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Nicht gefunden', ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Not found', ~{:: main})}">
 <body>
 <main>
-  <div class="page-head"><div><h1>Nicht gefunden</h1><p class="lead" th:text="${error}">Der Eintrag existiert nicht.</p></div></div>
-  <a class="button" th:href="@{/admin}">Zur Übersicht</a>
+  <div class="page-head"><div><h1>Not found</h1><p class="lead" th:text="${error}">The entry does not exist.</p></div></div>
+  <a class="button" th:href="@{/admin}">Back to the overview</a>
 </main>
 </body>
 </html>

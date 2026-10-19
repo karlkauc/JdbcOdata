@@ -1,61 +1,60 @@
 <!DOCTYPE html>
-<html lang="de" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${user == null} ? 'Neuer Service-User' : 'Service-User ' + ${user.username}, ~{:: main})}">
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page(${user == null} ? 'New service user' : ${user.username}, ~{:: main})}">
 <body>
 <main>
   <div class="page-head">
     <div>
-      <p class="hint"><a th:href="@{/admin/users}">Service-User</a></p>
-      <h1 th:text="${user == null} ? 'Neuer Service-User' : ${user.username}">Service-User</h1>
+      <h1 th:text="${user == null} ? 'New service user' : ${user.username}">Service user</h1>
       <p class="lead" th:if="${user != null}" th:text="${user.displayName}"></p>
     </div>
-    <form th:if="${user != null}" th:action="@{/admin/users/{id}/delete(id=${user.id})}" method="post" onsubmit="return confirm('Service-User wirklich löschen?')">
-      <button type="submit" class="danger">Löschen</button>
+    <form th:if="${user != null}" th:action="@{/admin/users/{id}/delete(id=${user.id})}" method="post" onsubmit="return confirm('Really delete this service user?')">
+      <button type="submit" class="danger">Delete</button>
     </form>
   </div>
 
   <form th:object="${form}" th:action="${user == null} ? @{/admin/users} : @{/admin/users/{id}(id=${user.id})}" method="post" class="card">
-    <h2>Konto</h2>
+    <h2>Account</h2>
     <div class="grid2">
-      <label>Benutzername <input type="text" th:field="*{username}" required autocomplete="off">
-        <small>Wird in Excel/PowerBI als Benutzer eingegeben.</small>
+      <label>User name <input type="text" th:field="*{username}" required autocomplete="off">
+        <small>Entered as the user in Excel / Power BI.</small>
         <span class="field-error" th:errors="*{username}"></span></label>
-      <label>Anzeigename <input type="text" th:field="*{displayName}"></label>
-      <label><span th:text="${user == null} ? 'Passwort (mind. 8 Zeichen)' : 'Neues Passwort (leer = unverändert)'">Passwort</span>
+      <label>Display name <input type="text" th:field="*{displayName}"></label>
+      <label><span th:text="${user == null} ? 'Password (at least 8 characters)' : 'New password (empty = unchanged)'">Password</span>
         <input type="password" th:field="*{password}" autocomplete="new-password"></label>
       <div class="check-list">
-        <label class="check"><input type="checkbox" th:field="*{enabled}"> aktiv</label>
-        <label class="check"><input type="checkbox" th:field="*{forcePassthrough}"> Pass-Through erzwingen (hinterlegte Zugangsdaten ignorieren)</label>
+        <label class="check"><input type="checkbox" th:field="*{enabled}"> enabled</label>
+        <label class="check"><input type="checkbox" th:field="*{forcePassthrough}"> force pass-through (ignore stored credentials)</label>
       </div>
-      <div class="span2 check-list"><strong>Gruppen</strong>
+      <div class="span2 check-list"><strong>Groups</strong>
         <label class="check" th:each="g : ${groups}"><input type="checkbox" th:field="*{groupIds}" th:value="${g.id}"> <span th:text="${g.name}"></span></label>
-        <span class="muted" th:if="${groups.isEmpty()}">keine Gruppen angelegt</span></div>
+        <span class="muted" th:if="${groups.isEmpty()}">no groups yet</span></div>
     </div>
     <div class="actions">
-      <button type="submit" class="primary">Speichern</button>
-      <a class="button" th:href="@{/admin/users}">Zurück</a>
+      <button type="submit" class="primary">Save</button>
+      <a class="button" th:href="@{/admin/users}">Back</a>
     </div>
   </form>
 
   <section class="card" th:if="${user != null}">
-    <h2>Hinterlegte DB-Zugangsdaten</h2>
-    <p class="muted">Werden verschlüsselt gespeichert und bei CALLER-Queries der jeweiligen Datenquelle anstelle der Excel-Anmeldung verwendet.</p>
+    <h2>Stored database credentials</h2>
+    <p class="muted">Stored encrypted and used instead of the Excel sign-in for CALLER queries of the respective datasource.</p>
     <table class="list" th:if="${!credentials.isEmpty()}">
-      <thead><tr><th>Datenquelle</th><th>DB-User</th><th>Geändert</th><th></th></tr></thead>
+      <thead><tr><th>Datasource</th><th>DB user</th><th>Changed</th><th></th></tr></thead>
       <tbody>
       <tr th:each="c : ${credentials}">
         <td th:text="${c.datasourceName}"></td>
         <td class="mono" th:text="${c.dbUsername}"></td>
-        <td th:text="${#temporals.format(c.updatedAt, 'dd.MM.yyyy HH:mm')}"></td>
-        <td><form th:action="@{/admin/users/{id}/credentials/{ds}/delete(id=${user.id}, ds=${c.datasourceId})}" method="post"><button type="submit" class="small">Entfernen</button></form></td>
+        <td th:text="${#temporals.format(c.updatedAt, 'yyyy-MM-dd HH:mm')}"></td>
+        <td><form th:action="@{/admin/users/{id}/credentials/{ds}/delete(id=${user.id}, ds=${c.datasourceId})}" method="post"><button type="submit" class="small">Remove</button></form></td>
       </tr>
       </tbody>
     </table>
     <form th:action="@{/admin/users/{id}/credentials(id=${user.id})}" method="post" class="inline-form" style="margin-top:14px">
-      <label>Datenquelle <select name="datasourceId" required>
+      <label>Datasource <select name="datasourceId" required>
         <option th:each="ds : ${datasources}" th:value="${ds.id}" th:text="${ds.name}"></option></select></label>
-      <label>DB-User <input type="text" name="dbUsername" required autocomplete="off"></label>
-      <label>DB-Passwort <input type="password" name="dbPassword" autocomplete="new-password"></label>
-      <button type="submit">Hinterlegen</button>
+      <label>DB user <input type="text" name="dbUsername" required autocomplete="off"></label>
+      <label>DB password <input type="password" name="dbPassword" autocomplete="new-password"></label>
+      <button type="submit">Store</button>
     </form>
   </section>
 </main>
