@@ -91,6 +91,7 @@ public class ODataServlet extends HttpServlet {
                 visible = identityResolver.visibleQueries(context);
             } catch (DbAuthenticationException e) {
                 log.debug("Pass-through login of '{}' rejected: {}", context.caller(), e.getMessage());
+                identityResolver.onRejectedLogin(context);
                 support.rateLimiter().recordFailure(req.getRemoteAddr(), context.caller());
                 unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
                 return;

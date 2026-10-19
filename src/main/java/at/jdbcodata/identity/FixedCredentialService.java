@@ -97,7 +97,12 @@ public class FixedCredentialService {
     @Transactional(readOnly = true)
     public ServiceUserService.DbLogin resolveLogin(UUID id) {
         FixedCredentialEntity e = repository.findById(id).orElseThrow(() -> new NotFoundException("Technical account " + id + " not found"));
-        return new ServiceUserService.DbLogin(e.getDbUsername(), vault.decrypt(e.getDbPasswordEnc(), e.getKeyId()));
+        return new ServiceUserService.DbLogin(e.getDbUsername(), vault.decrypt(e.getDbPasswordEnc(), e.getKeyId(), aad(e)));
+    }
+
+    /** Binds a technical account's password to its datasource and DB user (see {@link CredentialVault}). */
+    static String aad(FixedCredentialEntity e) {
+        return "fixed:" + e.getDatasourceId() + ":" + e.getDbUsername();
     }
 
     private void validate(FixedCredentialSpec spec, boolean create) {
@@ -117,14 +122,15 @@ public class FixedCredentialService {
 
     private void apply(FixedCredentialEntity e, FixedCredentialSpec s) {
         datasourceService.require(s.datasourceId());
+        boolean newPassword = s.dbPassword() != null && (e.getDbPasswordEnc() == null || !s.dbPassword().isEmpty());
+        // the password is bound to datasource and DB user: keep it readable when only those change
+        String password = newPassword ? s.dbPassword() : vault.decrypt(e.getDbPasswordEnc(), e.getKeyId(), aad(e));
         e.setName(s.name());
         e.setDescription(s.description() == null || s.description().isBlank() ? null : s.description());
         e.setDatasourceId(s.datasourceId());
         e.setDbUsername(s.dbUsername());
-        if (s.dbPassword() != null && (e.getDbPasswordEnc() == null || !s.dbPassword().isEmpty())) {
-            e.setDbPasswordEnc(vault.encrypt(s.dbPassword()));
-            e.setKeyId(vault.keyId());
-        }
+        e.setDbPasswordEnc(vault.encrypt(password, aad(e)));
+        e.setKeyId(vault.keyId());
         e.setUpdatedAt(Instant.now());
     }
 

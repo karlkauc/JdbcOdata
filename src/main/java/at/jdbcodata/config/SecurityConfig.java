@@ -7,10 +7,13 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 
 /**
  * Three security chains:
@@ -62,7 +65,7 @@ public class SecurityConfig {
 
     @Bean
     @Order(3)
-    SecurityFilterChain uiChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain uiChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
         http.authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error",
                                 "/webjars/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
@@ -74,10 +77,23 @@ public class SecurityConfig {
                 .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout"))
                 // a form from an expired session (restart, timeout) leads back to the login instead of a bare 403
                 .exceptionHandling(e -> e.accessDeniedHandler(new ExpiredFormHandler()))
+                // registry, so AdminSessions can end sessions of disabled, deleted or changed accounts
+                .sessionManagement(s -> s.maximumSessions(-1).sessionRegistry(sessionRegistry).expiredUrl("/login?ended"))
                 .headers(h -> h.contentSecurityPolicy(c -> c.policyDirectives(CONTENT_SECURITY_POLICY))
                         .referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
                 .httpBasic(Customizer.withDefaults());
         return http.build();
+    }
+
+    @Bean
+    SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
+
+    /** Lets the session registry forget sessions that time out or log out. */
+    @Bean
+    static HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
     }
 
     @Bean

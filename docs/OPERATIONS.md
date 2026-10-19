@@ -22,8 +22,9 @@ Secrets gehören in `/etc/jdbcodata/jdbcodata.env` (Vorlage `contrib/jdbcodata.e
 
 ```bash
 # selbstsigniert für Tests; produktiv ein Zertifikat der Firmen-CA als PKCS12 exportieren
+export SERVER_SSL_KEY_STORE_PASSWORD="$(openssl rand -base64 24)"   # in /etc/jdbcodata/jdbcodata.env übernehmen
 keytool -genkeypair -alias jdbcodata -keyalg RSA -keysize 2048 -validity 365 \
-  -dname "CN=odata.firma.local" -keystore certs/jdbcodata.p12 -storetype PKCS12 -storepass change-me
+  -dname "CN=odata.firma.local" -keystore certs/jdbcodata.p12 -storetype PKCS12 -storepass "$SERVER_SSL_KEY_STORE_PASSWORD"
 ```
 
 ```yaml
@@ -31,8 +32,7 @@ server:
   port: 8443
   ssl:
     key-store: certs/jdbcodata.p12
-    key-store-password: change-me
-    key-store-type: PKCS12
+    key-store-type: PKCS12        # Passwort aus SERVER_SSL_KEY_STORE_PASSWORD, nicht in die Datei
 ```
 
 Ohne `server.ssl.*` startet der Service nur mit `jdbcodata.security.allow-plain-http: true` und warnt im Log.

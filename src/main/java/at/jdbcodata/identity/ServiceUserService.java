@@ -98,6 +98,17 @@ public class ServiceUserService {
         return Optional.of(e.toRecord());
     }
 
+    private volatile String dummyHash;
+
+    /**
+     * Spends the time of one service-password check without a real user, so a rejected pass-through login takes
+     * about as long as a wrong service password and does not tell which names are service users.
+     */
+    public void spendPasswordCheck(String password) {
+        if (dummyHash == null) dummyHash = encoder.encode(UUID.randomUUID().toString());
+        encoder.matches(password == null ? "" : password, dummyHash);
+    }
+
     private boolean passwordMatches(ServiceUserEntity e, String password) {
         String key = sha256(e.getUsername() + '\0' + password + '\0' + e.getPasswordHash());
         if (verified.getIfPresent(key) != null) return true;
@@ -231,7 +242,7 @@ public class ServiceUserService {
         e.setServiceUserId(serviceUserId);
         e.setDatasourceId(datasourceId);
         e.setDbUsername(dbUsername);
-        e.setDbPasswordEnc(vault.encrypt(dbPassword == null ? "" : dbPassword));
+        e.setDbPasswordEnc(vault.encrypt(dbPassword == null ? "" : dbPassword, aad(e)));
         e.setKeyId(vault.keyId());
         e.setUpdatedAt(Instant.now());
         StoredCredential saved = toRecord(credentials.save(e));
@@ -253,7 +264,12 @@ public class ServiceUserService {
     @Transactional(readOnly = true)
     public Optional<DbLogin> resolveStoredLogin(UUID serviceUserId, UUID datasourceId) {
         return credentials.findByServiceUserIdAndDatasourceId(serviceUserId, datasourceId)
-                .map(e -> new DbLogin(e.getDbUsername(), vault.decrypt(e.getDbPasswordEnc(), e.getKeyId())));
+                .map(e -> new DbLogin(e.getDbUsername(), vault.decrypt(e.getDbPasswordEnc(), e.getKeyId(), aad(e))));
+    }
+
+    /** Binds a stored password to its service user, datasource and DB user (see {@link CredentialVault}). */
+    static String aad(StoredCredentialEntity e) {
+        return "stored:" + e.getServiceUserId() + ":" + e.getDatasourceId() + ":" + e.getDbUsername();
     }
 
     public record DbLogin(String username, String password) {

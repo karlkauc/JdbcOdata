@@ -137,6 +137,11 @@ public class ExecutionIdentityResolver {
         verifyLogin(datasourceService.require(query.datasourceId()), creds.username(), creds.password());
     }
 
+    /** After a database rejected a pass-through login: see {@link ServiceUserService#spendPasswordCheck}. */
+    public void onRejectedLogin(IdentityContext context) {
+        if (!context.isServiceUser() && !context.isAnonymous()) serviceUsers.spendPasswordCheck(context.credentials().password());
+    }
+
     /**
      * True if the caller's own Basic Auth password is the only credential behind this identity: nobody has verified
      * it yet except the target database. Service users were authenticated against their service password.

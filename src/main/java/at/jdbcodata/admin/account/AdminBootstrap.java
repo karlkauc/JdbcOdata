@@ -42,6 +42,10 @@ public class AdminBootstrap implements ApplicationRunner {
             new SecureRandom().nextBytes(bytes);
             password = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         }
+        if (!generated && password.toLowerCase().startsWith("change-me")) {
+            throw new IllegalStateException("jdbcodata.admin.password is still the placeholder from an example file; "
+                    + "set a real password or leave it empty for a generated one");
+        }
         if (!generated && password.length() < 8) {
             log.warn("The configured admin password is shorter than 8 characters; consider a longer one");
         }

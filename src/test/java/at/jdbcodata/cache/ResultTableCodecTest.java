@@ -74,6 +74,16 @@ class ResultTableCodecTest {
         assertThat(CacheKey.of(q, 1, null, Map.of()).dbUser()).isEmpty();
     }
 
+    @Test
+    void parameterValuesCannotForgeAnotherParameterSet() {
+        UUID q = UUID.randomUUID();
+        assertThat(CacheKey.of(q, 1, "u", Map.of("a", "1,b=2", "b", "3")))
+                .isNotEqualTo(CacheKey.of(q, 1, "u", Map.of("a", "1", "b", "2,b=3")));
+        java.util.Map<String, Object> withNull = new java.util.HashMap<>();
+        withNull.put("a", null);
+        assertThat(CacheKey.of(q, 1, "u", withNull)).isNotEqualTo(CacheKey.of(q, 1, "u", Map.of("a", "null")));
+    }
+
     private static ResultColumn col(String name, int type, String typeName) {
         return new ResultColumn(name, type, typeName, 10, 2, true, TypeMapper.map(type, typeName, 10, 2));
     }

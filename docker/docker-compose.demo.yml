@@ -9,7 +9,7 @@ services:
     image: jdbcodata:${JDBCODATA_VERSION:-1.0.0}
     container_name: jdbcodata-demo
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"   # plain HTTP with a default password: never on a public interface
     environment:
       SPRING_PROFILES_ACTIVE: demo
       JDBCODATA_ADMIN_PASSWORD: ${JDBCODATA_ADMIN_PASSWORD:-demo-admin}

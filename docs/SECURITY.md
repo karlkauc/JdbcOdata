@@ -26,11 +26,11 @@ der Feed jede unbekannte Basic-Auth-Anmeldung als DB-Login weiterreicht.
 | JDBC-URLs | `JdbcUrlPolicy`: nur bekannte Netzwerk-Treiber (erweiterbar), keine Optionen, die Klassen/Dateien laden, SQL beim Verbinden ausführen oder Read-only abschalten, keine Passwörter in der URL, Treiberklasse muss `java.sql.Driver` sein. Eingebettetes H2 nur mit `allow-embedded-h2` (Demo, Tests) |
 | Admin-SQL | `SqlValidator`: nur `SELECT`, keine schreibenden CTEs, kein `SELECT INTO` (auch in UNION-Zweigen), kein `FOR UPDATE/SHARE`, keine `/*! */`-Kommentare |
 | OData-Identität | `$metadata` und Service-Dokument erst nach gültigem DB-Login (Pass-Through) bzw. Service-Passwort; einheitliche 401-Meldung ohne Datasource- oder User-Namen. „Alle Authentifizierten“ schließt den anonymen Zugang aus |
-| Admin-UI | Session-Cookie `HttpOnly`, `SameSite=Lax`, `Secure` bei HTTPS; CSRF; Content-Security-Policy ohne Inline-Skripte; `frame-ancestors 'none'` |
-| Secrets | AES-256-GCM für hinterlegte Passwörter; Master-Key- und Initialpasswort-Datei werden mit Rechten 600 angelegt; das generierte Admin-Passwort steht nie im Log; BCrypt Cost 12 (erfolgreiche Service-User-Prüfungen 5 Minuten im Speicher, nur als SHA-256) |
+| Admin-UI | Session-Cookie `HttpOnly`, `SameSite=Lax`, `Secure` bei HTTPS; CSRF; Content-Security-Policy ohne Inline-Skripte; `frame-ancestors 'none'`; Sessions enden, wenn das Konto deaktiviert, gelöscht oder Passwort/Rolle geändert wird |
+| Secrets | AES-256-GCM für hinterlegte Passwörter, an ihren Datensatz gebunden (AAD); Master-Key- und Initialpasswort-Datei werden mit Rechten 600 angelegt; das generierte Admin-Passwort steht nie im Log; BCrypt Cost 12 (erfolgreiche Service-User-Prüfungen 5 Minuten im Speicher, nur als SHA-256) |
 | Protokolle | Sensible Parameter als `***` in Ausführungsprotokoll, Rohoptionen, CSV und Cache-Übersicht; CSV-Zellen mit `= + - @` werden gegen Formel-Ausführung entschärft |
 | Ressourcen | OData-Bodies maximal 10 MB, Zeilenlimit, Timeouts, Parallelitätslimit pro Datenquelle, Regex-Budget |
-| Abhängigkeiten | `./mvnw -Psecurity verify` (OWASP Dependency-Check, Abbruch ab CVSS 7) |
+| Abhängigkeiten | `./mvnw -Psecurity verify` (OWASP Dependency-Check, Abbruch ab CVSS 7); Base-Images per Digest gepinnt (Update: `docker buildx imagetools inspect <tag>`) |
 
 ## Review 19.10.2026
 
@@ -58,13 +58,13 @@ Snapshot), XSS, XXE/Deserialisierung, Secrets im Repository.
 | M11 | commons-io 2.13.0 (CVE-2024-47554), kein CVE-Scan | mittel | behoben (2.22.0, Profil `security`) |
 | M12 | Generiertes Admin-Passwort im Log | mittel | behoben (Datei mit Rechten 600) |
 | L1 | CSV-Formel-Injection | niedrig | behoben |
-| L2 | Sessions überleben Deaktivierung/Rollenwechsel/Passwortänderung | niedrig | offen |
+| L2 | Sessions überleben Deaktivierung/Rollenwechsel/Passwortänderung; `lastLoginAt` auch bei Fehlversuch | niedrig | behoben (`AdminSessions`, Session-Registry; Login-Zeit nur bei Erfolg) |
 | L3 | Keine CSP, doppelte widersprüchliche Header (Apache + Spring) | niedrig | behoben |
-| L4 | Service-User-Enumeration über Meldung und Antwortzeit | niedrig | Meldung behoben, Zeitunterschied bleibt |
-| L5 | Master-Key-Datei kurz mit Standardrechten; GCM ohne AAD | niedrig | Rechte behoben, AAD offen |
+| L4 | Service-User-Enumeration über Meldung und Antwortzeit | niedrig | behoben (einheitliche Meldung, abgelehnte Pass-Through-Logins kosten eine BCrypt-Prüfung) |
+| L5 | Master-Key-Datei kurz mit Standardrechten; GCM ohne AAD | niedrig | behoben (Datei mit 600 angelegt; Chiffrate an Datensatz gebunden, Altbestand wird beim Start umgeschlüsselt) |
 | L6 | BCrypt Cost 10 statt 12 (NFR-04) | niedrig | behoben |
 | L7 | Passwörter in JDBC-URLs für VIEWER und im Audit-Log sichtbar | niedrig | neue URLs mit Passwort werden abgelehnt; Altbestand beim nächsten Bearbeiten |
-| L8 | Cache-Schlüssel ohne Escaping (Kollision nur innerhalb desselben DB-Users) | niedrig | offen |
+| L8 | Cache-Schlüssel ohne Escaping (Kollision nur innerhalb desselben DB-Users) | niedrig | behoben (längenpräfixierter Hash-Input) |
 | L9 | Javadoc „sliding window“ stimmte nicht | niedrig | behoben |
 | L10 | Fehler-JSON escapte `\` und Steuerzeichen nicht | niedrig | behoben |
-| L11 | Deployment-Hygiene (systemd-Härtung, Caddy-Header, Image-Digests, Beispiel-Passwörter) | niedrig | systemd und Caddy behoben; Digests und `.env.example` offen |
+| L11 | Deployment-Hygiene (systemd-Härtung, Caddy-Header, Image-Digests, Beispiel-Passwörter) | niedrig | behoben (Images per Digest, keine Platzhalter-Passwörter, `change-me…` verhindert den Start, Demo-Compose nur auf 127.0.0.1) |

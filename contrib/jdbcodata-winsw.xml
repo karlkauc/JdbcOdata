@@ -10,7 +10,9 @@
   <executable>java</executable>
   <arguments>-Xms256m -Xmx1g -Dloader.path=lib -Dspring.config.additional-location=optional:file:./config/ -jar jdbcodata.jar</arguments>
   <workingdirectory>%BASE%</workingdirectory>
-  <env name="JDBCODATA_ADMIN_PASSWORD" value="change-me"/>
+  <!-- Values here are plain text: restrict this file to administrators. Empty admin password = random,
+       written to data\initial-admin-password. -->
+  <env name="JDBCODATA_ADMIN_PASSWORD" value=""/>
   <env name="JDBCODATA_MASTER_KEY" value=""/>
   <logpath>%BASE%\logs</logpath>
   <log mode="roll-by-size"><sizeThreshold>10240</sizeThreshold><keepFiles>5</keepFiles></log>

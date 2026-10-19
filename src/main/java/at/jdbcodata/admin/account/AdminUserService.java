@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.context.event.EventListener;
+import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -31,19 +33,29 @@ public class AdminUserService implements UserDetailsService {
     private final AdminUserRepository repository;
     private final PasswordEncoder encoder;
     private final AuditService audit;
+    private final AdminSessions sessions;
 
-    public AdminUserService(AdminUserRepository repository, PasswordEncoder encoder, AuditService audit) {
+    public AdminUserService(AdminUserRepository repository, PasswordEncoder encoder, AuditService audit,
+                            AdminSessions sessions) {
         this.repository = repository;
         this.encoder = encoder;
         this.audit = audit;
+        this.sessions = sessions;
+    }
+
+    /** Successful logins only (form and API Basic Auth); a failed attempt must not look like a login. */
+    @EventListener
+    @Transactional
+    public void onLogin(AuthenticationSuccessEvent event) {
+        repository.findByUsernameIgnoreCase(event.getAuthentication().getName())
+                .ifPresent(e -> e.setLastLoginAt(Instant.now()));
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         AdminUserEntity e = repository.findByUsernameIgnoreCase(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Unknown admin user"));
-        e.setLastLoginAt(Instant.now());
         return User.withUsername(e.getUsername()).password(e.getPasswordHash()).roles(e.getRole().name())
                 .disabled(!e.isEnabled()).build();
     }
@@ -100,6 +112,8 @@ public class AdminUserService implements UserDetailsService {
     @Transactional
     public AdminUser update(UUID id, AdminUserSpec spec) {
         AdminUserEntity e = repository.findById(id).orElseThrow(() -> new NotFoundException("Admin user " + id + " not found"));
+        AdminRole oldRole = e.getRole();
+        boolean wasEnabled = e.isEnabled();
         if (spec.password() != null && !spec.password().isBlank()) {
             if (spec.password().length() < 8) throw new InvalidRequestException("Password must have at least 8 characters");
             e.setPasswordHash(encoder.encode(spec.password()));
@@ -114,6 +128,10 @@ public class AdminUserService implements UserDetailsService {
         e.setEnabled(newEnabled);
         e.setUpdatedAt(Instant.now());
         AdminUser updated = repository.save(e).toRecord();
+        boolean passwordChanged = spec.password() != null && !spec.password().isBlank();
+        if (passwordChanged || newRole != oldRole || (wasEnabled && !newEnabled)) {
+            sessions.expire(e.getUsername());
+        }
         audit.record("UPDATE", "ADMIN_USER", updated.id(), updated.username(),
                 Map.of("role", updated.role().name(), "enabled", updated.enabled(),
                         "passwordChanged", spec.password() != null && !spec.password().isBlank()));
@@ -130,6 +148,7 @@ public class AdminUserService implements UserDetailsService {
             throw new ConflictException("At least one enabled ADMIN account must remain");
         }
         repository.delete(e);
+        sessions.expire(e.getUsername());
         audit.record("DELETE", "ADMIN_USER", id, e.getUsername(), null);
     }
 }

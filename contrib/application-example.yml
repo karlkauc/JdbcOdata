@@ -4,13 +4,13 @@ server:
   port: 8443
   ssl:
     key-store: certs/jdbcodata.p12
-    key-store-password: change-me
+    key-store-password: ""        # better via SERVER_SSL_KEY_STORE_PASSWORD in the environment
     key-store-type: PKCS12
 
 jdbcodata:
   admin:
     user: admin
-    password: change-me          # only used to create the first admin account
+    password: ""                 # first admin account only; empty = random, see data/initial-admin-password
   master-key: ""                 # openssl rand -base64 32 ; empty = key file in data/master.key
   meta:
     url: jdbc:h2:file:./data/jdbcodata;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH

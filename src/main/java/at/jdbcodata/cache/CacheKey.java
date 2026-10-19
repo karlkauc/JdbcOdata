@@ -12,10 +12,29 @@ import java.util.UUID;
 public record CacheKey(UUID queryId, int queryVersion, String dbUser, String paramsHash) {
 
     public static CacheKey of(UUID queryId, int version, String dbUser, Map<String, Object> params) {
-        return new CacheKey(queryId, version, dbUser == null ? "" : dbUser.toLowerCase(), hash(canonical(params)));
+        return new CacheKey(queryId, version, dbUser == null ? "" : dbUser.toLowerCase(), hash(unambiguous(params)));
     }
 
-    /** Stable text form of the parameters (sorted by name). */
+    /**
+     * Input of the parameter hash: each name and value length-prefixed and {@code null} distinct from the text
+     * "null", so values containing {@code ,} or {@code =} cannot make two parameter sets collide.
+     */
+    static String unambiguous(Map<String, Object> params) {
+        if (params == null || params.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        new TreeMap<>(params).forEach((k, v) -> {
+            sb.append(k.length()).append(':').append(k);
+            if (v == null) {
+                sb.append('N');
+            } else {
+                String text = v.toString();
+                sb.append('V').append(text.length()).append(':').append(text);
+            }
+        });
+        return sb.toString();
+    }
+
+    /** Stable text form of the parameters (sorted by name), for display. */
     public static String canonical(Map<String, Object> params) {
         if (params == null || params.isEmpty()) return "{}";
         StringBuilder sb = new StringBuilder("{");

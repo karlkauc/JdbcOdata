@@ -18,6 +18,7 @@
   <p class="muted">Administration of the service.</p>
   <div class="flash err" th:if="${param.error}">Sign-in failed. Please check user name and password.</div>
   <div class="flash ok" th:if="${param.logout}">You have been signed out.</div>
+  <div class="flash err" th:if="${param.ended}">Your session was ended because your account was changed or disabled. Please sign in again.</div>
   <div class="flash err" th:if="${param.expired}">Your session has expired, for example after a restart of the service. Please sign in again.</div>
   <form th:action="@{/login}" method="post">
     <label>User <input type="text" name="username" autofocus required autocomplete="username"></label>
