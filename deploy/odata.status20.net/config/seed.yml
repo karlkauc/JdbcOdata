@@ -37,6 +37,12 @@ queries:
         toMany: true
         partner: Kunde
         description: Umsatzpositionen des Kunden
+      - name: Bestellungen
+        target: Bestellungen
+        columns: {KundeId: KundeId}
+        toMany: true
+        partner: Kunde
+        description: Bestellungen des Kunden (Jahr des Parameters p_jahr, Standard 2025)
     cacheEnabled: true
     cacheTtlSec: 300
     snapshotCredentials:
@@ -175,6 +181,7 @@ queries:
       - name: Kunde
         target: Kunden
         columns: {KundeId: KundeId}
+        partner: Bestellungen
         description: Kunde der Bestellung
     cacheEnabled: true
     cacheTtlSec: 300
