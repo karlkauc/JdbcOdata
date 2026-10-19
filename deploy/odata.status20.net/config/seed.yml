@@ -10,6 +10,14 @@ datasources:
     defaultTimeoutSec: 60
     maxRows: 200000
     maxConcurrent: 8
+  - name: demo_produktstamm
+    description: Zweite Datenbank (produktstamm im Container demo-db) mit Produkt-Stammdaten; Beispiel für Beziehungen über Datenbanken hinweg
+    jdbcUrl: jdbc:postgresql://demo-db:5432/produktstamm
+    driverClass: org.postgresql.Driver
+    timezone: Europe/Vienna
+    defaultTimeoutSec: 60
+    maxRows: 200000
+    maxConcurrent: 8
 
 queries:
   - name: Kunden
@@ -51,6 +59,40 @@ queries:
         toMany: true
         partner: Produkt
         description: Umsatzpositionen mit diesem Produkt
+      - name: Stammdaten
+        target: Produktstamm
+        columns: {ProduktId: ProduktId}
+        partner: Produkt
+        description: Stammdaten aus der Datenbank produktstamm (andere Datenquelle)
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}
+
+  - name: Produktstamm
+    description: Produkt-Stammdaten aus der zweiten Datenbank produktstamm (Hersteller, Artikelnummer, EAN, Lager)
+    datasource: demo_produktstamm
+    sql: |
+      SELECT produkt_id AS "ProduktId", artikelnummer AS "Artikelnummer", ean AS "EAN", hersteller AS "Hersteller",
+             herkunftsland AS "Herkunftsland", gewicht_kg AS "GewichtKg", garantie_monate AS "GarantieMonate",
+             lieferant AS "Lieferant", lagerbestand AS "Lagerbestand"
+      FROM pim.artikel
+      ORDER BY produkt_id
+    keyMode: COLUMNS
+    keyColumns: [ProduktId]
+    relations:
+      - name: Produkt
+        target: Produkte
+        columns: {ProduktId: ProduktId}
+        partner: Stammdaten
+        description: Produkt aus der Datenbank demo (andere Datenquelle)
+      - name: Umsaetze
+        target: Umsatz
+        columns: {ProduktId: ProduktId}
+        toMany: true
+        partner: Produktstamm
+        description: Umsatzpositionen mit diesem Produkt (Datenbank demo)
     cacheEnabled: true
     cacheTtlSec: 300
     snapshotCredentials:
@@ -87,6 +129,11 @@ queries:
         columns: {ProduktId: ProduktId}
         partner: Umsaetze
         description: Verkauftes Produkt
+      - name: Produktstamm
+        target: Produktstamm
+        columns: {ProduktId: ProduktId}
+        partner: Umsaetze
+        description: Stammdaten des Produkts aus der Datenbank produktstamm (andere Datenquelle)
     cacheEnabled: true
     cacheTtlSec: 300
     snapshotCredentials:

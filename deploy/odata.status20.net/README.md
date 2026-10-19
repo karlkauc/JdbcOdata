@@ -66,6 +66,26 @@ Der Feed liefert Seiten zu 1000 Zeilen (`JDBCODATA_ODATA_PAGE_SIZE`) mit `@odata
 Pfade: `/odata/Umsatz(1)/Kunde`, `/odata/Kunden(1)/Umsaetze?$top=3`; Suche und Aggregation:
 `/odata/Kunden?$search=Wien`, `/odata/Umsatz?$apply=groupby((Region),aggregate(Betrag with sum as Summe))`.
 
+## Zweite Datenbank `produktstamm` (Beziehungen über Datenbanken hinweg)
+
+Im Container `demo-db` liegt neben `demo` eine zweite Datenbank `produktstamm` (Schema `pim`, Tabelle `artikel`,
+angelegt von `demo-db/05-produktstamm.sh`) mit Hersteller, Artikelnummer, EAN, Lieferant und Lagerbestand.
+JdbcOdata liest sie über die eigene Datenquelle `demo_produktstamm` als Query `Produktstamm` und verknüpft sie
+über `ProduktId` mit der anderen Datenbank: `Umsatz.Produktstamm`, `Produkte.Stammdaten` und zurück
+`Produktstamm.Umsaetze` / `Produktstamm.Produkt`. Beispiele:
+`/odata/Umsatz?$expand=Produktstamm($select=Hersteller,EAN)`, `/odata/Produkte(3)/Stammdaten`,
+`/odata/Umsatz?$filter=Produktstamm/Hersteller eq 'Cisco'`.
+
+Die Init-Skripte laufen nur bei leerem Volume. Auf einer bestehenden Instanz einmalig:
+
+```bash
+docker exec -i jdbcodata-status20-demo-db sh -c 'POSTGRES_USER=demo_admin POSTGRES_DB=demo sh -s' < demo-db/05-produktstamm.sh
+docker restart jdbcodata-status20     # Seed legt Datenquelle, Query und Beziehungen an
+```
+
+Der Service-User `demo` braucht zusätzlich Credentials für `demo_produktstamm` (wie unten, mit
+`d["name"]=="demo_produktstamm"`), sonst scheitern anonyme Anfragen an der zweiten Datenbank.
+
 ## Anonymer Lesezugriff (Service-User `demo`)
 
 Der Feed ist zusätzlich **ohne Login** lesbar, damit OData-Werkzeuge wie der
