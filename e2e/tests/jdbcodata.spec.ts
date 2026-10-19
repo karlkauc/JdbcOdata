@@ -20,10 +20,10 @@ function basic(user: string, password: string) {
 async function login(page: Page) {
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/login/);
-  await page.getByLabel("Benutzer").fill(ADMIN_USER);
-  await page.getByLabel("Passwort").fill(ADMIN_PASSWORD);
-  await page.getByRole("button", { name: "Anmelden" }).click();
-  await expect(page.getByRole("heading", { name: "Übersicht" })).toBeVisible();
+  await page.getByLabel("User").fill(ADMIN_USER);
+  await page.getByLabel("Password").fill(ADMIN_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 }
 
 test.describe("admin UI", () => {
@@ -31,20 +31,20 @@ test.describe("admin UI", () => {
 
   test("wrong password stays on the login page", async ({ page }) => {
     await page.goto("/login");
-    await page.getByLabel("Benutzer").fill(ADMIN_USER);
-    await page.getByLabel("Passwort").fill("falsch");
-    await page.getByRole("button", { name: "Anmelden" }).click();
+    await page.getByLabel("User").fill(ADMIN_USER);
+    await page.getByLabel("Password").fill("wrong");
+    await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByRole("heading", { name: "Übersicht" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Overview" })).toHaveCount(0);
   });
 
   test("navigation reaches every page", async ({ page }) => {
     await login(page);
     for (const [link, heading] of [
-      ["Datenquellen", /Datenquellen/],
+      ["Datasources", /Datasources/],
       ["Queries", /Queries/],
-      ["Cache", /Cache/],
-      ["Statistik", /Statistik/],
+      ["Cache", /cache/i],
+      ["Statistics", /Statistics/],
       ["Audit", /Audit/],
     ] as const) {
       await page.getByRole("navigation").getByRole("link", { name: link, exact: false }).first().click();
@@ -72,7 +72,7 @@ test.describe("admin UI", () => {
   test("statistics list recent executions", async ({ page }) => {
     await login(page);
     await page.goto("/admin/stats");
-    await expect(page.getByRole("heading", { name: "Letzte Ausführungen" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Recent executions" })).toBeVisible();
     await expect(page.getByRole("cell", { name: /Bestellungen|Kunden|Umsatz/ }).first()).toBeVisible();
   });
 });
