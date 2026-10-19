@@ -19,14 +19,27 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class StatsService {
 
+    /**
+     * {@code errors}: every execution that did not end with OK; {@code authFailures}: the part of it where the database
+     * rejected the caller's credentials (wrong password, unknown user) - a sign-in problem, not a service fault.
+     */
     public record Summary(long executions, long cacheHits, long errors, long rows, double avgTotalMs, long p50TotalMs,
-                          long p95TotalMs, double avgDbMs, long distinctCallers) {
+                          long p95TotalMs, double avgDbMs, long distinctCallers, long authFailures) {
         public double cacheHitRatio() {
             return executions == 0 ? 0 : (double) cacheHits / executions;
         }
 
         public double errorRatio() {
             return executions == 0 ? 0 : (double) errors / executions;
+        }
+
+        /** Errors without rejected sign-ins: database, timeout, validation and similar faults. */
+        public long faults() {
+            return errors - authFailures;
+        }
+
+        public double faultRatio() {
+            return executions == 0 ? 0 : (double) faults() / executions;
         }
     }
 
@@ -40,7 +53,8 @@ public class StatsService {
     }
 
     /** One hour bucket; {@code hour} is the start of the hour. */
-    public record HourStat(Instant hour, long executions, long errors, long cacheHits, double avgTotalMs) {
+    /** {@code faults}: failed executions without rejected sign-ins. */
+    public record HourStat(Instant hour, long executions, long faults, long cacheHits, double avgTotalMs) {
     }
 
     /** Calls of one query: {@code perDay} oldest day first, {@code lastCall} over the whole retained log. */
@@ -62,6 +76,8 @@ public class StatsService {
 
     /** Pseudo status of {@link Filter#status()}: every execution that did not end with OK. */
     public static final String FAILED = "FAILED";
+    /** Pseudo status of {@link Filter#status()}: failed executions without rejected sign-ins. */
+    public static final String FAULTS = "FAULTS";
 
     private final JdbcTemplate jdbc;
 
@@ -74,6 +90,7 @@ public class StatsService {
                 SELECT COUNT(*) AS n,
                        COALESCE(SUM(CASE WHEN cache_status = 'HIT' THEN 1 ELSE 0 END), 0) AS hits,
                        COALESCE(SUM(CASE WHEN status <> 'OK' THEN 1 ELSE 0 END), 0) AS errors,
+                       COALESCE(SUM(CASE WHEN status = 'AUTH_FAILED' THEN 1 ELSE 0 END), 0) AS auth_failures,
                        COALESCE(SUM(row_count), 0) AS rows_total,
                        COALESCE(AVG(total_duration_ms), 0) AS avg_total,
                        COALESCE(AVG(db_duration_ms), 0) AS avg_db,
@@ -84,7 +101,7 @@ public class StatsService {
                 Long.class, Timestamp.from(from), Timestamp.from(to));
         return new Summary(num(row.get("n")), num(row.get("hits")), num(row.get("errors")), num(row.get("rows_total")),
                 dbl(row.get("avg_total")), percentile(durations, 0.5), percentile(durations, 0.95), dbl(row.get("avg_db")),
-                num(row.get("callers")));
+                num(row.get("callers")), num(row.get("auth_failures")));
     }
 
     public List<QueryStat> topQueries(Instant from, Instant to, int limit) {
@@ -131,13 +148,13 @@ public class StatsService {
         Instant first = last.minus(hours - 1L, ChronoUnit.HOURS);
         Map<Instant, HourStat> found = new HashMap<>();
         jdbc.query("""
-                SELECT DATE_TRUNC('hour', started_at) AS h, COUNT(*) AS n, SUM(CASE WHEN status <> 'OK' THEN 1 ELSE 0 END) AS errors,
+                SELECT DATE_TRUNC('hour', started_at) AS h, COUNT(*) AS n, SUM(CASE WHEN status NOT IN ('OK', 'AUTH_FAILED') THEN 1 ELSE 0 END) AS faults,
                        SUM(CASE WHEN cache_status = 'HIT' THEN 1 ELSE 0 END) AS hits, AVG(total_duration_ms) AS avg_total
                 FROM execution_log WHERE started_at >= ? AND started_at < ?
                 GROUP BY DATE_TRUNC('hour', started_at)""",
                 rs -> {
                     Instant h = rs.getTimestamp("h").toInstant().truncatedTo(ChronoUnit.HOURS);
-                    found.put(h, new HourStat(h, rs.getLong("n"), rs.getLong("errors"), rs.getLong("hits"), rs.getDouble("avg_total")));
+                    found.put(h, new HourStat(h, rs.getLong("n"), rs.getLong("faults"), rs.getLong("hits"), rs.getDouble("avg_total")));
                 },
                 Timestamp.from(first), Timestamp.from(last.plus(1, ChronoUnit.HOURS)));
         List<HourStat> result = new ArrayList<>(hours);
@@ -210,6 +227,8 @@ public class StatsService {
         }
         if (FAILED.equals(f.status())) {
             sql.append(" AND status <> 'OK'");
+        } else if (FAULTS.equals(f.status())) {
+            sql.append(" AND status NOT IN ('OK', 'AUTH_FAILED')");
         } else if (f.status() != null && !f.status().isBlank()) {
             sql.append(" AND status = ?");
             args.add(f.status());

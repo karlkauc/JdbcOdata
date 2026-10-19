@@ -78,9 +78,11 @@ public class HomeController {
                 : signed(Math.round((day.executions() - before.executions()) * 100.0 / before.executions())) + " % vs. previous day";
         kpis.add(new Kpi("Executions · 24 h", fmt.num(day.executions()), execDelta, "muted",
                 fmt.spark(hours.stream().map(StatsService.HourStat::executions).toList(), 96, 30), "Executions per hour", "/admin/stats?period=24h"));
-        kpis.add(new Kpi("Error rate", fmt.pct(day.errorRatio(), 1), fmt.num(day.errors()) + (day.errors() == 1 ? " error" : " errors"),
-                day.errors() == 0 ? "ok" : "err",
-                fmt.spark(hours.stream().map(StatsService.HourStat::errors).toList(), 96, 30), "Errors per hour", "/admin/stats?period=24h&status=FAILED"));
+        String faultText = fmt.num(day.faults()) + (day.faults() == 1 ? " error" : " errors")
+                + (day.authFailures() > 0 ? " · " + fmt.num(day.authFailures()) + " rejected sign-in" + (day.authFailures() == 1 ? "" : "s") : "");
+        kpis.add(new Kpi("Error rate", fmt.pct(day.faultRatio(), 1), faultText, day.faults() == 0 ? "ok" : "err",
+                fmt.spark(hours.stream().map(StatsService.HourStat::faults).toList(), 96, 30),
+                "Errors per hour (without rejected sign-ins)", "/admin/stats?period=24h&status=" + StatsService.FAULTS));
         long ppDelta = Math.round((day.cacheHitRatio() - before.cacheHitRatio()) * 100);
         kpis.add(new Kpi("Cache hit rate", fmt.pct(day.cacheHitRatio(), 0),
                 before.executions() == 0 ? fmt.num(day.cacheHits()) + " hits" : signed(ppDelta) + " pp vs. previous day", "muted",
@@ -114,10 +116,15 @@ public class HomeController {
                         "/admin/queries/" + q.id() + "#spalten", false));
             }
         }
-        if (day.errors() > 0) {
-            items.add(new Attention("err", "alert", day.errors() + (day.errors() == 1 ? " failed execution" : " failed executions") + " in 24 h",
-                    "Error rate " + fmt.pct(day.errorRatio(), 1) + " – details in the statistics.", "View",
-                    "/admin/stats?period=24h&status=FAILED", false));
+        if (day.faults() > 0) {
+            items.add(new Attention("err", "alert", day.faults() + (day.faults() == 1 ? " failed execution" : " failed executions") + " in 24 h",
+                    "Error rate " + fmt.pct(day.faultRatio(), 1) + " – details in the statistics.", "View",
+                    "/admin/stats?period=24h&status=" + StatsService.FAULTS, false));
+        }
+        if (day.authFailures() > 0) {
+            items.add(new Attention("info", "lock", day.authFailures() + (day.authFailures() == 1 ? " rejected sign-in" : " rejected sign-ins") + " in 24 h",
+                    "The database rejected the credentials (wrong password or unknown user). Usually a typo in Excel or a test.",
+                    "View", "/admin/stats?period=24h&status=AUTH_FAILED", false));
         }
         Map<UUID, StatsService.QueryUsage> usage = stats.usageByQuery(UNUSED_DAYS, LocalDate.now());
         Instant cutoff = now.minus(Duration.ofDays(UNUSED_DAYS));

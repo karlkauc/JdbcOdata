@@ -66,7 +66,7 @@ class StatsTest extends DemoProfileTest {
         assertThat(StatsService.percentile(List.of(1L, 2L, 3L, 4L), 0.5)).isEqualTo(2L);
         assertThat(StatsService.percentile(List.of(1L, 2L, 3L, 4L), 0.95)).isEqualTo(4L);
 
-        assertThat(new StatsService.Summary(0, 0, 0, 0, 0, 0, 0, 0, 0).cacheHitRatio()).isZero();
+        assertThat(new StatsService.Summary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0).cacheHitRatio()).isZero();
 
         // the scheduled retention job may delete the old record first, so check the outcome, not the count
         log.deleteOlderThan(Duration.ofDays(365));
@@ -108,6 +108,26 @@ class StatsTest extends DemoProfileTest {
         assertThat(last.dbDurationMs()).isEqualTo(5L);
         assertThat(stats.executions(new StatsService.Filter(now.minus(Duration.ofDays(7)), now.plusSeconds(5), "Usage_q", null,
                 StatsService.FAILED), 10, 0)).singleElement().extracting(StatsService.Execution::status).isEqualTo("DB_ERROR");
+    }
+
+    @Test
+    void rejectedSignInsAreCountedApartFromFaults() {
+        String q = "Auth_" + UUID.randomUUID().toString().substring(0, 8);
+        Instant now = Instant.now();
+        log.record(record(q, "typo_user", ExecutionStatus.AUTH_FAILED, CacheStatus.DISABLED, 5, now.minusSeconds(20)));
+        log.record(record(q, "excel", ExecutionStatus.DB_ERROR, CacheStatus.DISABLED, 5, now.minusSeconds(10)));
+        Instant from = now.minusSeconds(60);
+        Instant to = now.plusSeconds(60);
+
+        StatsService.Summary s = stats.summary(from, to);
+        assertThat(s.authFailures()).isGreaterThanOrEqualTo(1);
+        assertThat(s.faults()).isEqualTo(s.errors() - s.authFailures());
+        assertThat(s.faultRatio()).isLessThanOrEqualTo(s.errorRatio());
+
+        assertThat(stats.executions(new StatsService.Filter(from, to, q, null, StatsService.FAILED), 10, 0)).hasSize(2);
+        assertThat(stats.executions(new StatsService.Filter(from, to, q, null, StatsService.FAULTS), 10, 0))
+                .singleElement().extracting(StatsService.Execution::status).isEqualTo("DB_ERROR");
+        assertThat(new StatsService.Summary(10, 0, 4, 0, 0, 0, 0, 0, 0, 3).faultRatio()).isEqualTo(0.1);
     }
 
     @Test

@@ -17,7 +17,7 @@
   <div class="tiles">
     <div class="tile"><span class="label">Executions</span><span class="num" th:text="${summary.executions}">0</span></div>
     <div class="tile"><span class="label">Cache hit rate</span><span class="num" th:text="${#numbers.formatPercent(summary.cacheHitRatio(), 1, 0)}">0</span><small th:text="${summary.cacheHits} + ' hits'"></small></div>
-    <div class="tile" th:classappend="${summary.errors > 0} ? 'warn'"><span class="label">Error rate</span><span class="num" th:text="${#numbers.formatPercent(summary.errorRatio(), 1, 1)}">0</span><small th:text="${summary.errors} + ' errors'"></small></div>
+    <div class="tile" th:classappend="${summary.faults() > 0} ? 'warn'"><span class="label">Error rate</span><span class="num" th:text="${#numbers.formatPercent(summary.faultRatio(), 1, 1)}">0</span><small th:text="${summary.faults()} + ' errors' + (${summary.authFailures > 0} ? ', ' + ${summary.authFailures} + ' rejected sign-ins' : '')"></small></div>
     <div class="tile"><span class="label">Duration p50 / p95</span><span class="num" th:text="${summary.p50TotalMs} + ' / ' + ${summary.p95TotalMs}">0</span><small>milliseconds total</small></div>
     <div class="tile"><span class="label">Callers</span><span class="num" th:text="${summary.distinctCallers}">0</span></div>
     <div class="tile"><span class="label">Rows delivered</span><span class="num" th:text="${#numbers.formatInteger(summary.rows, 1, 'COMMA')}">0</span></div>
@@ -73,6 +73,7 @@
     <label>Status <select name="status">
       <option value="">all</option>
       <option value="FAILED" th:selected="${status == 'FAILED'}">all failures</option>
+      <option value="FAULTS" th:selected="${status == 'FAULTS'}">errors (without sign-ins)</option>
       <option th:each="s : ${T(at.jdbcodata.stats.ExecutionStatus).values()}" th:value="${s}" th:text="${s}" th:selected="${s.name() == status}"></option>
     </select></label>
     <button type="submit">Filter</button>
