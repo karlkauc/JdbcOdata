@@ -12,7 +12,7 @@ class LoginRateLimiterTest {
     private static JdbcOdataProperties props(boolean plain, int limit) {
         JdbcOdataProperties p = TestData.props(10, 10, "");
         return new JdbcOdataProperties(p.admin(), p.odata(), p.seed(), p.cache(), p.stats(),
-                new JdbcOdataProperties.Security(plain, limit), "", "./data");
+                new JdbcOdataProperties.Security(plain, limit, java.util.List.of(), true), "", "./data");
     }
 
     @Test
@@ -23,6 +23,8 @@ class LoginRateLimiterTest {
         assertThat(limiter.isBlocked("10.0.0.1", "maria")).isFalse();
         limiter.recordFailure("10.0.0.1", "Maria");
         assertThat(limiter.isBlocked("10.0.0.1", "other")).as("ip blocked").isTrue();
+        assertThat(limiter.isBlocked("10.0.0.2", "maria")).as("one client cannot lock out a user").isFalse();
+        for (int i = 0; i < 3 * (LoginRateLimiter.USER_FACTOR - 1); i++) limiter.recordFailure("10.0.1." + i, "maria");
         assertThat(limiter.isBlocked("10.0.0.2", "MARIA")).as("username blocked, case-insensitive").isTrue();
         assertThat(limiter.isBlocked("10.0.0.2", "other")).isFalse();
         assertThat(limiter.isBlocked("10.0.0.2", null)).isFalse();

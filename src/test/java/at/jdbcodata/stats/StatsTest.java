@@ -61,6 +61,9 @@ class StatsTest extends DemoProfileTest {
         assertThat(csv).startsWith("started_at;query;").contains(q).contains("DB_ERROR").contains("{p=1}");
         assertThat(stats.toCsv(List.of(new StatsService.Execution(UUID.randomUUID(), now, "q;x", 1, null, "c\"d", null, null,
                 null, null, null, 5, null, "OK", "line\nbreak", null, null)))).contains("\"q;x\"").contains("\"c\"\"d\"").contains("\"line\nbreak\"");
+        assertThat(stats.toCsv(List.of(new StatsService.Execution(UUID.randomUUID(), now, "q", 1, null, "=HYPERLINK(\"x\")", null, null,
+                null, null, null, 5, null, "OK", null, null, "@SUM(1)")))).contains("\"'=HYPERLINK(\"\"x\"\")\"").contains("'@SUM(1)")
+                .doesNotContain(";=").doesNotContain(";@");
 
         assertThat(StatsService.percentile(List.of(), 0.5)).isZero();
         assertThat(StatsService.percentile(List.of(1L, 2L, 3L, 4L), 0.5)).isEqualTo(2L);

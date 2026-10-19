@@ -49,7 +49,34 @@ class ODataServletTest {
         MockHttpServletResponse resp = new MockHttpServletResponse();
         servlet.service(req, resp);
         assertThat(resp.getStatus()).isEqualTo(401);
-        assertThat(resp.getContentAsString()).contains("svc_x");
+        assertThat(resp.getContentAsString()).contains("credentials were rejected").doesNotContain("svc_x");
+    }
+
+    @Test
+    void oversizedBodiesAreRejected() throws Exception {
+        ODataServlet servlet = new ODataServlet(mock(EdmRegistry.class), mock(ExecutionIdentityResolver.class), support(), props());
+        MockHttpServletRequest declared = new MockHttpServletRequest("POST", "/odata/$batch") {
+            @Override
+            public long getContentLengthLong() {
+                return BoundedRequest.MAX_BODY_BYTES + 1;
+            }
+        };
+        MockHttpServletResponse resp = new MockHttpServletResponse();
+        servlet.service(declared, resp);
+        assertThat(resp.getStatus()).isEqualTo(413);
+
+        MockHttpServletRequest chunked = new MockHttpServletRequest("POST", "/odata/$batch");
+        chunked.setContent(new byte[(int) BoundedRequest.MAX_BODY_BYTES + 1]);
+        var in = new BoundedRequest(chunked).getInputStream();
+        org.assertj.core.api.Assertions.assertThatThrownBy(in::readAllBytes).isInstanceOf(java.io.IOException.class);
+    }
+
+    @Test
+    void errorJsonIsEscaped() throws Exception {
+        String json = JsonErrorProcessor.errorJson(400, "a\"b\\c\nd\u0001");
+        assertThat(json).isEqualTo("{\"error\":{\"code\":\"400\",\"message\":\"a\\\"b\\\\c\\nd\\u0001\"}}");
+        assertThat(tools.jackson.databind.json.JsonMapper.builder().build().readTree(json).get("error").get("message").asString())
+                .isEqualTo("a\"b\\c\nd\u0001");
     }
 
     @Test
@@ -63,15 +90,6 @@ class ODataServletTest {
         servlet.service(req, resp);
         assertThat(resp.getStatus()).isEqualTo(500);
         assertThat(resp.getContentAsString()).contains("Internal server error").doesNotContain("boom");
-    }
-
-    @Test
-    void readsForwardedClientIp() {
-        MockHttpServletRequest req = new MockHttpServletRequest();
-        req.setRemoteAddr("10.0.0.1");
-        assertThat(ODataServlet.clientIp(req)).isEqualTo("10.0.0.1");
-        req.addHeader("X-Forwarded-For", "192.168.1.5, 10.0.0.2");
-        assertThat(ODataServlet.clientIp(req)).isEqualTo("192.168.1.5");
     }
 
     @Test

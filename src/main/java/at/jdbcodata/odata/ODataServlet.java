@@ -1,6 +1,7 @@
 package at.jdbcodata.odata;
 
 import at.jdbcodata.config.JdbcOdataProperties;
+import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.identity.BasicCredentials;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.identity.IdentityContext;
@@ -55,7 +56,12 @@ public class ODataServlet extends HttpServlet {
     }
 
     @Override
-    protected void service(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    protected void service(HttpServletRequest rawReq, HttpServletResponse resp) throws IOException {
+        if (BoundedRequest.declaredTooLarge(rawReq)) {
+            writeJsonError(resp, 413, "Request body larger than " + BoundedRequest.MAX_BODY_BYTES + " bytes");
+            return;
+        }
+        HttpServletRequest req = new BoundedRequest(rawReq);
         Optional<BasicCredentials> credentials = BasicCredentials.fromHeader(req.getHeader("Authorization"));
         if (credentials.isEmpty() && anonymousUser.isEmpty()) {
             unauthorized(resp, "Authentication required. Send HTTP Basic credentials for the target database.");
@@ -69,8 +75,9 @@ public class ODataServlet extends HttpServlet {
                         : identityResolver.anonymous(anonymousUser);
             } catch (ServiceAuthenticationException e) {
                 if (credentials.isPresent()) {
-                    support.rateLimiter().recordFailure(clientIp(req), credentials.get().username());
-                    unauthorized(resp, e.getMessage());
+                    support.rateLimiter().recordFailure(req.getRemoteAddr(), credentials.get().username());
+                    // same answer as a rejected database login, so service user names cannot be probed
+                    unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
                 } else {
                     log.warn("Anonymous OData access is configured for service user '{}' but the user is missing, "
                             + "disabled or flagged force-passthrough", anonymousUser);
@@ -79,12 +86,20 @@ public class ODataServlet extends HttpServlet {
                 return;
             }
             EntityExpressionVisitor.resetRegexBudget();
-            List<QueryDefinition> visible = identityResolver.visibleQueries(context);
+            List<QueryDefinition> visible;
+            try {
+                visible = identityResolver.visibleQueries(context);
+            } catch (DbAuthenticationException e) {
+                log.debug("Pass-through login of '{}' rejected: {}", context.caller(), e.getMessage());
+                support.rateLimiter().recordFailure(req.getRemoteAddr(), context.caller());
+                unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
+                return;
+            }
             ServiceMetadata metadata = edmRegistry.serviceMetadata(visible);
             // Per-caller content (row-level security), revalidated via ETag instead of never stored.
             resp.setHeader("Cache-Control", "private, no-cache");
             resp.setHeader("Vary", "Authorization");
-            RequestContext requestContext = new RequestContext(context, req.getHeader("User-Agent"), clientIp(req));
+            RequestContext requestContext = new RequestContext(context, req.getHeader("User-Agent"), req.getRemoteAddr());
             String path = odataPath(req);
             if (path.startsWith(ASYNC_MONITOR)) {
                 serveMonitor(req, resp, context.caller(), path.substring(ASYNC_MONITOR.length()));
@@ -374,14 +389,6 @@ public class ODataServlet extends HttpServlet {
         return new Rewritten(odataPath, q);
     }
 
-    static String clientIp(HttpServletRequest req) {
-        String forwarded = req.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].strip();
-        }
-        return req.getRemoteAddr();
-    }
-
     private static void unauthorized(HttpServletResponse resp, String message) throws IOException {
         resp.setHeader("WWW-Authenticate", JsonErrorProcessor.BASIC_CHALLENGE);
         writeJsonError(resp, 401, message);
@@ -391,6 +398,6 @@ public class ODataServlet extends HttpServlet {
         resp.setStatus(status);
         resp.setContentType("application/json");
         resp.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        resp.getWriter().write("{\"error\":{\"code\":\"" + status + "\",\"message\":\"" + message.replace("\"", "'") + "\"}}");
+        resp.getWriter().write(JsonErrorProcessor.errorJson(status, message));
     }
 }

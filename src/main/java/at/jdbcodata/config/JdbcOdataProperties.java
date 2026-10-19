@@ -1,5 +1,6 @@
 package at.jdbcodata.config;
 
+import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
@@ -45,9 +46,15 @@ public record JdbcOdataProperties(
     /**
      * {@code allowPlainHttp}: Basic Auth carries clear-text passwords, so without TLS the service refuses to start
      * unless this flag is set (e.g. behind a TLS-terminating reverse proxy or for local demos).
-     * {@code rateLimitPerMinute}: failed logins per client IP and per username before requests are rejected with 429.
+     * {@code rateLimitPerMinute}: failed logins per client IP before requests are rejected with 429 (per username:
+     * five times as many).
+     * {@code allowedJdbcUrls}: further JDBC URL prefixes for drivers in {@code lib/} (see {@code JdbcUrlPolicy}).
+     * {@code allowEmbeddedH2}: allow in-process H2 databases as datasources. They run inside this JVM and can read
+     * its files (e.g. the master key), so only for the local demo and tests.
      */
     public record Security(@DefaultValue("false") boolean allowPlainHttp,
-                           @DefaultValue("20") int rateLimitPerMinute) {
+                           @DefaultValue("20") int rateLimitPerMinute,
+                           @DefaultValue List<String> allowedJdbcUrls,
+                           @DefaultValue("false") boolean allowEmbeddedH2) {
     }
 }

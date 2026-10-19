@@ -10,6 +10,7 @@ import at.jdbcodata.datasource.DatasourceRepository;
 import at.jdbcodata.identity.FixedCredentialEntity;
 import at.jdbcodata.identity.FixedCredentialRepository;
 import at.jdbcodata.identity.ServiceGroupRepository;
+import at.jdbcodata.identity.IdentityContext;
 import at.jdbcodata.identity.ServiceUser;
 import at.jdbcodata.identity.ServiceUserRepository;
 import java.time.Instant;
@@ -124,14 +125,18 @@ public class QueryService {
         return grants(queryId);
     }
 
-    /** CALLER queries are visible to everyone; FIXED queries need a matching grant. */
+    /**
+     * CALLER queries are visible to everyone; FIXED queries need a matching grant. "All authenticated callers"
+     * does not include the anonymous caller: it only sees queries granted to the anonymous service user itself.
+     */
     @Transactional(readOnly = true)
-    public boolean isVisible(QueryDefinition query, ServiceUser serviceUser) {
+    public boolean isVisible(QueryDefinition query, IdentityContext caller) {
         if (query.executionMode() != ExecutionMode.FIXED) return true;
+        ServiceUser serviceUser = caller.serviceUser();
         for (QueryGrantEntity g : grantRepository.findAllByQueryId(query.id())) {
             switch (g.getPrincipalType()) {
                 case ALL_AUTHENTICATED -> {
-                    return true;
+                    if (!caller.isAnonymous()) return true;
                 }
                 case USER -> {
                     if (serviceUser != null && serviceUser.id().equals(g.getPrincipalId())) return true;

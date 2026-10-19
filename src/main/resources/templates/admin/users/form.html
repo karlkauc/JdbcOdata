@@ -7,7 +7,7 @@
       <h1 th:text="${user == null} ? 'New service user' : ${user.username}">Service user</h1>
       <p class="lead" th:if="${user != null}" th:text="${user.displayName}"></p>
     </div>
-    <form th:if="${user != null}" th:action="@{/admin/users/{id}/delete(id=${user.id})}" method="post" onsubmit="return confirm('Really delete this service user?')">
+    <form th:if="${user != null}" th:action="@{/admin/users/{id}/delete(id=${user.id})}" method="post" data-confirm="Really delete this service user?">
       <button type="submit" class="danger">Delete</button>
     </form>
   </div>

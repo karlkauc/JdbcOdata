@@ -53,10 +53,13 @@ class AdminApiTest extends DemoProfileTest {
         assertThat(json.readTree(wrong.body()).get("error").asString()).contains("SQLState");
 
         String badDriver = updated.replace("\"driverClass\":\"\"", "\"driverClass\":\"no.such.Driver\"");
-        send("PUT", "/api/v1/datasources/" + id, badDriver, ADMIN, ADMIN_PASSWORD);
-        HttpResponse<String> noDriver = send("POST", "/api/v1/datasources/" + id + "/test",
-                "{\"username\":\"sa\",\"password\":\"\"}", ADMIN, ADMIN_PASSWORD);
-        assertThat(json.readTree(noDriver.body()).get("error").asString()).contains("driver class");
+        HttpResponse<String> noDriver = send("PUT", "/api/v1/datasources/" + id, badDriver, ADMIN, ADMIN_PASSWORD);
+        assertThat(noDriver.statusCode()).isEqualTo(400);
+        assertThat(noDriver.body()).contains("driver class not found");
+        HttpResponse<String> init = send("PUT", "/api/v1/datasources/" + id,
+                updated.replaceFirst("\"jdbcUrl\":\"([^\"]*)\"", "\"jdbcUrl\":\"$1;INIT=RUNSCRIPT FROM 'http://x/y.sql'\""),
+                ADMIN, ADMIN_PASSWORD);
+        assertThat(init.statusCode()).as(init.body()).isEqualTo(400);
 
         assertThat(send("DELETE", "/api/v1/datasources/" + id, null, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(204);
         assertThat(get("/api/v1/datasources/" + id, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(404);

@@ -5,10 +5,14 @@
     encode gzip
     reverse_proxy jdbcodata:8080 {
         header_up X-Forwarded-Proto https
+        header_up -X-Forwarded-Prefix
+        header_up -Forwarded
     }
     tls {$JDBCODATA_TLS:internal}
     header {
         Strict-Transport-Security "max-age=31536000"
         X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
     }
 }

@@ -3,6 +3,7 @@
 jdbcodata:
   security:
     allow-plain-http: true   # local demo without TLS
+    allow-embedded-h2: true  # the demo database is an H2 file; never in production (runs inside the JVM)
   demo:
     jdbc-url: jdbc:h2:file:./data/demo;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
   seed:

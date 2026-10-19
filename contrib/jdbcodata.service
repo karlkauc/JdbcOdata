@@ -13,10 +13,20 @@ EnvironmentFile=-/etc/jdbcodata/jdbcodata.env
 ExecStart=/opt/jdbcodata/bin/jdbcodata.sh
 Restart=on-failure
 RestartSec=5
-# hardening
+# hardening; UMask keeps data/master.key, the H2 files and logs private to the service account
+UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
 ReadWritePaths=/opt/jdbcodata/data /opt/jdbcodata/logs
 
 [Install]

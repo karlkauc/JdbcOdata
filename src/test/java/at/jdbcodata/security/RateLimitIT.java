@@ -20,7 +20,9 @@ import org.springframework.boot.test.context.SpringBootTest;
         "jdbcodata.admin.password=secret-rate",
         "jdbcodata.stats.async=false",
         "jdbcodata.master-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
-        "jdbcodata.security.rate-limit-per-minute=3"
+        "jdbcodata.security.rate-limit-per-minute=3",
+        // as behind the reverse proxy: localhost is a trusted proxy, its X-Forwarded-For is evaluated by Tomcat
+        "server.forward-headers-strategy=native"
 })
 class RateLimitIT {
 
@@ -41,27 +43,37 @@ class RateLimitIT {
     @Test
     void failedDatabaseLoginsAreRateLimitedPerIp() throws Exception {
         for (int i = 0; i < 3; i++) {
-            assertThat(get("/odata/Sales?$top=1", "demo", "wrong" + i, "10.1.1.1").statusCode()).isEqualTo(401);
+            assertThat(get("/odata/Sales?$top=1", "demo", "wrong" + i, "203.0.113.1").statusCode()).isEqualTo(401);
         }
-        HttpResponse<String> blocked = get("/odata/Sales?$top=1", "demo", "demo", "10.1.1.1");
+        HttpResponse<String> blocked = get("/odata/Sales?$top=1", "demo", "demo", "203.0.113.1");
         assertThat(blocked.statusCode()).isEqualTo(429);
         assertThat(blocked.headers().firstValue("Retry-After")).hasValue("60");
         assertThat(blocked.body()).contains("Too many failed logins");
-        // the username "demo" is blocked as well, from any address
-        assertThat(get("/odata/Sales?$top=1", "demo", "demo", "10.1.1.2").statusCode()).isEqualTo(429);
-        // other users from other addresses still work
-        assertThat(get("/actuator/health", null, null, "10.1.1.3").statusCode()).isEqualTo(200);
+        // a forged first X-Forwarded-For entry does not help: the proxy appends the real address
+        assertThat(get("/odata/Sales?$top=1", "demo", "demo", "198.51.100.7, 203.0.113.1").statusCode()).isEqualTo(429);
+        // the user itself is not locked out from other addresses by one client
+        assertThat(get("/odata/Sales?$top=1", "demo", "demo", "203.0.113.2").statusCode()).isEqualTo(200);
+        assertThat(get("/actuator/health", null, null, "203.0.113.3").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void basicAuthOnUiPathsAndEncodedPathsAreLimited() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            assertThat(get("/admin", "admin", "bad" + i, "203.0.113.20").statusCode()).isEqualTo(401);
+        }
+        assertThat(get("/admin", "admin", "secret-rate", "203.0.113.20").statusCode()).isEqualTo(429);
+        assertThat(get("/%6fdata/Sales?$top=1", null, null, "203.0.113.20").statusCode()).isEqualTo(429);
     }
 
     @Test
     void failedAdminLoginsAreRateLimited() throws Exception {
         for (int i = 0; i < 3; i++) {
-            assertThat(get("/api/v1/queries", "admin", "bad" + i, "10.2.2.2").statusCode()).isEqualTo(401);
+            assertThat(get("/api/v1/queries", "admin", "bad" + i, "203.0.113.10").statusCode()).isEqualTo(401);
         }
-        assertThat(get("/api/v1/queries", "admin", "secret-rate", "10.2.2.2").statusCode()).isEqualTo(429);
+        assertThat(get("/api/v1/queries", "admin", "secret-rate", "203.0.113.10").statusCode()).isEqualTo(429);
         // login form POSTs are covered by the same filter
         HttpRequest form = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/login"))
-                .header("X-Forwarded-For", "10.2.2.2").header("Content-Type", "application/x-www-form-urlencoded")
+                .header("X-Forwarded-For", "203.0.113.10").header("Content-Type", "application/x-www-form-urlencoded")
                 .POST(HttpRequest.BodyPublishers.ofString("username=admin&password=x")).build();
         assertThat(client.send(form, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(429);
     }

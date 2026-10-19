@@ -7,7 +7,7 @@
       <h1 th:text="${account == null} ? 'New technical account' : ${account.name}">Account</h1>
       <p class="lead" th:if="${account != null}" th:text="${account.description}"></p>
     </div>
-    <form th:if="${account != null}" th:action="@{/admin/accounts/{id}/delete(id=${account.id})}" method="post" onsubmit="return confirm('Really delete this account?')">
+    <form th:if="${account != null}" th:action="@{/admin/accounts/{id}/delete(id=${account.id})}" method="post" data-confirm="Really delete this account?">
       <button type="submit" class="danger">Delete</button>
     </form>
   </div>

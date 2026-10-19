@@ -8,13 +8,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.stereotype.Component;
 
 /**
- * Counts failed logins per client IP and per username in a sliding one-minute window (FR-37). Once the limit is
- * reached, further requests from that IP or for that username are rejected with 429 until the window expires.
+ * Counts failed logins per client IP and per username (FR-37); a counter expires one minute after its last
+ * failure. An IP is blocked once it reaches the limit. A username is blocked only at {@value #USER_FACTOR} times
+ * the limit: that still stops a brute force spread over many addresses, but a single client cannot lock out
+ * another user. Blocked requests get 429 until the counter expires.
  */
 @Component
 public class LoginRateLimiter {
 
     public static final Duration WINDOW = Duration.ofMinutes(1);
+    static final int USER_FACTOR = 5;
 
     private final int limit;
     private final Cache<String, AtomicInteger> failures = Caffeine.newBuilder()
@@ -26,19 +29,23 @@ public class LoginRateLimiter {
 
     public void recordFailure(String ip, String username) {
         if (limit <= 0) return;
-        if (ip != null) failures.get("ip:" + ip, k -> new AtomicInteger()).incrementAndGet();
-        if (username != null && !username.isBlank()) {
-            failures.get("user:" + username.toLowerCase(), k -> new AtomicInteger()).incrementAndGet();
-        }
+        if (ip != null) increment("ip:" + ip);
+        if (username != null && !username.isBlank()) increment("user:" + username.toLowerCase());
     }
 
     public boolean isBlocked(String ip, String username) {
         if (limit <= 0) return false;
-        return count("ip:" + ip) >= limit || (username != null && count("user:" + username.toLowerCase()) >= limit);
+        return count("ip:" + ip) >= limit
+                || (username != null && count("user:" + username.toLowerCase()) >= limit * USER_FACTOR);
     }
 
     public int limit() {
         return limit;
+    }
+
+    /** A write, so the entry's expiry restarts with every failure. */
+    private void increment(String key) {
+        failures.asMap().merge(key, new AtomicInteger(1), (old, one) -> new AtomicInteger(old.get() + 1));
     }
 
     private int count(String key) {

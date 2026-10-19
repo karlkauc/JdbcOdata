@@ -136,7 +136,19 @@ curl -s -u "excel_demo:$DEMO_READER_PASSWORD" 'https://odata.status20.net/odata/
 curl -s -u "excel_demo:$DEMO_READER_PASSWORD" 'https://odata.status20.net/odata/Kunden?$count=true&$top=0'
 curl -s -u "excel_nord:$DEMO_NORD_PASSWORD"   'https://odata.status20.net/odata/Kunden?$count=true&$top=0'   # kleinerer Count
 curl -s -D - -o /dev/null -u "excel_demo:$DEMO_READER_PASSWORD" 'https://odata.status20.net/odata/Umsatz?p_jahr=2025&$top=5' | grep -i x-cache
-psql -h 127.0.0.1 -p 5440 -U demo_admin demo    # direkt in die Demo-DB
+docker exec -it jdbcodata-status20-demo-db psql -U demo_admin demo   # direkt in die Demo-DB (nur per Socket, siehe unten)
 ```
 
 Admin-UI: `https://odata.status20.net/admin`, Benutzer `admin`, Passwort `JDBCODATA_ADMIN_PASSWORD` aus `.env`.
+
+## demo_admin nur lokal
+
+`demo_admin` ist Superuser der Demo-DB. Weil der Feed jede Basic-Auth-Anmeldung als Pass-Through an die DB
+weiterreicht, darf er sich nicht über das Netz anmelden (`demo-db/00-hba.sh`, `host all demo_admin all reject`).
+Neue Volumes bekommen das beim ersten Start. Für ein bestehendes Volume einmalig:
+
+```bash
+docker exec jdbcodata-status20-demo-db sh -c \
+  'grep -q "demo_admin all reject" "$PGDATA/pg_hba.conf" || sed -i "1i host all demo_admin all reject" "$PGDATA/pg_hba.conf"'
+docker exec jdbcodata-status20-demo-db psql -U demo_admin -d demo -c 'SELECT pg_reload_conf()'
+```

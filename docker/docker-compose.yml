@@ -36,7 +36,7 @@ services:
       JDBCODATA_META_USERNAME: ${POSTGRES_USER:-jdbcodata}
       JDBCODATA_META_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP: "true"   # TLS ends at Caddy
-      SERVER_FORWARD_HEADERS_STRATEGY: framework    # honour X-Forwarded-* from Caddy
+      SERVER_FORWARD_HEADERS_STRATEGY: native       # Tomcat honours X-Forwarded-* only from internal proxies (Caddy)
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75}
     volumes:
       - jdbcodata-data:/app/data

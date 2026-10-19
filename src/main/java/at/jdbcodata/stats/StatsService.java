@@ -261,7 +261,9 @@ public class StatsService {
     private static String csv(Object v) {
         if (v == null) return "";
         String s = v.toString();
-        if (s.contains(";") || s.contains("\"") || s.contains("\n")) {
+        // caller names and OData options come from clients: Excel must not run them as formulas
+        if (v instanceof CharSequence && !s.isEmpty() && "=+-@\t\r".indexOf(s.charAt(0)) >= 0) s = "'" + s;
+        if (s.contains(";") || s.contains("\"") || s.contains("\n") || s.contains("\r")) {
             return "\"" + s.replace("\"", "\"\"") + "\"";
         }
         return s;

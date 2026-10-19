@@ -7,7 +7,14 @@ import at.jdbcodata.common.NotFoundException;
 import at.jdbcodata.crypto.CredentialVault;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceService;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +43,13 @@ public class ServiceUserService {
     private final CredentialVault vault;
     private final PasswordEncoder encoder;
     private final AuditService audit;
+    /**
+     * Recently verified (username, password, stored hash) triples: Excel and PowerBI send the Basic header with every
+     * page and batch, and one BCrypt check at cost 12 takes about a quarter of a second. Only a SHA-256 of the
+     * triple is kept; a changed password changes the stored hash and therefore misses.
+     */
+    private final Cache<String, Boolean> verified = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(5)).maximumSize(10_000).build();
 
     public ServiceUserService(ServiceUserRepository users, ServiceGroupRepository groups,
                               StoredCredentialRepository credentials, DatasourceService datasourceService,
@@ -77,11 +91,27 @@ public class ServiceUserService {
         Optional<ServiceUserEntity> entity = users.findByUsernameIgnoreCase(username);
         if (entity.isEmpty()) return Optional.empty();
         ServiceUserEntity e = entity.get();
-        if (!e.isEnabled() || password == null || !encoder.matches(password, e.getPasswordHash())) {
+        if (!e.isEnabled() || password == null || !passwordMatches(e, password)) {
             throw new ServiceAuthenticationException(username);
         }
         e.setLastLoginAt(Instant.now());
         return Optional.of(e.toRecord());
+    }
+
+    private boolean passwordMatches(ServiceUserEntity e, String password) {
+        String key = sha256(e.getUsername() + '\0' + password + '\0' + e.getPasswordHash());
+        if (verified.getIfPresent(key) != null) return true;
+        if (!encoder.matches(password, e.getPasswordHash())) return false;
+        verified.put(key, Boolean.TRUE);
+        return true;
+    }
+
+    private static String sha256(String s) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException(ex);
+        }
     }
 
     @Transactional

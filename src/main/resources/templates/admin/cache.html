@@ -4,7 +4,7 @@
 <main>
   <div class="page-head">
     <div><h1>Result cache</h1><p class="lead">Cached results per query, DB user and parameter values. An entry is only served to the DB user it was created for.</p></div>
-    <form th:action="@{/admin/cache/invalidate}" method="post" onsubmit="return confirm('Clear the whole cache?')"><button type="submit" class="danger">Invalidate all</button></form>
+    <form th:action="@{/admin/cache/invalidate}" method="post" data-confirm="Clear the whole cache?"><button type="submit" class="danger">Invalidate all</button></form>
   </div>
   <div class="tiles">
     <div class="tile"><span class="label">Entries (persistent)</span><span class="num" th:text="${stats.entries}">0</span></div>

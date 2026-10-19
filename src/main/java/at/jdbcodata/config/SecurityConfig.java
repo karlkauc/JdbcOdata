@@ -10,6 +10,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 /**
  * Three security chains:
@@ -25,6 +26,14 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 public class SecurityConfig {
+
+    /**
+     * Admin UI: scripts and styles only from this origin (htmx, CodeMirror and admin.js are served locally); inline
+     * styles stay allowed for CodeMirror and htmx indicators. No framing, forms only to this origin.
+     */
+    static final String CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self'; "
+            + "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
+            + "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
 
     @Bean
     @Order(1)
@@ -65,12 +74,14 @@ public class SecurityConfig {
                 .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout"))
                 // a form from an expired session (restart, timeout) leads back to the login instead of a bare 403
                 .exceptionHandling(e -> e.accessDeniedHandler(new ExpiredFormHandler()))
+                .headers(h -> h.contentSecurityPolicy(c -> c.policyDirectives(CONTENT_SECURITY_POLICY))
+                        .referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
                 .httpBasic(Customizer.withDefaults());
         return http.build();
     }
 
     @Bean
     PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        return new BCryptPasswordEncoder(12); // NFR-04; existing cost-10 hashes keep working
     }
 }

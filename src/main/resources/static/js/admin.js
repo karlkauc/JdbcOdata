@@ -2,6 +2,16 @@
   document.documentElement.classList.add('js');
   var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
+  // ---------- Declarative form helpers (the CSP forbids inline handlers) ----------
+  // <form data-confirm="Really delete?">: ask before submitting; <select data-autosubmit>: submit on change.
+  document.addEventListener('submit', function (e) {
+    var question = e.target.getAttribute && e.target.getAttribute('data-confirm');
+    if (question && !confirm(question)) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+  document.addEventListener('change', function (e) {
+    if (e.target.hasAttribute && e.target.hasAttribute('data-autosubmit') && e.target.form) e.target.form.submit();
+  });
+
   // ---------- Theme: "system" (no data-theme, follows the OS), "light" or "dark"; kept per browser ----------
   var THEME_KEY = 'jdbcodata-theme';
   var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;

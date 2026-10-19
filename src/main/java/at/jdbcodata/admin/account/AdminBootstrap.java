@@ -1,6 +1,10 @@
 package at.jdbcodata.admin.account;
 
+import at.jdbcodata.common.SecretFiles;
 import at.jdbcodata.config.JdbcOdataProperties;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.util.Base64;
 import org.slf4j.Logger;
@@ -16,6 +20,7 @@ import org.springframework.stereotype.Component;
 public class AdminBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AdminBootstrap.class);
+    static final String INITIAL_PASSWORD_FILE = "initial-admin-password";
 
     private final AdminUserService service;
     private final JdbcOdataProperties props;
@@ -42,8 +47,18 @@ public class AdminBootstrap implements ApplicationRunner {
         }
         service.create(new AdminUserService.AdminUserSpec(props.admin().user(), password, AdminRole.ADMIN, true), false);
         if (generated) {
-            log.warn("No admin password configured (jdbcodata.admin.password / JDBCODATA_ADMIN_PASSWORD). "
-                    + "Created admin user '{}' with generated password: {}", props.admin().user(), password);
+            // never in the log: logs end up in log collectors and support tickets
+            Path file = Path.of(props.dataDir(), INITIAL_PASSWORD_FILE);
+            try {
+                Files.deleteIfExists(file); // left over from an earlier installation, no longer valid
+                SecretFiles.createOwnerOnly(file, password + System.lineSeparator());
+                log.warn("No admin password configured (jdbcodata.admin.password / JDBCODATA_ADMIN_PASSWORD). "
+                        + "Created admin user '{}'; the generated password is in {} (delete it after the first login)",
+                        props.admin().user(), file.toAbsolutePath());
+            } catch (IOException e) {
+                throw new IllegalStateException("Cannot write the generated admin password to " + file
+                        + "; set jdbcodata.admin.password instead", e);
+            }
         } else {
             log.info("Created initial admin user '{}'", props.admin().user());
         }

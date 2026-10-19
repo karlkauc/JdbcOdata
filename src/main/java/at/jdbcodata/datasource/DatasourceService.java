@@ -2,6 +2,7 @@ package at.jdbcodata.datasource;
 
 import at.jdbcodata.audit.AuditService;
 import at.jdbcodata.common.ConflictException;
+import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
 import at.jdbcodata.identity.FixedCredentialRepository;
 import at.jdbcodata.query.QueryDefinitionRepository;
@@ -25,14 +26,17 @@ public class DatasourceService {
     private final FixedCredentialRepository fixedCredentials;
     private final IdentityPoolManager pools;
     private final AuditService audit;
+    private final JdbcUrlPolicy urlPolicy;
 
     public DatasourceService(DatasourceRepository repository, QueryDefinitionRepository queryRepository,
-                             FixedCredentialRepository fixedCredentials, IdentityPoolManager pools, AuditService audit) {
+                             FixedCredentialRepository fixedCredentials, IdentityPoolManager pools, AuditService audit,
+                             JdbcUrlPolicy urlPolicy) {
         this.repository = repository;
         this.queryRepository = queryRepository;
         this.fixedCredentials = fixedCredentials;
         this.pools = pools;
         this.audit = audit;
+        this.urlPolicy = urlPolicy;
     }
 
     @Transactional(readOnly = true)
@@ -112,6 +116,12 @@ public class DatasourceService {
         Datasource ds = require(id);
         long start = System.nanoTime();
         try {
+            // also covers datasources stored before the policy existed
+            urlPolicy.check(ds.jdbcUrl(), ds.driverClass());
+        } catch (InvalidRequestException e) {
+            return ConnectionTestResult.failure(e.getMessage(), elapsedMs(start));
+        }
+        try {
             if (ds.driverClass() != null && !ds.driverClass().isBlank()) {
                 Class.forName(ds.driverClass());
             }
@@ -135,7 +145,8 @@ public class DatasourceService {
         return (System.nanoTime() - startNanos) / 1_000_000;
     }
 
-    private static void apply(DatasourceEntity e, DatasourceSpec s) {
+    private void apply(DatasourceEntity e, DatasourceSpec s) {
+        urlPolicy.check(s.jdbcUrl(), s.driverClass());
         e.setName(s.name());
         e.setDescription(s.description());
         e.setJdbcUrl(s.jdbcUrl());

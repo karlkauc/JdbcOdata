@@ -1,5 +1,6 @@
 package at.jdbcodata.crypto;
 
+import at.jdbcodata.common.SecretFiles;
 import at.jdbcodata.config.JdbcOdataProperties;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -78,13 +79,7 @@ public class MasterKeyProvider {
             }
             byte[] bytes = new byte[KEY_BYTES];
             new SecureRandom().nextBytes(bytes);
-            Files.createDirectories(file.toAbsolutePath().getParent());
-            Files.writeString(file, Base64.getEncoder().encodeToString(bytes), StandardCharsets.UTF_8);
-            try {
-                Files.setPosixFilePermissions(file, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException | IOException ignored) {
-                // Windows or non-POSIX file system
-            }
+            SecretFiles.createOwnerOnly(file, Base64.getEncoder().encodeToString(bytes));
             log.warn("No master key configured; generated {}. Back it up: stored DB credentials cannot be decrypted without it.",
                     file.toAbsolutePath());
             return bytes;

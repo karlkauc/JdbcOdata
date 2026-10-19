@@ -27,7 +27,7 @@
         <div class="menu-list right">
           <a th:href="@{/admin/stats(period='7d', queryName=${query.name})}"><svg th:replace="~{fragments/icons :: icon('chart')}"></svg>View executions</a>
           <a th:href="@{/admin/cache}"><svg th:replace="~{fragments/icons :: icon('layers')}"></svg>Manage cache</a>
-          <form th:action="@{/admin/queries/{id}/delete(id=${query.id})}" method="post" onsubmit="return confirm('Really delete this query?')">
+          <form th:action="@{/admin/queries/{id}/delete(id=${query.id})}" method="post" data-confirm="Really delete this query?">
             <button type="submit" class="danger-item"><svg th:replace="~{fragments/icons :: icon('trash')}"></svg>Delete</button></form>
         </div>
       </details>

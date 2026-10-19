@@ -18,7 +18,7 @@
         <label class="check"><input type="checkbox" name="enabled" value="true" th:checked="${a.enabled}"> enabled</label>
         <input type="password" name="password" placeholder="new password" autocomplete="new-password" style="width:160px">
         <button type="submit" class="small">Save</button></form></td>
-      <td><form th:action="@{/admin/admins/{id}/delete(id=${a.id})}" method="post" onsubmit="return confirm('Delete this account?')"><button type="submit" class="small">Delete</button></form></td>
+      <td><form th:action="@{/admin/admins/{id}/delete(id=${a.id})}" method="post" data-confirm="Delete this account?"><button type="submit" class="small">Delete</button></form></td>
     </tr>
     </tbody>
   </table>

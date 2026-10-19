@@ -62,12 +62,32 @@ public class JsonErrorProcessor implements ErrorProcessor {
         try {
             response.setContent(odata.createSerializer(format).error(error).getContent());
         } catch (SerializerException e) {
-            String fallback = "{\"error\":{\"code\":\"" + error.getStatusCode() + "\",\"message\":\""
-                    + error.getMessage().replace("\"", "'") + "\"}}";
+            String fallback = errorJson(error.getStatusCode(), error.getMessage());
             response.setContent(new ByteArrayInputStream(fallback.getBytes(StandardCharsets.UTF_8)));
             format = ContentType.JSON;
         }
         response.setStatusCode(error.getStatusCode());
         response.setHeader(HttpHeader.CONTENT_TYPE, format.toContentTypeString());
+    }
+
+    /** OData JSON error body; the message is escaped as a JSON string (quotes, backslashes, control characters). */
+    static String errorJson(int status, String message) {
+        StringBuilder sb = new StringBuilder("{\"error\":{\"code\":\"").append(status).append("\",\"message\":\"");
+        String m = message == null ? "" : message;
+        for (int i = 0; i < m.length(); i++) {
+            char c = m.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20 || c == 0x2028 || c == 0x2029) sb.append(String.format("\\u%04x", (int) c));
+                    else sb.append(c);
+                }
+            }
+        }
+        return sb.append("\"}}").toString();
     }
 }

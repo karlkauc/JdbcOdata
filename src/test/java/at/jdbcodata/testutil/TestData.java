@@ -38,7 +38,7 @@ public final class TestData {
         return new JdbcOdataProperties(new JdbcOdataProperties.Admin("a", "b"),
                 new JdbcOdataProperties.OData(maxRows, defaultTimeoutSec, 2000, "", 0), new JdbcOdataProperties.Seed(seedFile),
                 new JdbcOdataProperties.Cache(16, 4, 3_600_000), new JdbcOdataProperties.Stats(90, false),
-                new JdbcOdataProperties.Security(true, 20), "", "./data");
+                new JdbcOdataProperties.Security(true, 20, java.util.List.of(), true), "", "./data");
     }
 
     public static Datasource datasource(String name, String jdbcUrl) {

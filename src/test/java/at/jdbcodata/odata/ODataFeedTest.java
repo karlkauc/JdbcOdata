@@ -106,7 +106,16 @@ class ODataFeedTest extends DemoProfileTest {
         HttpResponse<String> r = get("/odata/Sales", "demo", "wrong");
         assertThat(r.statusCode()).isEqualTo(401);
         assertThat(r.headers().firstValue("WWW-Authenticate")).hasValue("Basic realm=\"JdbcOdata\"");
-        assertThat(r.body()).contains("rejected the supplied credentials");
+        assertThat(r.body()).contains("credentials were rejected").doesNotContain("demo_");
+    }
+
+    @Test
+    void metadataNeedsAValidPassThroughLogin() throws Exception {
+        HttpResponse<String> unknown = get("/odata/$metadata", "nobody", "guess");
+        assertThat(unknown.statusCode()).isEqualTo(401);
+        assertThat(unknown.body()).doesNotContain("EntitySet");
+        assertThat(get("/odata/", "demo", "wrong").statusCode()).isEqualTo(401);
+        assertThat(get("/odata/$metadata", "demo", "demo").body()).contains("EntitySet Name=\"Sales\"");
     }
 
     @Test

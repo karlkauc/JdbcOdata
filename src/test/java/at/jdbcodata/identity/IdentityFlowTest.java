@@ -50,7 +50,7 @@ class IdentityFlowTest extends DemoProfileTest {
         // wrong service password → 401 from the service, never forwarded to the DB
         HttpResponse<String> wrong = get("/odata/Sales?$top=1", name, "nope");
         assertThat(wrong.statusCode()).isEqualTo(401);
-        assertThat(wrong.body()).contains("Service login");
+        assertThat(wrong.body()).contains("credentials were rejected").doesNotContain(name);
 
         // no stored credentials yet → pass-through with the service password fails at the DB
         assertThat(get("/odata/Sales?$top=1", name, "maria-pass").statusCode()).isEqualTo(401);
@@ -129,7 +129,9 @@ class IdentityFlowTest extends DemoProfileTest {
         queries.setGrants(q.id(), List.of(new QueryService.GrantSpec(PrincipalType.ALL_AUTHENTICATED, null)));
         assertThat(get("/odata/" + qName + "?$top=1", "demo", "demo").statusCode()).isEqualTo(200);
         assertThat(get("/odata/" + qName + "?$top=1", "demo", "wrong").statusCode()).isEqualTo(401);
-        assertThat(get("/odata/", "demo", "wrong").body()).contains(qName);
+        HttpResponse<String> unverified = get("/odata/", "demo", "wrong");
+        assertThat(unverified.statusCode()).as("no service document without a valid DB login").isEqualTo(401);
+        assertThat(unverified.body()).doesNotContain(qName);
 
         // validation of FIXED definitions
         assertThatThrownBy(() -> queries.create(new QuerySpec(unique("Bad_"), null, demo.id(), "SELECT 1", ExecutionMode.FIXED,

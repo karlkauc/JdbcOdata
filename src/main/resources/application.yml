@@ -23,6 +23,10 @@ spring:
 
 server:
   port: 8080
+  servlet:
+    session:
+      cookie:
+        same-site: lax     # Secure is set by Tomcat for HTTPS requests (directly or via X-Forwarded-Proto, strategy native)
 
 management:
   endpoints:
@@ -60,7 +64,9 @@ jdbcodata:
     environment: ""        # label of this deployment in the admin top bar, e.g. DEV, TEST, PROD; empty = no badge
   security:
     allow-plain-http: false   # true only behind a TLS reverse proxy or for local demos (Basic Auth needs TLS)
-    rate-limit-per-minute: 20 # failed logins per IP / username before 429
+    rate-limit-per-minute: 20 # failed logins per IP before 429 (per username: 5x)
+    allowed-jdbc-urls: []     # extra JDBC URL prefixes for drivers in lib/, e.g. jdbc:sqlserver:
+    allow-embedded-h2: false  # in-process H2 as datasource: local demo and tests only
 
 logging:
   level:

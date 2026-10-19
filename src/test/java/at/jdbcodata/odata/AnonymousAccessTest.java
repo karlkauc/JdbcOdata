@@ -100,6 +100,33 @@ class AnonymousAccessTest {
         assertThat(right.statusCode()).isEqualTo(200);
     }
 
+    @Test
+    void allAuthenticatedGrantDoesNotIncludeAnonymousCallers() throws Exception {
+        HttpResponse<String> fixed = send("POST", "/api/v1/fixed-credentials",
+                "{\"name\":\"tech_anon\",\"datasourceId\":\"%s\",\"dbUsername\":\"demo\",\"dbPassword\":\"demo\"}"
+                        .formatted(datasourceId), "admin", "secret");
+        assertThat(fixed.statusCode()).as(fixed.body()).isEqualTo(201);
+        String fixedId = json.readTree(fixed.body()).get("id").asString();
+        HttpResponse<String> q = send("POST", "/api/v1/queries", """
+                {"name":"FixedForAll","datasourceId":"%s","sql":"SELECT id FROM sales","executionMode":"FIXED","fixedCredentialId":"%s"}"""
+                .formatted(datasourceId, fixedId), "admin", "secret");
+        assertThat(q.statusCode()).as(q.body()).isEqualTo(201);
+        String qId = json.readTree(q.body()).get("id").asString();
+        try {
+            assertThat(send("POST", "/api/v1/queries/" + qId + "/snapshot", "{\"username\":\"demo\",\"password\":\"demo\"}", "admin", "secret").statusCode()).isEqualTo(200);
+            assertThat(send("PUT", "/api/v1/queries/" + qId + "/grants",
+                    "{\"grants\":[{\"principalType\":\"ALL_AUTHENTICATED\"}]}", "admin", "secret").statusCode()).isEqualTo(200);
+
+            assertThat(send("GET", "/odata/", null, null, null).body()).doesNotContain("FixedForAll");
+            assertThat(send("GET", "/odata/FixedForAll?$top=1", null, null, null).statusCode()).isEqualTo(404);
+            HttpResponse<String> loggedIn = send("GET", "/odata/FixedForAll?$top=1", null, "demo", "demo");
+            assertThat(loggedIn.statusCode()).as(loggedIn.body()).isEqualTo(200);
+        } finally {
+            send("DELETE", "/api/v1/queries/" + qId, null, "admin", "secret");
+            send("DELETE", "/api/v1/fixed-credentials/" + fixedId, null, "admin", "secret");
+        }
+    }
+
     private HttpResponse<String> send(String method, String path, String jsonBody, String user, String password)
             throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path));

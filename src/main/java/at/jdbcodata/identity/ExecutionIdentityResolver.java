@@ -2,6 +2,7 @@ package at.jdbcodata.identity;
 
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceService;
+import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.datasource.DbErrorClassifier;
 import at.jdbcodata.datasource.IdentityPoolManager;
 import at.jdbcodata.query.ExecutionMode;
@@ -9,8 +10,12 @@ import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryService;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -64,19 +69,42 @@ public class ExecutionIdentityResolver {
         return IdentityContext.anonymous(user);
     }
 
-    /** Enabled queries with a snapshot that the caller may see (personalised service document, FR-35). */
+    /**
+     * Enabled queries with a snapshot that the caller may see (personalised service document, FR-35). A pass-through
+     * caller has proven nothing yet, so each datasource behind these queries must accept the Basic login first
+     * (pooled, so cheap after the first request); queries of datasources that reject it are left out. A datasource
+     * that is merely unreachable keeps its queries, they fail when executed.
+     *
+     * @throws DbAuthenticationException every datasource rejected the pass-through login
+     */
     public List<QueryDefinition> visibleQueries(IdentityContext context) {
-        return queryService.findAllEnabled().stream()
+        List<QueryDefinition> visible = queryService.findAllEnabled().stream()
                 .filter(QueryDefinition::hasSnapshot)
-                .filter(q -> queryService.isVisible(q, context.serviceUser()))
+                .filter(q -> queryService.isVisible(q, context))
                 .toList();
+        if (context.isServiceUser() || context.isAnonymous() || visible.isEmpty()) return visible;
+        Set<UUID> accepted = new HashSet<>();
+        DbAuthenticationException rejected = null;
+        for (UUID datasourceId : visible.stream().map(QueryDefinition::datasourceId).collect(Collectors.toSet())) {
+            try {
+                verifyLogin(datasourceService.require(datasourceId), context.credentials().username(),
+                        context.credentials().password());
+                accepted.add(datasourceId);
+            } catch (DbAuthenticationException e) {
+                rejected = e;
+            } catch (RuntimeException e) {
+                accepted.add(datasourceId);
+            }
+        }
+        if (accepted.isEmpty() && rejected != null) throw rejected;
+        return visible.stream().filter(q -> accepted.contains(q.datasourceId())).toList();
     }
 
     public ExecutionIdentity resolve(QueryDefinition query, IdentityContext context) {
         BasicCredentials creds = context.credentials();
         String caller = context.caller();
         if (query.executionMode() == ExecutionMode.FIXED) {
-            if (!queryService.isVisible(query, context.serviceUser())) {
+            if (!queryService.isVisible(query, context)) {
                 throw new QueryNotVisibleException(query.name());
             }
             if (query.fixedCredentialId() == null) {

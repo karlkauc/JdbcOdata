@@ -8,7 +8,7 @@
       <p class="lead" th:if="${datasource != null}" th:text="${datasource.description}"></p>
     </div>
     <form th:if="${datasource != null}" th:action="@{/admin/datasources/{id}/delete(id=${datasource.id})}" method="post"
-          onsubmit="return confirm('Really delete this datasource?')">
+          data-confirm="Really delete this datasource?">
       <button type="submit" class="danger">Delete</button>
     </form>
   </div>

@@ -64,8 +64,10 @@ Flyway migriert das Schema beim Start.
 ## Apache als Reverse Proxy
 
 Statt Caddy kann ein vorhandener Apache (oder nginx, Traefik, IIS) TLS terminieren. Der Service läuft dann mit
-`JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP=true` und `SERVER_FORWARD_HEADERS_STRATEGY=framework` nur auf
-`127.0.0.1`, der Proxy setzt `X-Forwarded-Proto`, `X-Forwarded-Port` und `X-Forwarded-For`. Ein komplettes
+`JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP=true` und `SERVER_FORWARD_HEADERS_STRATEGY=native` nur auf
+`127.0.0.1`, der Proxy setzt `X-Forwarded-Proto`, `X-Forwarded-Port` und `X-Forwarded-For`. Vom Client
+mitgeschickte `X-Forwarded-*`-Header muss der Proxy verwerfen (Apache: `RequestHeader unset X-Forwarded-Host early`
+usw., siehe Beispiel-vHost), sonst landen fremde Hosts in `@odata.context` und `@odata.nextLink`. Ein komplettes
 Beispiel mit Docker-Stack, Let's-Encrypt-Zertifikat und Demo-PostgreSQL liegt unter
 `deploy/odata.status20.net/` (vHost in `apache/odata.status20.net.conf`).
 
@@ -118,15 +120,32 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 ## Sicherheit im Betrieb
 
 - Basic Auth nur über TLS; HSTS wird vom Caddy gesetzt.
-- Fehlgeschlagene Logins werden pro IP und Benutzername gezählt (`jdbcodata.security.rate-limit-per-minute`),
-  danach antwortet der Service mit 429 für eine Minute.
+- Fehlgeschlagene Logins werden pro Client-IP und Benutzername gezählt (`jdbcodata.security.rate-limit-per-minute`),
+  danach antwortet der Service mit 429. Hinter einem Proxy nur mit `server.forward-headers-strategy=native` (siehe
+  oben), sonst ist die IP fälschbar.
+- Die Admin-UI sendet eine Content-Security-Policy (nur eigene Skripte, kein Framing); Inline-Skripte und
+  `on…`-Handler sind deshalb in Templates nicht erlaubt (`data-confirm`, `data-autosubmit` in `admin.js`).
+- Ein ADMIN-Konto ist mächtig: Datenquellen-URLs sind auf bekannte Netzwerk-Treiber beschränkt
+  (`jdbcodata.security.allowed-jdbc-urls`), trotzdem gehören Admin-Konten nur vertrauenswürdigen Personen.
+  Öffentlich erreichbare Admin-UIs per Proxy auf bekannte Netze beschränken, wo möglich.
 - Hinterlegte DB-Passwörter sind AES-256-GCM-verschlüsselt (`JDBCODATA_MASTER_KEY`), Admin- und
   Service-User-Passwörter bcrypt-gehasht. Pass-Through-Passwörter werden nicht gespeichert.
-- Alle DB-Verbindungen sind read-only, SQL ist auf `SELECT` beschränkt, Parameter werden gebunden.
+- Alle DB-Verbindungen sind read-only, SQL ist auf `SELECT` beschränkt (keine schreibenden CTEs, kein `SELECT
+  INTO`, kein `FOR UPDATE`, keine MySQL-`/*! */`-Kommentare), Parameter werden gebunden. Read-only setzen nicht
+  alle Treiber durch: Datenbank-Konten mit minimalen Rechten (nur `SELECT`) verwenden.
+- Pass-Through: Jede Basic-Auth-Anmeldung, die kein Service-User ist, wird als DB-Login versucht. Konten mit
+  Superuser- oder Schreibrechten dürfen sich deshalb nicht über das Netz an den Datenquellen anmelden können
+  (z. B. `pg_hba.conf`: `host all <superuser> all reject`). Service-Dokument und `$metadata` gibt es erst nach
+  erfolgreichem DB-Login; sichtbar sind nur Queries der Datenquellen, die den Login akzeptieren.
+- OData-Request-Bodies (`$batch`, asynchrone Anfragen) sind auf 10 MB begrenzt (413).
+- Sensible Query-Parameter erscheinen in Ausführungsprotokoll, CSV-Export und Cache-Übersicht als `***`.
+- `./mvnw -Psecurity verify` prüft die Abhängigkeiten gegen bekannte CVEs (OWASP Dependency-Check, bricht ab
+  CVSS 7 ab; `NVD_API_KEY` beschleunigt den Download).
 - Pro Datenquelle gelten Timeout, Zeilenlimit und maximale parallele Ausführungen; darüber 503 mit `Retry-After`.
 - Konfigurationsänderungen stehen im Audit-Log (Admin-UI → Audit, `GET /api/v1/audit`).
 - `jdbcodata.odata.anonymous-user` öffnet den Feed ohne Login unter einem Service-User. Nur für öffentliche
-  Demo-Daten verwenden: der Service-User sieht alle Queries, für die er freigegeben ist, und läuft mit seinen
+  Demo-Daten verwenden: der Service-User sieht alle Queries, für die er selbst (oder seine Gruppe) freigegeben ist
+  – Freigaben für „alle Authentifizierten“ gelten für anonyme Aufrufer nicht –, und läuft mit seinen
   hinterlegten DB-Credentials; Rate-Limit und Datenquellen-Limits gelten weiterhin, eine Login-Sperre greift
   naturgemäß nicht.
   Clients, die Zugangsdaten nur auf eine 401-Aufforderung schicken (Browser), bleiben dann anonym und sehen die

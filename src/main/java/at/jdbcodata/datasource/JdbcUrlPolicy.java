@@ -1,0 +1,113 @@
+package at.jdbcodata.datasource;
+
+import at.jdbcodata.common.InvalidRequestException;
+import at.jdbcodata.config.JdbcOdataProperties;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.sql.Driver;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+/**
+ * Which JDBC URLs an admin may configure. A JDBC URL is code: embedded H2 runs {@code INIT=RUNSCRIPT} and
+ * {@code FILE_READ} inside this JVM, other drivers load classes or local files named in URL options. Only known
+ * network drivers are allowed (plus {@code jdbcodata.security.allowed-jdbc-urls} for drivers in {@code lib/}),
+ * options that load code, run SQL on connect or weaken read-only mode are rejected, and a driver class must be a
+ * {@link Driver}.
+ */
+@Component
+public class JdbcUrlPolicy {
+
+    static final List<String> DEFAULT_PREFIXES = List.of(
+            "jdbc:postgresql:", "jdbc:mariadb:", "jdbc:oracle:thin:", "jdbc:h2:tcp:", "jdbc:h2:ssl:");
+
+    /** Lower-case option names that load classes or files, run SQL on connect or switch off read-only mode. */
+    static final Set<String> FORBIDDEN_OPTIONS = Set.of(
+            "init", "authenticator", "trace_level_file",
+            "socketfactory", "socketfactoryarg", "sslfactory", "sslfactoryarg", "sslhostnameverifier",
+            "sslpasswordcallback", "authenticationpluginclassname", "loggerfile", "readonlymode",
+            "allowlocalinfile", "allowloadlocalinfile", "allowurlinlocalinfile", "allowmultiqueries", "initsql",
+            "autodeserialize", "queryinterceptors", "statementinterceptors", "connectionlifecycleinterceptors");
+
+    /** {@code password=}/{@code pwd=} options, {@code //user:pass@host} and Oracle's {@code thin:user/pass@host}. */
+    private static final Pattern CREDENTIALS_IN_URL = Pattern.compile(
+            "[;?&:]\\s*(password|pwd)\\s*=|//[^/@?;]*:[^/@?;]*@|^jdbc:oracle:thin:[^@/]+/[^@]+@");
+
+    private static final Pattern OPTION = Pattern.compile("[;?&]\\s*([A-Za-z0-9_.\\-]+)\\s*=");
+
+    private final List<String> prefixes;
+    private final boolean allowEmbeddedH2;
+
+    @Autowired
+    public JdbcUrlPolicy(JdbcOdataProperties props) {
+        this(props.security().allowedJdbcUrls(), props.security().allowEmbeddedH2());
+    }
+
+    JdbcUrlPolicy(List<String> extraPrefixes, boolean allowEmbeddedH2) {
+        List<String> all = new ArrayList<>(DEFAULT_PREFIXES);
+        if (extraPrefixes != null) {
+            extraPrefixes.stream().filter(p -> p != null && !p.isBlank()).map(p -> p.trim().toLowerCase(Locale.ROOT))
+                    .forEach(all::add);
+        }
+        this.prefixes = List.copyOf(all);
+        this.allowEmbeddedH2 = allowEmbeddedH2;
+    }
+
+    public void check(String jdbcUrl, String driverClass) {
+        if (jdbcUrl == null || jdbcUrl.isBlank()) throw new InvalidRequestException("JDBC URL is required");
+        String url = decode(jdbcUrl.strip()).toLowerCase(Locale.ROOT);
+        boolean embeddedH2 = url.startsWith("jdbc:h2:") && !url.startsWith("jdbc:h2:tcp:") && !url.startsWith("jdbc:h2:ssl:");
+        if (!(embeddedH2 ? allowEmbeddedH2 : prefixes.stream().anyMatch(url::startsWith))) {
+            throw new InvalidRequestException("JDBC URL not allowed. Allowed: " + String.join(", ", prefixes)
+                    + " (more via jdbcodata.security.allowed-jdbc-urls; embedded H2 only with allow-embedded-h2)");
+        }
+        // credentials belong into pass-through logins, stored credentials or technical accounts: the URL is shown
+        // to VIEWER admins and written to the audit log
+        if (CREDENTIALS_IN_URL.matcher(url).find()) {
+            throw new InvalidRequestException("The JDBC URL must not contain a password; use the login fields instead");
+        }
+        Matcher m = OPTION.matcher(url);
+        while (m.find()) {
+            if (FORBIDDEN_OPTIONS.contains(m.group(1))) {
+                throw new InvalidRequestException("JDBC URL option '" + m.group(1) + "' is not allowed");
+            }
+        }
+        if (url.contains("runscript") || url.contains("create alias")) {
+            throw new InvalidRequestException("JDBC URL must not contain SQL");
+        }
+        if (driverClass != null && !driverClass.isBlank()) checkDriverClass(driverClass.strip());
+    }
+
+    /** Loads the class without initialising it, so no static initialiser of an arbitrary class runs. */
+    private static void checkDriverClass(String name) {
+        try {
+            Class<?> c = Class.forName(name, false, Thread.currentThread().getContextClassLoader());
+            if (!Driver.class.isAssignableFrom(c)) {
+                throw new InvalidRequestException("Driver class '" + name + "' is not a java.sql.Driver");
+            }
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new InvalidRequestException("JDBC driver class not found: " + name);
+        }
+    }
+
+    /** Percent-decodes repeatedly, so double-encoded option names are caught too; '+' stays as it is. */
+    private static String decode(String url) {
+        String current = url;
+        for (int i = 0; i < 3 && current.indexOf('%') >= 0; i++) {
+            try {
+                String next = URLDecoder.decode(current.replace("+", "%2B"), StandardCharsets.UTF_8);
+                if (next.equals(current)) break;
+                current = next;
+            } catch (IllegalArgumentException e) {
+                break;
+            }
+        }
+        return current;
+    }
+}

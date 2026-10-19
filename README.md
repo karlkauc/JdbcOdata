@@ -17,6 +17,7 @@ Stellt SQL-Abfragen gegen firmeninterne Datenbanken (Oracle, PostgreSQL, MySQL/M
 | [docs/PRD.md](docs/PRD.md) | Project Requirement Document: Scope, Use Cases, funktionale und nicht-funktionale Anforderungen, Datenmodell, API, Sicherheit, Tests, Meilensteine |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Betrieb: native Installation, Docker Compose, TLS, Backup, Monitoring, Fehlersuche |
 | [docs/CONFIG.md](docs/CONFIG.md) | Konfigurationsreferenz |
+| [docs/SECURITY.md](docs/SECURITY.md) | Bedrohungsmodell, Schutzmaßnahmen, Ergebnis der Security Review |
 | [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Datenquellen, Queries, Identität, Cache, Statistik einrichten |
 | [docs/EXCEL_POWERBI.md](docs/EXCEL_POWERBI.md) | Anleitung für Excel und PowerBI |
 | [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) | Abnahme-Checkliste |

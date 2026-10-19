@@ -37,8 +37,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import org.apache.olingo.commons.api.Constants;
 import org.apache.olingo.commons.api.data.ContextURL;
 import org.apache.olingo.commons.api.data.Entity;
@@ -2248,7 +2250,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 .orElseThrow(() -> new ODataApplicationException("Entity set '" + queryName + "' not found",
                         HttpStatusCode.NOT_FOUND.getStatusCode(), LOCALE));
         Datasource ds = support.datasourceService().findById(query.datasourceId()).orElse(null);
-        LogDraft draft = new LogDraft(started, query, ds, optionsForLog);
+        LogDraft draft = new LogDraft(started, query, ds, maskedOptions(query, optionsForLog));
         try {
             if (!query.hasSnapshot()) {
                 throw new SchemaSnapshotMissingException(queryName);
@@ -2294,10 +2296,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 Duration ttl = Duration.ofSeconds(Math.max(1, query.cacheTtlSec()));
                 if (refresh) {
                     ResultTable table = run.get();
-                    support.cache().put(key, params, table, ttl);
+                    support.cache().put(key, maskedParameterMap(query, params), table, ttl);
                     exec = new Execution(query, table, CacheStatus.BYPASS, null, null);
                 } else {
-                    ResultCache.CachedResult r = support.cache().getOrLoad(key, params, ttl, run);
+                    ResultCache.CachedResult r = support.cache().getOrLoad(key, maskedParameterMap(query, params), ttl, run);
                     if (r.status() == CacheStatus.HIT
                             && ExecutionIdentityResolver.isUnverifiedPassThrough(request.identity(), identity)) {
                         // The key holds only the DB user name. A hit must not bypass the database login, so the
@@ -2325,7 +2327,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (DbAuthenticationException e) {
             draft.fail(ExecutionStatus.AUTH_FAILED, e.getMessage());
             support.rateLimiter().recordFailure(request.clientIp(), request.identity().caller());
-            throw new ODataApplicationException(e.getMessage(), HttpStatusCode.UNAUTHORIZED.getStatusCode(), LOCALE, e);
+            throw new ODataApplicationException(DbAuthenticationException.CLIENT_MESSAGE,
+                    HttpStatusCode.UNAUTHORIZED.getStatusCode(), LOCALE, e);
         } catch (ServiceAuthenticationException e) {
             // Anonymous caller without stored credentials for this datasource: credentials are required.
             draft.fail(ExecutionStatus.AUTH_FAILED, e.getMessage());
@@ -2394,12 +2397,39 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     private static String maskedParameters(QueryDefinition query, Map<String, Object> params) {
         if (params.isEmpty()) return null;
+        return CacheKey.canonical(maskedParameterMap(query, params));
+    }
+
+    /** Parameter values as shown to admins (execution log, cache list): sensitive ones as {@code ***}. */
+    static Map<String, Object> maskedParameterMap(QueryDefinition query, Map<String, Object> params) {
         Map<String, Object> masked = new LinkedHashMap<>();
         for (QueryParameter p : query.parameters()) {
             Object v = params.get(p.name());
             masked.put(p.name(), p.sensitive() && v != null ? "***" : v);
         }
-        return CacheKey.canonical(masked);
+        return masked;
+    }
+
+    /** The raw query string for the execution log, with values of sensitive parameters replaced by {@code ***}. */
+    static String maskedOptions(QueryDefinition query, String rawQuery) {
+        if (rawQuery == null || rawQuery.isEmpty()) return rawQuery;
+        Set<String> sensitive = query.parameters().stream().filter(QueryParameter::sensitive).map(QueryParameter::name)
+                .collect(Collectors.toSet());
+        if (sensitive.isEmpty()) return rawQuery;
+        StringBuilder sb = new StringBuilder();
+        for (String part : rawQuery.split("&", -1)) {
+            if (!sb.isEmpty()) sb.append('&');
+            int eq = part.indexOf('=');
+            String name = eq < 0 ? part : part.substring(0, eq);
+            String decoded;
+            try {
+                decoded = java.net.URLDecoder.decode(name, StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) {
+                decoded = name;
+            }
+            sb.append(eq >= 0 && sensitive.contains(decoded) ? name + "=***" : part);
+        }
+        return sb.toString();
     }
 
     /** $deltatoken outside entity collections (single entities, $count, properties): 400 instead of ignoring it. */
