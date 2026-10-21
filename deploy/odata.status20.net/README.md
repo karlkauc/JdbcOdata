@@ -114,6 +114,7 @@ docker restart jdbcodata-status20
 
 Test im [OData Viewer](https://odata-viewer.status20.net/): Service-URL `https://odata.status20.net/odata/`
 eintragen, mit Login `betreuer_anna` öffnen, `MeineKunden` anzeigen; danach dasselbe mit `betreuer_bernd`.
+Automatisch prüfen das die E2E-Tests, direkt am Feed und über den Viewer (siehe `e2e/README.md`).
 
 ## Anonymer Lesezugriff (Service-User `demo`)
 

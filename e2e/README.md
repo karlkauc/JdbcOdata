@@ -41,6 +41,8 @@ Live-Deployment `https://odata.status20.net` (siehe `deploy/odata.status20.net/`
 - OData-Feed: Service-Dokument, `$metadata`, Collections mit `$select`-Optionen, `…/Positionen/$count`,
   `…/Kundendaten/Land/$value`, Push-Down-Header und `$apply`.
 - Row-Level-Security (`excel_nord`) und anonymer Zugang.
+- Pass-Through per Basic Auth: dieselbe URL `/odata/MeineKunden` liefert für `betreuer_anna` 12 und für
+  `betreuer_bernd` 8 Kunden, `AngemeldetAls` ist jeweils der eigene DB-User, ein falsches Passwort gibt 401.
 
 `tests/security.spec.ts` prüft die Härtung der Admin-UI, ebenfalls nur lesend: CSP-, Frame- und HSTS-Header,
 Session-Cookie (`Secure`, `HttpOnly`, `SameSite=Lax`), alle Seiten der Navigation plus Query-Editor ohne
@@ -57,5 +59,27 @@ JDBCODATA_ANNA_PASSWORD=$DEMO_ANNA_PASSWORD JDBCODATA_BERND_PASSWORD=$DEMO_BERND
 ```
 
 Die Tests schicken die Zugangsdaten mit jeder Anfrage. Bei aktivem anonymen Zugang kommt ohne Login kein 401, und
-Browser würden sonst gar keine Zugangsdaten senden. Den Feed über den OData-Viewer prüft
-`odata-online-viewer/e2e/tests/live-jdbcodata.spec.ts`.
+Browser würden sonst gar keine Zugangsdaten senden.
+
+### Über den OData Viewer
+
+Den Feed über den [OData Online Viewer](https://www.odata-viewer.online) prüft das Repo `odata-online-viewer`
+(`e2e/tests/live-jdbcodata.spec.ts`). Der Test „basic auth: the same queries return each user's own rows“ meldet
+sich im Viewer als `betreuer_anna` und danach als `betreuer_bernd` an (HTTP Basic im URL-Formular) und vergleicht:
+- `MeineKunden`: dieselben Kunden wie ein direkter Aufruf an JdbcOdata als dieser User, `AngemeldetAls` und
+  `Betreuer` nur der eigene User, keine Überschneidung zwischen Anna und Bernd.
+- `Bestellungen`: `$count` wie beim direkten Aufruf, bei Anna und Bernd verschieden und kleiner als bei `excel_demo`.
+
+Ein zweiter Test prüft, dass **Run** die im Daten-Explorer eingetippten Zugangsdaten mitschickt. Weil die Demo
+anonymen Zugang hat, fiele eine fehlende Anmeldung sonst nicht als 401 auf, sondern nur durch andere Daten.
+
+```bash
+cd ~/webdav/odata-online-viewer/e2e
+set -a && . ~/webdav/JdbcOdata/deploy/odata.status20.net/.env && set +a
+E2E_EXTERNAL=1 E2E_BASE_URL=https://www.odata-viewer.online \
+JDBCODATA_PASSWORD=$DEMO_READER_PASSWORD JDBCODATA_NORD_PASSWORD=$DEMO_NORD_PASSWORD \
+JDBCODATA_ANNA_PASSWORD=$DEMO_ANNA_PASSWORD JDBCODATA_BERND_PASSWORD=$DEMO_BERND_PASSWORD \
+npx playwright test live-jdbcodata
+```
+
+Für die Testinstanz des Viewers `E2E_BASE_URL=https://odata-viewer.status20.net` setzen.
