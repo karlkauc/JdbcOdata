@@ -6,6 +6,8 @@ const ADMIN_PASSWORD = process.env.JDBCODATA_ADMIN_PASSWORD ?? "";
 const USER = process.env.JDBCODATA_USER ?? "excel_demo";
 const PASSWORD = process.env.JDBCODATA_PASSWORD ?? "";
 const NORD_PASSWORD = process.env.JDBCODATA_NORD_PASSWORD ?? "";
+const ANNA_PASSWORD = process.env.JDBCODATA_ANNA_PASSWORD ?? "";
+const BERND_PASSWORD = process.env.JDBCODATA_BERND_PASSWORD ?? "";
 
 test.describe.configure({ mode: "serial" });
 
@@ -143,6 +145,37 @@ test.describe("row-level security", () => {
     const body = await response!.json();
     expect(body["@odata.count"]).toBeGreaterThan(0);
     expect(new Set(body.value.map((r: { Region: string }) => r.Region))).toEqual(new Set(["Nord"]));
+  });
+});
+
+test.describe("basic auth pass-through", () => {
+  test.skip(!ANNA_PASSWORD || !BERND_PASSWORD, "JDBCODATA_ANNA_PASSWORD / JDBCODATA_BERND_PASSWORD not set");
+
+  type Row = { KundeId: number; Betreuer: string; AngemeldetAls: string };
+  const url = "/odata/MeineKunden?$count=true&$format=json";
+
+  test("the same query returns different rows per Basic Auth login", async ({ request }) => {
+    const ids: Record<string, number[]> = {};
+    for (const [user, password, count] of [
+      ["betreuer_anna", ANNA_PASSWORD, 12],
+      ["betreuer_bernd", BERND_PASSWORD, 8],
+    ] as const) {
+      const response = await request.get(url, { headers: basic(user, password) });
+      expect(response.status()).toBe(200);
+      const body = await response.json();
+      expect(body["@odata.count"]).toBe(count);
+      for (const row of body.value as Row[]) {
+        expect(row.AngemeldetAls).toBe(user);
+        expect(row.Betreuer).toBe(user);
+      }
+      ids[user] = (body.value as Row[]).map((r) => r.KundeId);
+    }
+    expect(ids.betreuer_anna.filter((id) => ids.betreuer_bernd.includes(id))).toEqual([]);
+  });
+
+  test("a wrong password is rejected by the database login", async ({ request }) => {
+    const response = await request.get(url, { headers: basic("betreuer_anna", "falsch") });
+    expect(response.status()).toBe(401);
   });
 });
 

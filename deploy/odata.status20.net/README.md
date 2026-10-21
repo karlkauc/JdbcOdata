@@ -16,7 +16,7 @@ Excel ──HTTPS, Basic Auth──▶ Host-Apache (odata.status20.net) ──�
 | `docker-compose.yml` | Stack `jdbcodata-status20`: Service, Metadaten-DB, Demo-DB |
 | `.env.example` | Vorlage für `.env` (Secrets, nicht im Git) |
 | `demo-db/` | Init-Skripte der Demo-DB: Rollen, Schema, Beispieldaten, Rechte und Row-Level-Security |
-| `config/seed.yml` | Datenquelle `demo_postgres` und vier Queries, werden beim Start angelegt und per Snapshot im Feed sichtbar |
+| `config/seed.yml` | Datenquellen `demo_postgres` und `demo_produktstamm` und acht Queries, werden beim Start angelegt und per Snapshot im Feed sichtbar |
 | `apache/` | vHost-Konfiguration für den Host-Apache (HTTP-Variante für den certbot-Erstlauf und die endgültige Fassung) |
 
 ## Start
@@ -25,7 +25,7 @@ Excel ──HTTPS, Basic Auth──▶ Host-Apache (odata.status20.net) ──�
 cd deploy/odata.status20.net
 cp .env.example .env            # alle Werte setzen, z. B. openssl rand -base64 24; Master-Key: openssl rand -base64 32
 docker compose up -d --build    # erster Start baut das Image und befüllt die Demo-DB
-docker compose logs -f jdbcodata   # "Seed /app/config/seed.yml applied: 1 datasource(s), 4 query(ies)" abwarten
+docker compose logs -f jdbcodata   # "Seed /app/config/seed.yml applied: 2 datasource(s), 8 query(ies)" abwarten
 ```
 
 Apache-vHost und Zertifikat: siehe Kommentar in `apache/odata.status20.net.conf`.
@@ -39,14 +39,18 @@ Schema `verkauf` in der Demo-DB: `kunden` (60, Regionen Nord/Süd/Ost/West), `pr
 (3 000, 2024 bis Oktober 2026), `bestellpositionen` (ca. 7 500) und die View `v_umsatz`. Die Daten sind
 deterministisch generiert (`setseed`), also bei jedem Neuaufbau gleich.
 
-Zwei Lese-User zeigen, dass jede Query unter den Rechten des Aufrufers läuft:
+Die Lese-User zeigen, dass jede Query unter den Rechten des Aufrufers läuft: JdbcOdata meldet sich mit den
+Basic-Auth-Zugangsdaten des Aufrufers an der DB an (Pass-Through), die DB filtert per Row-Level-Security.
 
 | DB-User | Sieht |
 |---|---|
 | `excel_demo` | alle Kunden, Bestellungen und Umsätze |
-| `excel_nord` | per Row-Level-Security nur Kunden der Region Nord und deren Bestellungen |
+| `excel_nord` | nur Kunden der Region Nord und deren Bestellungen |
+| `betreuer_anna` | nur ihre 12 betreuten Kunden (Tabelle `kundenbetreuung`) und deren Bestellungen |
+| `betreuer_bernd` | nur seine 8 betreuten Kunden und deren Bestellungen |
 
-Die Passwörter stehen in `.env` (`DEMO_READER_PASSWORD`, `DEMO_NORD_PASSWORD`).
+Die Passwörter stehen in `.env` (`DEMO_READER_PASSWORD`, `DEMO_NORD_PASSWORD`, `DEMO_ANNA_PASSWORD`,
+`DEMO_BERND_PASSWORD`).
 
 Queries im Feed (alle im Modus CALLER, Cache 5 Minuten pro User):
 
@@ -56,6 +60,10 @@ Queries im Feed (alle im Modus CALLER, Cache 5 Minuten pro User):
 | `Produkte` | Produktliste | – |
 | `Umsatz` | Umsatz auf Positionsebene | `p_jahr` (Standard 2025) |
 | `UmsatzProMonat` | Summe je Monat, Region, Kategorie | `p_jahr` (Standard 2025) |
+| `Bestellungen` | Bestellungen mit Kategorien (Array), Positionen (JSON) und Kunde | `p_jahr` (Standard 2025) |
+| `Produktstamm` | Produkt-Stammdaten aus der zweiten Datenbank `produktstamm` | – |
+| `Organisation` | Organisationshierarchie (statische Daten, Hierarchie-Funktionen) | – |
+| `MeineKunden` | Kunden des angemeldeten Betreuers, Spalte `AngemeldetAls` = DB-User | – |
 
 Beziehungen im `$metadata` (NavigationProperties): `Umsatz.Kunde → Kunden` und `Umsatz.Produkt → Produkte`
 (je über `KundeId` bzw. `ProduktId`), Gegenrichtung `Kunden.Umsaetze` und `Produkte.Umsaetze`. Schlüssel sind
@@ -85,6 +93,27 @@ docker restart jdbcodata-status20     # Seed legt Datenquelle, Query und Beziehu
 
 Der Service-User `demo` braucht zusätzlich Credentials für `demo_produktstamm` (wie unten, mit
 `d["name"]=="demo_produktstamm"`), sonst scheitern anonyme Anfragen an der zweiten Datenbank.
+
+## Pass-Through mit zwei Betreuern (`MeineKunden`)
+
+`demo-db/06-betreuer.sh` legt die Rollen `betreuer_anna` und `betreuer_bernd`, die Tabelle
+`verkauf.kundenbetreuung` und die Policies an. Dieselbe URL `/odata/MeineKunden` liefert je nach Login ein anderes
+Ergebnis: Anna sieht die Kunden 1–12, Bernd 13–20, `excel_demo` (und damit der anonyme Zugang) alle 20. Die Spalte
+`AngemeldetAls` ist `current_user` aus der DB-Session, also der Beweis, unter welchem DB-User die Query lief. Der
+Cache ist pro DB-User getrennt.
+
+Auf einer bestehenden Instanz einmalig (vorher `DEMO_ANNA_PASSWORD`/`DEMO_BERND_PASSWORD` in `.env` setzen):
+
+```bash
+set -a; . .env; set +a
+docker exec -i -e DEMO_ANNA_PASSWORD="$DEMO_ANNA_PASSWORD" -e DEMO_BERND_PASSWORD="$DEMO_BERND_PASSWORD" \
+  jdbcodata-status20-demo-db sh -c 'POSTGRES_USER=demo_admin POSTGRES_DB=demo sh -s' < demo-db/06-betreuer.sh
+docker compose up -d                  # neue Umgebungsvariablen für demo-db, Seed legt MeineKunden an
+docker restart jdbcodata-status20
+```
+
+Test im [OData Viewer](https://odata-viewer.status20.net/): Service-URL `https://odata.status20.net/odata/`
+eintragen, mit Login `betreuer_anna` öffnen, `MeineKunden` anzeigen; danach dasselbe mit `betreuer_bernd`.
 
 ## Anonymer Lesezugriff (Service-User `demo`)
 
@@ -135,6 +164,8 @@ source .env
 curl -s -u "excel_demo:$DEMO_READER_PASSWORD" 'https://odata.status20.net/odata/'            # Service-Dokument
 curl -s -u "excel_demo:$DEMO_READER_PASSWORD" 'https://odata.status20.net/odata/Kunden?$count=true&$top=0'
 curl -s -u "excel_nord:$DEMO_NORD_PASSWORD"   'https://odata.status20.net/odata/Kunden?$count=true&$top=0'   # kleinerer Count
+curl -s -u "betreuer_anna:$DEMO_ANNA_PASSWORD"   'https://odata.status20.net/odata/MeineKunden?$count=true&$top=1'   # 12, AngemeldetAls betreuer_anna
+curl -s -u "betreuer_bernd:$DEMO_BERND_PASSWORD" 'https://odata.status20.net/odata/MeineKunden?$count=true&$top=1'   # 8, AngemeldetAls betreuer_bernd
 curl -s -D - -o /dev/null -u "excel_demo:$DEMO_READER_PASSWORD" 'https://odata.status20.net/odata/Umsatz?p_jahr=2025&$top=5' | grep -i x-cache
 docker exec -it jdbcodata-status20-demo-db psql -U demo_admin demo   # direkt in die Demo-DB (nur per Socket, siehe unten)
 ```

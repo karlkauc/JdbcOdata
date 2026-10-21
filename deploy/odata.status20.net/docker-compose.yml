@@ -66,6 +66,8 @@ services:
       POSTGRES_PASSWORD: ${DEMO_ADMIN_PASSWORD:?DEMO_ADMIN_PASSWORD in .env setzen}
       DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:?DEMO_READER_PASSWORD in .env setzen}
       DEMO_NORD_PASSWORD: ${DEMO_NORD_PASSWORD:?DEMO_NORD_PASSWORD in .env setzen}
+      DEMO_ANNA_PASSWORD: ${DEMO_ANNA_PASSWORD:?DEMO_ANNA_PASSWORD in .env setzen}     # Kundenbetreuer, 06-betreuer.sh
+      DEMO_BERND_PASSWORD: ${DEMO_BERND_PASSWORD:?DEMO_BERND_PASSWORD in .env setzen}
     volumes:
       - demo-data:/var/lib/postgresql/data
       - ./demo-db:/docker-entrypoint-initdb.d:ro   # läuft nur beim ersten Start (leeres Volume)

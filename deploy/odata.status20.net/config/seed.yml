@@ -253,3 +253,25 @@ queries:
     snapshotCredentials:
       username: excel_demo
       password: ${DEMO_READER_PASSWORD}
+
+  - name: MeineKunden
+    description: Kunden des angemeldeten Betreuers. Gleiche URL, je nach Basic-Auth-Login (betreuer_anna, betreuer_bernd) ein anderes Ergebnis, weil die DB per Row-Level-Security filtert
+    datasource: demo_postgres
+    sql: |
+      SELECT kb.kunde_id AS "KundeId", k.name AS "Name", k.region AS "Region",
+             kb.betreuer AS "Betreuer", CAST(current_user AS varchar(63)) AS "AngemeldetAls"
+      FROM verkauf.kundenbetreuung kb
+      JOIN verkauf.kunden k ON k.id = kb.kunde_id
+      ORDER BY kb.kunde_id
+    keyMode: COLUMNS
+    keyColumns: [KundeId]
+    relations:
+      - name: Kunde
+        target: Kunden
+        columns: {KundeId: KundeId}
+        description: Kundenstammdaten
+    cacheEnabled: true
+    cacheTtlSec: 300
+    snapshotCredentials:
+      username: excel_demo
+      password: ${DEMO_READER_PASSWORD}

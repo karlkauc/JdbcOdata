@@ -52,7 +52,8 @@ cd e2e && npm install && npx playwright install chromium
 set -a && . ../deploy/odata.status20.net/.env && set +a
 E2E_BASE_URL=https://odata.status20.net \
 JDBCODATA_ADMIN_USER=$JDBCODATA_ADMIN_USER JDBCODATA_ADMIN_PASSWORD=$JDBCODATA_ADMIN_PASSWORD \
-JDBCODATA_PASSWORD=$DEMO_READER_PASSWORD JDBCODATA_NORD_PASSWORD=$DEMO_NORD_PASSWORD npx playwright test
+JDBCODATA_PASSWORD=$DEMO_READER_PASSWORD JDBCODATA_NORD_PASSWORD=$DEMO_NORD_PASSWORD \
+JDBCODATA_ANNA_PASSWORD=$DEMO_ANNA_PASSWORD JDBCODATA_BERND_PASSWORD=$DEMO_BERND_PASSWORD npx playwright test
 ```
 
 Die Tests schicken die Zugangsdaten mit jeder Anfrage. Bei aktivem anonymen Zugang kommt ohne Login kein 401, und
