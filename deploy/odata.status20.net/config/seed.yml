@@ -10,6 +10,9 @@ datasources:
     defaultTimeoutSec: 60
     maxRows: 200000
     maxConcurrent: 8
+    # nach dem Verbinden gesetzt (set_config); sonst gilt die Zeitzone, die der JDBC-Treiber aus der JVM mitschickt
+    sessionSettings:
+      TimeZone: Europe/Vienna
   - name: demo_produktstamm
     description: Zweite Datenbank (produktstamm im Container demo-db) mit Produkt-Stammdaten; Beispiel für Beziehungen über Datenbanken hinweg
     jdbcUrl: jdbc:postgresql://demo-db:5432/produktstamm
