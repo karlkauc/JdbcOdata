@@ -5,6 +5,7 @@ import at.jdbcodata.datasource.ConcurrencyLimiter;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbErrorClassifier;
 import at.jdbcodata.datasource.IdentityPoolManager;
+import at.jdbcodata.datasource.SessionSettings;
 import at.jdbcodata.identity.ExecutionIdentity;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -98,7 +99,8 @@ public class QueryExecutor {
         List<Object> extra = wrapper == null ? List.of() : countOnly ? wrapper.countBinds() : wrapper.rowBinds();
         long start = System.nanoTime();
         try (ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
-             Connection c = pools.connect(ds, identity.dbUsername(), identity.dbPassword())) {
+             Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(),
+                     identity.dbPassword())) {
             try {
                 c.setReadOnly(true);
             } catch (SQLException ignored) {

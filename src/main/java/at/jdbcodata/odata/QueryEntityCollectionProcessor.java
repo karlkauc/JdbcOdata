@@ -9,6 +9,7 @@ import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.identity.ServiceAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
 import at.jdbcodata.datasource.TooManyExecutionsException;
+import at.jdbcodata.datasource.SessionSettings;
 import at.jdbcodata.identity.ExecutionIdentity;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.identity.QueryNotVisibleException;
@@ -2292,7 +2293,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             } else if (!query.cacheEnabled()) {
                 exec = new Execution(query, run.get(), CacheStatus.DISABLED, null, null);
             } else {
-                CacheKey key = CacheKey.of(query.id(), query.version(), identity.dbUsername(), params);
+                CacheKey key = CacheKey.of(query.id(), query.version(), identity.dbUsername(), params,
+                        SessionSettings.effective(ds, query));
                 Duration ttl = Duration.ofSeconds(Math.max(1, query.cacheTtlSec()));
                 if (refresh) {
                     ResultTable table = run.get();

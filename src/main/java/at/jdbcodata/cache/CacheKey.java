@@ -8,11 +8,24 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 
-/** Identifies a cached result: query, version, effective DB user and the parameter values. */
+/** Identifies a cached result: query, version, effective DB user, the parameter values and the session settings. */
 public record CacheKey(UUID queryId, int queryVersion, String dbUser, String paramsHash) {
 
     public static CacheKey of(UUID queryId, int version, String dbUser, Map<String, Object> params) {
-        return new CacheKey(queryId, version, dbUser == null ? "" : dbUser.toLowerCase(), hash(unambiguous(params)));
+        return of(queryId, version, dbUser, params, Map.of());
+    }
+
+    /**
+     * With the effective session settings: NLS formats and sort orders change the result without a new query
+     * version. Without settings the key is the same as before they existed.
+     */
+    public static CacheKey of(UUID queryId, int version, String dbUser, Map<String, Object> params,
+                              Map<String, String> sessionSettings) {
+        String input = unambiguous(params);
+        if (sessionSettings != null && !sessionSettings.isEmpty()) {
+            input += "S" + unambiguous(new TreeMap<String, Object>(sessionSettings));
+        }
+        return new CacheKey(queryId, version, dbUser == null ? "" : dbUser.toLowerCase(), hash(input));
     }
 
     /**

@@ -68,6 +68,25 @@ class QueryServiceTest extends DemoProfileTest {
     }
 
     @Test
+    void storesAndValidatesSessionSettingOverrides() {
+        Datasource demo = datasourceService.findByName("demo").orElseThrow();
+        String name = uniqueName("Sess_");
+        QuerySpec base = spec(name, "SELECT 1 AS one", List.of());
+        QuerySpec withSettings = new QuerySpec(base.name(), base.description(), base.datasourceId(), base.sqlText(),
+                null, null, null, null, null, null, null, null, List.of(), null, null, java.util.Map.of("time_zone", "+05:00"));
+        QueryDefinition created = service.create(withSettings);
+        assertThat(created.sessionSettings()).containsExactly(java.util.Map.entry("TIME_ZONE", "+05:00"));
+        // without the field the overrides are kept
+        assertThat(service.update(created.id(), base).sessionSettings()).containsKey("TIME_ZONE");
+        assertThat(demo.jdbcUrl()).startsWith("jdbc:h2:");
+        QuerySpec oracleKey = new QuerySpec(name, null, demo.id(), "SELECT 1 AS one", null, null, null, null, null,
+                null, null, null, List.of(), null, null, java.util.Map.of("NLS_SORT", "GERMAN"));
+        assertThatThrownBy(() -> service.update(created.id(), oracleKey))
+                .isInstanceOf(InvalidRequestException.class).hasMessageContaining("NLS_SORT");
+        service.delete(created.id());
+    }
+
+    @Test
     void lifecycleWithVersions() {
         String name = uniqueName("Svc_");
         QueryDefinition created = service.create(spec(name, "SELECT 1 AS one", List.of()));

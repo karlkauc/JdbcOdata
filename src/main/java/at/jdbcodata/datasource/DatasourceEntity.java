@@ -1,5 +1,6 @@
 package at.jdbcodata.datasource;
 
+import at.jdbcodata.common.StringMapJson;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -7,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -44,6 +46,12 @@ public class DatasourceEntity {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @Column(name = "session_settings", columnDefinition = "TEXT")
+    private String sessionSettings;
+
+    @Column(name = "driver_properties", columnDefinition = "TEXT")
+    private String driverProperties;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -52,7 +60,7 @@ public class DatasourceEntity {
 
     public Datasource toRecord() {
         return new Datasource(id, name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
-                maxConcurrent, enabled, createdAt, updatedAt);
+                maxConcurrent, enabled, createdAt, updatedAt, getSessionSettings(), getDriverProperties());
     }
 
     public UUID getId() { return id; }
@@ -74,6 +82,10 @@ public class DatasourceEntity {
     public void setMaxConcurrent(int maxConcurrent) { this.maxConcurrent = maxConcurrent; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public Map<String, String> getSessionSettings() { return StringMapJson.read(sessionSettings); }
+    public void setSessionSettings(Map<String, String> settings) { this.sessionSettings = StringMapJson.write(settings); }
+    public Map<String, String> getDriverProperties() { return StringMapJson.read(driverProperties); }
+    public void setDriverProperties(Map<String, String> properties) { this.driverProperties = StringMapJson.write(properties); }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

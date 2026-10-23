@@ -2,6 +2,7 @@ package at.jdbcodata.query;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Immutable view of a query definition including parameters and the schema snapshot. */
@@ -27,10 +28,23 @@ public record QueryDefinition(
         Instant createdAt,
         Instant updatedAt,
         List<QueryRelation> relations,
-        boolean pushDown) {
+        boolean pushDown,
+        Map<String, String> sessionSettings) {
 
     public QueryDefinition {
         relations = relations == null ? List.of() : List.copyOf(relations);
+        sessionSettings = sessionSettings == null ? Map.of() : Map.copyOf(sessionSettings);
+    }
+
+    /** Without session setting overrides. */
+    public QueryDefinition(UUID id, String name, String description, UUID datasourceId, String datasourceName,
+                           String sqlText, ExecutionMode executionMode, UUID fixedCredentialId, String fixedCredentialName,
+                           boolean cacheEnabled, int cacheTtlSec, Integer timeoutSec, Integer maxRows, KeyMode keyMode,
+                           int version, boolean enabled, List<QueryParameter> parameters, List<QueryColumn> columns,
+                           Instant createdAt, Instant updatedAt, List<QueryRelation> relations, boolean pushDown) {
+        this(id, name, description, datasourceId, datasourceName, sqlText, executionMode, fixedCredentialId,
+                fixedCredentialName, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled, parameters,
+                columns, createdAt, updatedAt, relations, pushDown, Map.of());
     }
 
     /** Without the push-down flag (off). */

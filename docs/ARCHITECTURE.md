@@ -259,8 +259,9 @@ flowchart TD
 
 **Connections.**
 
-- Pass-Through und hinterlegte Identitäten: HikariCP-Pool pro `(Datenquelle, DB-User, SHA-256(Passwort))`, `maximumPoolSize=2`, `idleTimeout=5 min`, Pool wird nach Inaktivität komplett geschlossen. Excel-Refreshes treffen damit einen warmen Pool, Credentials bleiben aber nicht dauerhaft offen.
+- Pass-Through und hinterlegte Identitäten: HikariCP-Pool pro `(Datenquelle, DB-User, SHA-256(Passwort), Session-Einstellungen)`, `maximumPoolSize=2`, `idleTimeout=5 min`, Pool wird nach Inaktivität komplett geschlossen. Excel-Refreshes treffen damit einen warmen Pool, Credentials bleiben aber nicht dauerhaft offen.
 - `FIXED`-Accounts: regulärer Pool pro Query-Account, Größe konfigurierbar.
+- Session-Einstellungen (Datenquelle, von der Query überschreibbar) setzt `connectionInitSql` einmal pro Connection (`SessionSettings`: Allowlist pro Dialekt, ein generiertes Statement), mit `isolateInternalQueries`, damit das Rollback am Ende einer Ausführung PostgreSQL-`set_config` nicht zurücknimmt. Treiber-Properties gehen über `addDataSourceProperty` an den Treiber.
 - Jede Connection: `setReadOnly(true)`, `setAutoCommit(false)` + Rollback am Ende, Statement-Timeout und `maxRows` aus Datenquelle bzw. Query (Query darf Datenquellen-Limit nur unterschreiten).
 
 **SQL-Sicherheit.** SQL wird nur von Admins geschrieben, ist also vertrauenswürdig, aber: JSqlParser erzwingt `SELECT`/`WITH` (keine DML/DDL, kein `INTO`), Parameter werden nie konkateniert, die DB-Connection ist read-only, und pro Datenquelle gelten Timeout und Zeilenlimit. Fehlermeldungen an Clients enthalten nie SQL-Text. Jede Änderung an SQL, Parametern oder Datenquelle erzeugt einen Eintrag in `query_version` (Autor, Zeit, Kommentar); ältere Versionen können wiederhergestellt werden.
@@ -355,8 +356,8 @@ Spring Data JPA, Flyway-Migrationen unter `db/migration`. Standard H2 im Dateimo
 
 | Tabelle | Inhalt |
 |---|---|
-| `datasource` | Name, JDBC-URL, Treiberklasse, Limits, Pool-Einstellungen, Zeitzone |
-| `query_definition` | Name, Datenquelle, SQL, Modus, `FIXED`-Credential-Referenz, Cache-Einstellungen, Version, Status (aktiv/inaktiv) |
+| `datasource` | Name, JDBC-URL, Treiberklasse, Limits, Pool-Einstellungen, Zeitzone, Session-Einstellungen und Treiber-Properties (JSON) |
+| `query_definition` | Name, Datenquelle, SQL, Modus, `FIXED`-Credential-Referenz, Cache-Einstellungen, Session-Overrides (JSON), Version, Status (aktiv/inaktiv) |
 | `query_version` | Historie der Definition (SQL, Parameter als JSON, Datenquelle) mit Autor, Zeitstempel und Kommentar |
 | `query_parameter` | Name, Typ, Pflicht, Default, sensitiv |
 | `query_column` | Schema-Snapshot: Spalte, JDBC-Typ, EDM-Typ, Precision, Scale, Nullable, Key-Flag, sichtbar |

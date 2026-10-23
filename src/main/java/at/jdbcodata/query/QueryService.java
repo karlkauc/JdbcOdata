@@ -7,6 +7,7 @@ import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
 import at.jdbcodata.datasource.DatasourceEntity;
 import at.jdbcodata.datasource.DatasourceRepository;
+import at.jdbcodata.datasource.SessionSettings;
 import at.jdbcodata.identity.FixedCredentialEntity;
 import at.jdbcodata.identity.FixedCredentialRepository;
 import at.jdbcodata.identity.ServiceGroupRepository;
@@ -226,7 +227,8 @@ public class QueryService {
         }
         QueryDefinition updated = toRecord(e);
         audit.record("UPDATE", "QUERY", updated.id(), updated.name(), Map.of("version", updated.version(),
-                "newVersion", newVersion, "mode", updated.executionMode().name(), "enabled", updated.enabled()));
+                "newVersion", newVersion, "mode", updated.executionMode().name(), "enabled", updated.enabled(),
+                "sessionSettings", updated.sessionSettings()));
         events.publishEvent(new QueryDefinitionsChangedEvent());
         return updated;
     }
@@ -404,7 +406,7 @@ public class QueryService {
                 spec.timeoutSec(), spec.maxRows(), spec.keyMode() == null ? KeyMode.ROWID : spec.keyMode(), 0,
                 spec.enabled() == null || spec.enabled(), spec.parameters() == null ? List.of() : spec.parameters(),
                 List.of(), null, null, spec.relations() == null ? List.of() : spec.relations(),
-                Boolean.TRUE.equals(spec.pushDown()));
+                Boolean.TRUE.equals(spec.pushDown()), SessionSettings.validate(ds.getJdbcUrl(), spec.sessionSettings()));
     }
 
     public void validate(QuerySpec spec) {
@@ -525,6 +527,9 @@ public class QueryService {
         if (s.keyMode() != null) e.setKeyMode(s.keyMode());
         if (s.enabled() != null) e.setEnabled(s.enabled());
         if (s.pushDown() != null) e.setPushDown(s.pushDown());
+        // checked again when kept: the datasource may have changed to another database
+        e.setSessionSettings(SessionSettings.validate(ds.getJdbcUrl(),
+                s.sessionSettings() != null ? s.sessionSettings() : e.getSessionSettings()));
         e.replaceParameters(s.parameters() == null ? List.of() : s.parameters());
         if (s.relations() != null) {
             e.replaceRelations(s.relations());

@@ -8,6 +8,14 @@ datasources:
     defaultTimeoutSec: 60
     maxRows: 200000
     maxConcurrent: 5
+    # optional: applied after connecting (ALTER SESSION on Oracle; NLS_LANG is not read by the thin driver)
+    sessionSettings:
+      NLS_LANGUAGE: GERMAN
+      NLS_TERRITORY: AUSTRIA
+      NLS_SORT: GERMAN
+      NLS_DATE_FORMAT: DD.MM.YYYY
+    # optional: passed to the JDBC driver like URL options
+    # driverProperties: {oracle.jdbc.defaultNChar: "true"}
 
 queries:
   - name: Umsatz
@@ -22,6 +30,8 @@ queries:
         type: INT
         required: true
         description: Geschaeftsjahr
+    # optional: overrides single session settings of the datasource for this query
+    # sessionSettings: {NLS_SORT: BINARY}
     # optional: credentials used once for the schema snapshot at start (not stored)
     # snapshotCredentials: {username: report_ro, password: secret}
     # optional: key columns (sets keyMode COLUMNS semantics after the snapshot) and relations to other

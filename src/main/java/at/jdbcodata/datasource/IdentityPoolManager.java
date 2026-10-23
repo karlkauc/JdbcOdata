@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
@@ -20,9 +21,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Small, short-lived HikariCP pools per (datasource, db user, password hash). Repeated Excel refreshes by the
- * same user reuse a warm connection; pools idle for {@link #IDLE_EVICTION} are closed. Pass-through passwords are
- * kept only inside the pool configuration, never persisted.
+ * Small, short-lived HikariCP pools per (datasource, db user, password hash, session settings). Session settings
+ * are applied once per connection by {@code connectionInitSql}, so a query with overrides gets its own pool instead
+ * of resetting the session after each execution. Repeated Excel refreshes by the same user reuse a warm
+ * connection; pools idle for {@link #IDLE_EVICTION} are closed. Pass-through passwords are kept only inside the pool
+ * configuration, never persisted.
  */
 @Component
 public class IdentityPoolManager {
@@ -30,7 +33,7 @@ public class IdentityPoolManager {
     private static final Logger log = LoggerFactory.getLogger(IdentityPoolManager.class);
     private static final Duration IDLE_EVICTION = Duration.ofMinutes(5);
 
-    private record PoolKey(UUID datasourceId, String username, String passwordHash) {
+    private record PoolKey(UUID datasourceId, String username, String passwordHash, Map<String, String> settings) {
     }
 
     private static final class Pool {
@@ -44,17 +47,25 @@ public class IdentityPoolManager {
 
     private final Map<PoolKey, Pool> pools = new ConcurrentHashMap<>();
 
+    /** A connection with the session settings of the datasource. */
     public Connection connect(Datasource ds, String username, String password) throws SQLException {
-        PoolKey key = new PoolKey(ds.id(), username, sha256(password));
+        return connect(ds, ds.sessionSettings(), username, password);
+    }
+
+    /** A connection with the given (effective) session settings, see {@link SessionSettings#effective}. */
+    public Connection connect(Datasource ds, Map<String, String> sessionSettings, String username, String password)
+            throws SQLException {
+        Map<String, String> settings = new TreeMap<>(sessionSettings == null ? Map.of() : sessionSettings);
+        PoolKey key = new PoolKey(ds.id(), username, sha256(password), Map.copyOf(settings));
         Pool pool = pools.get(key);
         if (pool == null) {
-            pool = pools.computeIfAbsent(key, k -> new Pool(createPool(ds, username, password)));
+            pool = pools.computeIfAbsent(key, k -> new Pool(createPool(ds, settings, username, password)));
         }
         pool.lastUsed = Instant.now();
         return pool.dataSource.getConnection();
     }
 
-    private HikariDataSource createPool(Datasource ds, String username, String password) {
+    private HikariDataSource createPool(Datasource ds, Map<String, String> settings, String username, String password) {
         HikariConfig cfg = new HikariConfig();
         cfg.setJdbcUrl(ds.jdbcUrl());
         cfg.setUsername(username);
@@ -62,7 +73,14 @@ public class IdentityPoolManager {
         if (ds.driverClass() != null && !ds.driverClass().isBlank()) {
             cfg.setDriverClassName(ds.driverClass());
         }
-        cfg.setPoolName("jdbcodata-" + ds.name() + "-" + username);
+        ds.driverProperties().forEach(cfg::addDataSourceProperty);
+        String initSql = SessionSettings.initSql(ds.jdbcUrl(), settings);
+        if (initSql != null) {
+            cfg.setConnectionInitSql(initSql);
+            // commits the init statement: with auto-commit off, PostgreSQL would undo set_config on the first rollback
+            cfg.setIsolateInternalQueries(true);
+        }
+        cfg.setPoolName("jdbcodata-" + ds.name() + "-" + username + (settings.isEmpty() ? "" : "-" + sha256(settings.toString()).substring(0, 8)));
         cfg.setMaximumPoolSize(2);
         cfg.setMinimumIdle(0);
         cfg.setIdleTimeout(Duration.ofMinutes(1).toMillis());

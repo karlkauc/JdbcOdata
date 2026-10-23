@@ -123,7 +123,7 @@ public class SeedLoader implements ApplicationRunner {
                 bool(q, "cacheEnabled", false), integer(q, "cacheTtlSec"), integer(q, "timeoutSec"),
                 integer(q, "maxRows"), KeyMode.valueOf(str(q, "keyMode", "ROWID").toUpperCase()),
                 bool(q, "enabled", true), params, q.containsKey("relations") ? relations : null,
-                q.containsKey("pushDown") ? bool(q, "pushDown", false) : null);
+                q.containsKey("pushDown") ? bool(q, "pushDown", false) : null, stringMap(q, "sessionSettings"));
         QueryDefinition saved = queryService.upsertByName(spec);
 
         Map<String, Object> creds = map(q, "snapshotCredentials");
@@ -168,7 +168,17 @@ public class SeedLoader implements ApplicationRunner {
     private DatasourceSpec toDatasourceSpec(Map<String, Object> ds) {
         return new DatasourceSpec(str(ds, "name"), str(ds, "description"), str(ds, "jdbcUrl"), str(ds, "driverClass"),
                 str(ds, "timezone"), integer(ds, "defaultTimeoutSec"), integer(ds, "maxRows"),
-                integer(ds, "maxConcurrent"), bool(ds, "enabled", true));
+                integer(ds, "maxConcurrent"), bool(ds, "enabled", true), stringMap(ds, "sessionSettings"),
+                stringMap(ds, "driverProperties"));
+    }
+
+    /** {@code sessionSettings: {NLS_SORT: GERMAN}}; {@code null} when the key is missing (keeps the current values). */
+    private static Map<String, String> stringMap(Map<String, Object> m, String key) {
+        Object v = m == null ? null : m.get(key);
+        if (!(v instanceof Map<?, ?> source)) return null;
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        source.forEach((k, val) -> result.put(String.valueOf(k), val == null ? "" : String.valueOf(val)));
+        return result;
     }
 
     @SuppressWarnings("unchecked")

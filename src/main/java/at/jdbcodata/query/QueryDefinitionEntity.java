@@ -1,5 +1,6 @@
 package at.jdbcodata.query;
 
+import at.jdbcodata.common.StringMapJson;
 import at.jdbcodata.datasource.DatasourceEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -18,6 +19,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Entity
@@ -73,6 +75,9 @@ public class QueryDefinitionEntity {
     @Column(name = "push_down", nullable = false)
     private boolean pushDown = false;
 
+    @Column(name = "session_settings", columnDefinition = "TEXT")
+    private String sessionSettings;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -101,7 +106,7 @@ public class QueryDefinitionEntity {
                 parameters.stream().map(QueryParameterEntity::toRecord).toList(),
                 columns.stream().map(QueryColumnEntity::toRecord).toList(),
                 createdAt, updatedAt,
-                relations.stream().map(QueryRelationEntity::toRecord).toList(), pushDown);
+                relations.stream().map(QueryRelationEntity::toRecord).toList(), pushDown, getSessionSettings());
     }
 
     public void replaceRelations(List<QueryRelation> rels) {
@@ -153,6 +158,8 @@ public class QueryDefinitionEntity {
     public int getVersion() { return version; }
     public void setVersion(int version) { this.version = version; }
     public boolean isEnabled() { return enabled; }
+    public Map<String, String> getSessionSettings() { return StringMapJson.read(sessionSettings); }
+    public void setSessionSettings(Map<String, String> settings) { this.sessionSettings = StringMapJson.write(settings); }
     public boolean isPushDown() { return pushDown; }
     public void setPushDown(boolean pushDown) { this.pushDown = pushDown; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }

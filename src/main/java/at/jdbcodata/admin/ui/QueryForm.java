@@ -1,5 +1,6 @@
 package at.jdbcodata.admin.ui;
 
+import at.jdbcodata.datasource.SessionSettings;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.ParameterType;
@@ -139,6 +140,8 @@ public class QueryForm {
     private KeyMode keyMode = KeyMode.ROWID;
     private boolean enabled = true;
     private boolean pushDown;
+    @Size(max = 10_000)
+    private String sessionSettings = "";
 
     public static QueryForm from(QueryDefinition q) {
         QueryForm f = new QueryForm();
@@ -157,6 +160,7 @@ public class QueryForm {
         f.keyMode = q.keyMode();
         f.enabled = q.enabled();
         f.pushDown = q.pushDown();
+        f.sessionSettings = SessionSettings.toLines(q.sessionSettings());
         return f;
     }
 
@@ -168,7 +172,8 @@ public class QueryForm {
                 : relations.stream().filter(r -> r != null && r.name != null && !r.name.isBlank())
                         .map(RelationForm::toRecord).toList();
         return new QuerySpec(name, blankToNull(description), datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled,
-                cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params, rels, pushDown);
+                cacheTtlSec, timeoutSec, maxRows, keyMode, enabled, params, rels, pushDown,
+                SessionSettings.fromLines(sessionSettings));
     }
 
     private static String blankToNull(String s) {
@@ -204,5 +209,7 @@ public class QueryForm {
     public boolean isEnabled() { return enabled; }
     public boolean isPushDown() { return pushDown; }
     public void setPushDown(boolean pushDown) { this.pushDown = pushDown; }
+    public String getSessionSettings() { return sessionSettings; }
+    public void setSessionSettings(String sessionSettings) { this.sessionSettings = sessionSettings; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

@@ -2,6 +2,7 @@ package at.jdbcodata.admin.ui;
 
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceSpec;
+import at.jdbcodata.datasource.SessionSettings;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -27,6 +28,10 @@ public class DatasourceForm {
     @Min(1) @Max(1000)
     private Integer maxConcurrent = 10;
     private boolean enabled = true;
+    @Size(max = 10_000)
+    private String sessionSettings = "";
+    @Size(max = 10_000)
+    private String driverProperties = "";
 
     public static DatasourceForm from(Datasource d) {
         DatasourceForm f = new DatasourceForm();
@@ -39,12 +44,19 @@ public class DatasourceForm {
         f.maxRows = d.maxRows();
         f.maxConcurrent = d.maxConcurrent();
         f.enabled = d.enabled();
+        f.sessionSettings = SessionSettings.toLines(d.sessionSettings());
+        f.driverProperties = SessionSettings.toLines(d.driverProperties());
         return f;
     }
 
     public DatasourceSpec toSpec() {
         return new DatasourceSpec(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
-                maxConcurrent, enabled);
+                maxConcurrent, enabled, SessionSettings.fromLines(sessionSettings), SessionSettings.fromLines(driverProperties));
+    }
+
+    /** Session setting keys for the database of the current JDBC URL, for the hint below the field. */
+    public String getAllowedSessionKeys() {
+        return String.join(", ", SessionSettings.allowedKeys(jdbcUrl));
     }
 
     public String getName() { return name; }
@@ -65,4 +77,8 @@ public class DatasourceForm {
     public void setMaxConcurrent(Integer maxConcurrent) { this.maxConcurrent = maxConcurrent; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public String getSessionSettings() { return sessionSettings; }
+    public void setSessionSettings(String sessionSettings) { this.sessionSettings = sessionSettings; }
+    public String getDriverProperties() { return driverProperties; }
+    public void setDriverProperties(String driverProperties) { this.driverProperties = driverProperties; }
 }

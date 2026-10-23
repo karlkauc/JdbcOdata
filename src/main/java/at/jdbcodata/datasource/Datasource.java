@@ -1,6 +1,7 @@
 package at.jdbcodata.datasource;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 /** Immutable view of a configured target database. */
@@ -16,5 +17,20 @@ public record Datasource(
         int maxConcurrent,
         boolean enabled,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        Map<String, String> sessionSettings,
+        Map<String, String> driverProperties) {
+
+    public Datasource {
+        sessionSettings = sessionSettings == null ? Map.of() : Map.copyOf(sessionSettings);
+        driverProperties = driverProperties == null ? Map.of() : Map.copyOf(driverProperties);
+    }
+
+    /** Without session settings and driver properties. */
+    public Datasource(UUID id, String name, String description, String jdbcUrl, String driverClass, String timezone,
+                      int defaultTimeoutSec, int maxRows, int maxConcurrent, boolean enabled, Instant createdAt,
+                      Instant updatedAt) {
+        this(id, name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows, maxConcurrent, enabled,
+                createdAt, updatedAt, Map.of(), Map.of());
+    }
 }

@@ -9,6 +9,7 @@ import at.jdbcodata.query.QueryDefinitionRepository;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -68,7 +69,8 @@ public class DatasourceService {
         e.setCreatedAt(Instant.now());
         apply(e, spec);
         Datasource created = repository.save(e).toRecord();
-        audit.record("CREATE", "DATASOURCE", created.id(), created.name(), Map.of("jdbcUrl", created.jdbcUrl()));
+        audit.record("CREATE", "DATASOURCE", created.id(), created.name(), Map.of("jdbcUrl", created.jdbcUrl(),
+                "sessionSettings", created.sessionSettings(), "driverProperties", created.driverProperties()));
         return created;
     }
 
@@ -80,9 +82,18 @@ public class DatasourceService {
             throw new ConflictException("Datasource name '" + spec.name() + "' already exists");
         });
         apply(e, spec);
+        // query overrides were checked against the old database; another dialect has other keys
+        for (var q : queryRepository.findAllByDatasourceId(id)) {
+            try {
+                SessionSettings.validate(e.getJdbcUrl(), q.getSessionSettings());
+            } catch (InvalidRequestException ex) {
+                throw new InvalidRequestException("Query '" + q.getName() + "': " + ex.getMessage());
+            }
+        }
         Datasource updated = repository.save(e).toRecord();
         pools.closePoolsFor(id);
-        audit.record("UPDATE", "DATASOURCE", updated.id(), updated.name(), Map.of("jdbcUrl", updated.jdbcUrl(), "enabled", updated.enabled()));
+        audit.record("UPDATE", "DATASOURCE", updated.id(), updated.name(), Map.of("jdbcUrl", updated.jdbcUrl(), "enabled", updated.enabled(),
+                "sessionSettings", updated.sessionSettings(), "driverProperties", updated.driverProperties()));
         return updated;
     }
 
@@ -118,6 +129,7 @@ public class DatasourceService {
         try {
             // also covers datasources stored before the policy existed
             urlPolicy.check(ds.jdbcUrl(), ds.driverClass());
+            urlPolicy.checkDriverProperties(ds.driverProperties());
         } catch (InvalidRequestException e) {
             return ConnectionTestResult.failure(e.getMessage(), elapsedMs(start));
         }
@@ -126,10 +138,20 @@ public class DatasourceService {
                 Class.forName(ds.driverClass());
             }
             Properties props = new Properties();
+            props.putAll(ds.driverProperties());
             props.setProperty("user", username);
             props.setProperty("password", password == null ? "" : password);
             DriverManager.setLoginTimeout(10);
             try (Connection c = DriverManager.getConnection(ds.jdbcUrl(), props)) {
+                String initSql = SessionSettings.initSql(ds.jdbcUrl(), ds.sessionSettings());
+                if (initSql != null) {
+                    try (Statement st = c.createStatement()) {
+                        st.execute(initSql);
+                    } catch (SQLException e) {
+                        return ConnectionTestResult.failure("Session settings rejected: " + DbErrorClassifier.describe(e),
+                                elapsedMs(start));
+                    }
+                }
                 var meta = c.getMetaData();
                 return ConnectionTestResult.success(meta.getDatabaseProductName(), meta.getDatabaseProductVersion(),
                         elapsedMs(start));
@@ -156,7 +178,20 @@ public class DatasourceService {
         if (s.maxRows() != null) e.setMaxRows(s.maxRows());
         if (s.maxConcurrent() != null) e.setMaxConcurrent(s.maxConcurrent());
         if (s.enabled() != null) e.setEnabled(s.enabled());
+        // checked again when kept: the JDBC URL may now point to another database
+        e.setSessionSettings(SessionSettings.validate(s.jdbcUrl(),
+                s.sessionSettings() != null ? s.sessionSettings() : e.getSessionSettings()));
+        if (s.driverProperties() != null) {
+            urlPolicy.checkDriverProperties(s.driverProperties());
+            e.setDriverProperties(trimKeys(s.driverProperties()));
+        }
         e.setUpdatedAt(Instant.now());
+    }
+
+    private static Map<String, String> trimKeys(Map<String, String> map) {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        map.forEach((k, v) -> result.put(k.strip(), v.strip()));
+        return result;
     }
 
     private static String blankToNull(String s) {

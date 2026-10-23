@@ -121,6 +121,9 @@
             <label>Max. rows <input type="number" th:field="*{maxRows}" min="1" placeholder="Datasource default" data-label="Max. rows"></label>
             <label class="switch-row" title="Only with key 'Columns'. For large tables: $filter, $orderby, $top and $skip are passed to the database as SQL.">
               <input type="checkbox" class="switch" th:field="*{pushDown}" data-label="Push-down"><span>Push-down<small>Evaluate filters in the database</small></span></label>
+            <label>Session setting overrides
+              <textarea th:field="*{sessionSettings}" rows="3" class="mono" placeholder="NLS_SORT=GERMAN" data-label="Session settings"></textarea>
+              <small>KEY=VALUE per line; overrides the datasource defaults.</small></label>
           </div>
 
           <div class="card side-card" th:if="${query != null}">

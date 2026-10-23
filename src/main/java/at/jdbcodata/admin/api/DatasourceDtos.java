@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 
 final class DatasourceDtos {
@@ -25,11 +26,14 @@ final class DatasourceDtos {
             @Min(1) @Max(3600) Integer defaultTimeoutSec,
             @Min(1) Integer maxRows,
             @Min(1) @Max(1000) Integer maxConcurrent,
-            Boolean enabled) {
+            Boolean enabled,
+            Map<String, String> sessionSettings,
+            Map<String, String> driverProperties) {
 
+        /** Missing maps keep the stored session settings and driver properties, empty maps remove them. */
         DatasourceSpec toSpec() {
             return new DatasourceSpec(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
-                    maxConcurrent, enabled);
+                    maxConcurrent, enabled, sessionSettings, driverProperties);
         }
     }
 
@@ -45,12 +49,14 @@ final class DatasourceDtos {
             int maxConcurrent,
             boolean enabled,
             Instant createdAt,
-            Instant updatedAt) {
+            Instant updatedAt,
+            Map<String, String> sessionSettings,
+            Map<String, String> driverProperties) {
 
         static DatasourceResponse from(Datasource d) {
             return new DatasourceResponse(d.id(), d.name(), d.description(), d.jdbcUrl(), d.driverClass(),
                     d.timezone(), d.defaultTimeoutSec(), d.maxRows(), d.maxConcurrent(), d.enabled(),
-                    d.createdAt(), d.updatedAt());
+                    d.createdAt(), d.updatedAt(), d.sessionSettings(), d.driverProperties());
         }
     }
 

@@ -6,6 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -54,6 +59,44 @@ class IdentityPoolManagerTest {
         assertThatThrownBy(() -> pools.connect(ds, "owner", "nope"))
                 .isInstanceOf(DbAuthenticationException.class);
         assertThat(pools.activePoolCount()).isZero();
+    }
+
+    @Test
+    void appliesSessionSettingsInSeparatePools() throws Exception {
+        Datasource base = datasource("pool", URL);
+        Datasource ds = new Datasource(base.id(), "pool", null, URL, null, null, 30, 10, 1, true, Instant.now(),
+                Instant.now(), Map.of("TIME_ZONE", "+05:00"), Map.of());
+        try (Connection c = pools.connect(ds, "owner", "pw")) {
+            assertThat(offset(c)).isEqualTo(ZoneOffset.ofHours(5));
+            c.rollback(); // the executor rolls back after each statement; the setting must survive
+        }
+        try (Connection c = pools.connect(ds, "owner", "pw")) {
+            assertThat(offset(c)).isEqualTo(ZoneOffset.ofHours(5));
+        }
+        try (Connection c = pools.connect(ds, Map.of("TIME_ZONE", "-03:00"), "owner", "pw")) {
+            assertThat(offset(c)).isEqualTo(ZoneOffset.ofHours(-3));
+        }
+        assertThat(pools.activePoolCount()).isEqualTo(2);
+    }
+
+    @Test
+    void passesDriverProperties() throws Exception {
+        Datasource base = datasource("pool", URL);
+        Datasource ds = new Datasource(base.id(), "pool", null, URL, null, null, 30, 10, 1, true, Instant.now(),
+                Instant.now(), Map.of(), Map.of("DEFAULT_NULL_ORDERING", "HIGH"));
+        try (Connection c = pools.connect(ds, "owner", "pw");
+             ResultSet rs = c.createStatement().executeQuery(
+                     "SELECT SETTING_VALUE FROM INFORMATION_SCHEMA.SETTINGS WHERE SETTING_NAME = 'DEFAULT_NULL_ORDERING'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString(1)).isEqualTo("HIGH");
+        }
+    }
+
+    private static ZoneOffset offset(Connection c) throws Exception {
+        try (ResultSet rs = c.createStatement().executeQuery("SELECT CURRENT_TIMESTAMP")) {
+            rs.next();
+            return rs.getObject(1, OffsetDateTime.class).getOffset();
+        }
     }
 
     @Test

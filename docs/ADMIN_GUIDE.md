@@ -37,6 +37,47 @@ Zugangsdaten werden nicht gespeichert.
 Beispiele: `jdbc:oracle:thin:@//host:1521/SERVICE`, `jdbc:postgresql://host:5432/db`,
 `jdbc:mariadb://host:3306/db`, `jdbc:mysql://host:3306/db`.
 
+### Session-Einstellungen und Treiber-Properties
+
+**Session settings** (eine Zeile `KEY=VALUE` je Einstellung) setzt der Service direkt nach dem
+Verbindungsaufbau. Unter dem Feld steht, welche Schlüssel für die Datenbank der JDBC-URL erlaubt sind:
+
+| Datenbank | Erzeugtes Statement | Erlaubte Schlüssel |
+|---|---|---|
+| Oracle | `ALTER SESSION SET …` | `NLS_LANGUAGE`, `NLS_TERRITORY`, `NLS_SORT`, `NLS_DATE_FORMAT`, `NLS_DATE_LANGUAGE`, `NLS_TIMESTAMP_FORMAT`, `NLS_TIMESTAMP_TZ_FORMAT`, `NLS_NUMERIC_CHARACTERS`, `NLS_CURRENCY`, `NLS_ISO_CURRENCY`, `NLS_DUAL_CURRENCY`, `NLS_CALENDAR`, `TIME_ZONE` |
+| PostgreSQL | `SELECT set_config(…)` | `DateStyle`, `IntervalStyle`, `TimeZone`, `lc_monetary`, `lc_numeric`, `lc_time`, `search_path`, `extra_float_digits` |
+| MySQL/MariaDB | `SET SESSION …` | `time_zone`, `lc_time_names`, `sql_mode`, `collation_connection`, `div_precision_increment` |
+| H2 | `SET TIME ZONE …` | `TIME_ZONE` |
+
+Beispiel Oracle:
+
+```
+NLS_LANGUAGE=GERMAN
+NLS_TERRITORY=AUSTRIA
+NLS_SORT=GERMAN
+NLS_DATE_FORMAT=DD.MM.YYYY
+```
+
+`NLS_LANG` wirkt beim Thin-Treiber nicht. Das ist eine Umgebungsvariable des OCI-Clients; Sprache,
+Territorium und Formate setzt man hier einzeln. `NLS_COMP` ist bewusst nicht erlaubt, weil
+`LINGUISTIC` die binären Vergleiche des Push-Downs ändern würde.
+
+Werte dürfen Buchstaben, Ziffern, Leerzeichen und `. , : / + - "` enthalten, aber keine Hochkommas,
+Semikolons oder Backslashes. Bei PostgreSQL muss `DateStyle` mit `ISO` beginnen (z. B. `ISO, DMY`),
+sonst trennt der JDBC-Treiber die Verbindung; Datumsausgaben formatiert man dort mit `to_char`. Eine Query kann einzelne Schlüssel im Feld „Session setting overrides“
+überschreiben; alle anderen erbt sie von der Datenquelle. Eine Query mit Overrides bekommt eigene
+Verbindungen. Ein Zurücksetzen der Session nach der Ausführung ist so nicht nötig. Der Cache-Schlüssel
+enthält die wirksamen Einstellungen, ein geändertes Datumsformat liefert also keine alten Treffer.
+
+Die Einstellungen wirken auf das SQL der Query: `ORDER BY`, `TO_CHAR` ohne Formatmaske, implizite
+Datums- und Zahlkonvertierungen. OData-`$orderby`/`$filter` sortieren und vergleichen weiterhin binär,
+im Speicher wie im Push-Down. „Test connection“ führt die Einstellungen der Datenquelle mit aus und
+meldet ungültige Werte (z. B. `NLS_SORT=GERMANX`).
+
+**JDBC driver properties** werden dem Treiber wie URL-Optionen übergeben (z. B.
+`oracle.jdbc.defaultNChar=true`, `ApplicationName=jdbcodata`). Es gelten dieselben Verbote wie für
+URL-Optionen; Credentials (`user`, `password`, `…Password`, `…secret`) sind nicht erlaubt.
+
 ## 2. Query anlegen
 
 Queries → New query. Der Editor ist in Tabs gegliedert: **Definition** (Name, Datenquelle, SQL, Testlauf;
@@ -159,4 +200,6 @@ Snapshot-Spalten als Schlüssel, `relations` deklariert Beziehungen (`name`, `ta
 als `eigene: ziel`, `toMany`, `partner`); fehlt `relations` in der Datei, bleiben vorhandene Beziehungen
 erhalten. `pushDown: true` schaltet den Push-Down ein. `collectionColumns: [Kategorien, Positionen]` veröffentlicht
 SQL-Arrays und JSON-Spalten strukturiert (Werte, ComplexType-Collection oder ComplexType, je nachdem, was der Snapshot
-erkannt hat), `textCopyColumns` zusätzlich als Text.
+erkannt hat), `textCopyColumns` zusätzlich als Text. `sessionSettings` (an Datenquelle und Query) und
+`driverProperties` (an der Datenquelle) sind Maps, z. B. `sessionSettings: {NLS_SORT: GERMAN}`; fehlen sie,
+bleiben die gespeicherten Werte erhalten.

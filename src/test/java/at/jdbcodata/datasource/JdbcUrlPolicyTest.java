@@ -77,4 +77,27 @@ class JdbcUrlPolicyTest {
         assertThatThrownBy(() -> policy.check("jdbc:postgresql://db/x", "does.not.Exist"))
                 .isInstanceOf(InvalidRequestException.class).hasMessageContaining("not found");
     }
+
+    @Test
+    void allowsHarmlessDriverProperties() {
+        assertThatCode(() -> policy.checkDriverProperties(java.util.Map.of(
+                "oracle.jdbc.defaultNChar", "true", "ApplicationName", "jdbcodata", "sslmode", "require")))
+                .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"socketFactory", "INIT", "sslfactory", "password", "user", "javax.net.ssl.keyStorePassword",
+            "oracle.jdbc.loggerfile", "allowLoadLocalInfile", "bad key", "client_secret"})
+    void rejectsDangerousDriverProperties(String key) {
+        assertThatThrownBy(() -> policy.checkDriverProperties(java.util.Map.of(key, "x")))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void rejectsSqlAndMultiLineDriverPropertyValues() {
+        assertThatThrownBy(() -> policy.checkDriverProperties(java.util.Map.of("MODE", "x;RUNSCRIPT FROM 'y'")))
+                .isInstanceOf(InvalidRequestException.class);
+        assertThatThrownBy(() -> policy.checkDriverProperties(java.util.Map.of("ApplicationName", "a\nb")))
+                .isInstanceOf(InvalidRequestException.class);
+    }
 }

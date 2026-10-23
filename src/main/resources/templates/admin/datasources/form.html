@@ -26,6 +26,16 @@
       <label>Time zone <input type="text" th:field="*{timezone}" placeholder="e.g. Europe/Vienna">
         <small>For DATE/TIMESTAMP without time zone.</small></label>
     </div>
+    <h2>Session</h2>
+    <div class="grid2">
+      <label>Session settings
+        <textarea th:field="*{sessionSettings}" rows="4" class="mono" placeholder="NLS_SORT=GERMAN&#10;NLS_DATE_FORMAT=DD.MM.YYYY"></textarea>
+        <small>One KEY=VALUE per line, applied after connecting (e.g. ALTER SESSION on Oracle). Queries can override single keys.
+          <span th:if="${!#strings.isEmpty(form.allowedSessionKeys)}">Allowed: <span class="mono" th:text="${form.allowedSessionKeys}"></span></span></small></label>
+      <label>JDBC driver properties
+        <textarea th:field="*{driverProperties}" rows="4" class="mono" placeholder="oracle.jdbc.defaultNChar=true"></textarea>
+        <small>One KEY=VALUE per line, passed to the driver like URL options. No credentials.</small></label>
+    </div>
     <h2>Limits</h2>
     <div class="grid3">
       <label>Default timeout (s) <input type="number" th:field="*{defaultTimeoutSec}" min="1" max="3600">
