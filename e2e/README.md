@@ -61,6 +61,26 @@ JDBCODATA_ANNA_PASSWORD=$DEMO_ANNA_PASSWORD JDBCODATA_BERND_PASSWORD=$DEMO_BERND
 Die Tests schicken die Zugangsdaten mit jeder Anfrage. Bei aktivem anonymen Zugang kommt ohne Login kein 401, und
 Browser würden sonst gar keine Zugangsdaten senden.
 
+### Session-Einstellungen (schreibend, lokal)
+
+`tests/session-settings.spec.ts` legt eine eigene Datenquelle und Query `e2e_session_…` an und löscht sie am Ende
+über die REST-API wieder. Deshalb läuft die Spec nur mit `E2E_WRITE=1`, gedacht gegen die lokale Demo-Instanz
+(H2, einziger erlaubter Schlüssel `TIME_ZONE`). Die JDBC-URL übernimmt sie von der Datenquelle `demo`.
+- Datenquelle: fremder Schlüssel (`NLS_SORT`) mit Hinweis „Allowed: TIME_ZONE“, Hochkomma/Semikolon im Wert,
+  verbotene Treiber-Properties (`socketFactory`, `password`) werden abgelehnt.
+- Gespeicherte Werte stehen nach dem Neuladen im Formular.
+- „Test connection“ meldet eine ungültige Zeitzone als „Session settings rejected“ und ist mit `+05:00` erfolgreich.
+- Query: Der Testlauf zeigt den Offset der Datenquelle (`+05:00`), ein Override im ungespeicherten Formular gilt
+  sofort (`-03:00`), ein fremder Schlüssel wird beim Speichern abgelehnt, ohne Override gilt wieder die Datenquelle.
+
+```bash
+# Instanz wie oben starten (Admin-Passwort "playwright-pw"), dann
+cd e2e && E2E_WRITE=1 E2E_BASE_URL=http://localhost:18080 JDBCODATA_ADMIN_PASSWORD=playwright-pw \
+  npx playwright test session-settings
+```
+
+`E2E_SOURCE_DATASOURCE`, `E2E_DB_USER` und `E2E_DB_PASSWORD` ändern die Vorgaben `demo`/`demo`/`demo`.
+
 ### Über den OData Viewer
 
 Den Feed über den [OData Online Viewer](https://www.odata-viewer.online) prüft das Repo `odata-online-viewer`
