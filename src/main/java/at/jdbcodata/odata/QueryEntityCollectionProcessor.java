@@ -114,6 +114,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     private static final Logger log = LoggerFactory.getLogger(QueryEntityCollectionProcessor.class);
     private static final Locale LOCALE = Locale.ENGLISH;
+    static final int MAX_BATCH_REQUESTS = 100;
     static final String REFRESH_OPTION = "refresh";
 
     private final ProcessorSupport support;
@@ -1182,6 +1183,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         List<BatchRequestPart> parts = odata.createFixedFormatDeserializer().parseBatchRequest(req.getBody(), boundary,
                 BatchOptions.with().rawBaseUri(req.getRawBaseUri()).rawServiceResolutionUri(req.getRawServiceResolutionUri())
                         .build());
+        int requests = parts.stream().mapToInt(p -> p.getRequests().size()).sum();
+        if (requests > MAX_BATCH_REQUESTS) {
+            throw new ODataApplicationException("$batch is limited to " + MAX_BATCH_REQUESTS + " requests",
+                    HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
+        }
         List<ODataResponsePart> responses = new ArrayList<>();
         for (BatchRequestPart part : parts) {
             for (ODataRequest r : part.getRequests()) rewriteBatchRequest(r);
@@ -2349,8 +2355,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             draft.fail(e.isTimeout() ? ExecutionStatus.TIMEOUT : ExecutionStatus.DB_ERROR, "(ref " + ref + ") " + e.getMessage());
             int status = e.isTimeout() ? HttpStatusCode.GATEWAY_TIMEOUT.getStatusCode()
                     : HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode();
+            // vendor messages can name hosts and SQL fragments: fine for a database user, not for the public
+            String detail = request.identity().isAnonymous() ? "" : ": " + e.getMessage();
             throw new ODataApplicationException("Database error while executing '" + queryName + "' (ref " + ref
-                    + "): " + e.getMessage(), status, LOCALE, e);
+                    + ")" + detail, status, LOCALE, e);
         } catch (ODataApplicationException e) {
             if (draft.status == null) draft.fail(ExecutionStatus.ERROR, e.getMessage());
             throw e;

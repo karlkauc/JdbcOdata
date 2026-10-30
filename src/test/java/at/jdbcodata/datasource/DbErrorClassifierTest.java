@@ -45,4 +45,12 @@ class DbErrorClassifierTest {
         assertThat(DbErrorClassifier.describe(new SQLException((String) null))).isEqualTo("SQLException");
         assertThat(DbErrorClassifier.describe(new SQLException("x".repeat(400)))).hasSize(301);
     }
+
+    @Test
+    void missingDriverNamesTheLibFolder() {
+        RuntimeException e = DbErrorClassifier.translate(new RuntimeException("Failed to get driver instance",
+                new java.sql.SQLException("No suitable driver", "08001")), "erp");
+        org.assertj.core.api.Assertions.assertThat(e).isInstanceOf(DbExecutionException.class)
+                .hasMessageContaining("lib/").hasMessageContaining("erp");
+    }
 }

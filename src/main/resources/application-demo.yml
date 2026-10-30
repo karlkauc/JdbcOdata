@@ -1,5 +1,7 @@
 # Demo profile: creates a local H2 database with sample data (user demo / password demo)
 # and seeds one datasource and one query so the feed is immediately visible in Excel.
+server:
+  address: 127.0.0.1         # plain HTTP and a sample database: this machine only
 jdbcodata:
   security:
     allow-plain-http: true   # local demo without TLS

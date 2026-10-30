@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 /** Creates the first admin account from configuration when the table is empty (PRD FR-65). */
@@ -21,13 +23,16 @@ public class AdminBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AdminBootstrap.class);
     static final String INITIAL_PASSWORD_FILE = "initial-admin-password";
+    private static final int MIN_PASSWORD_LENGTH = 8;
 
     private final AdminUserService service;
     private final JdbcOdataProperties props;
+    private final Environment environment;
 
-    public AdminBootstrap(AdminUserService service, JdbcOdataProperties props) {
+    public AdminBootstrap(AdminUserService service, JdbcOdataProperties props, Environment environment) {
         this.service = service;
         this.props = props;
+        this.environment = environment;
     }
 
     @Override
@@ -46,8 +51,9 @@ public class AdminBootstrap implements ApplicationRunner {
             throw new IllegalStateException("jdbcodata.admin.password is still the placeholder from an example file; "
                     + "set a real password or leave it empty for a generated one");
         }
-        if (!generated && password.length() < 8) {
-            log.warn("The configured admin password is shorter than 8 characters; consider a longer one");
+        if (!generated && password.length() < MIN_PASSWORD_LENGTH && !environment.acceptsProfiles(Profiles.of("demo"))) {
+            throw new IllegalStateException("jdbcodata.admin.password must have at least " + MIN_PASSWORD_LENGTH
+                    + " characters; set a longer one or leave it empty for a generated one");
         }
         service.create(new AdminUserService.AdminUserSpec(props.admin().user(), password, AdminRole.ADMIN, true), false);
         if (generated) {

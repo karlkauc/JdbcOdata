@@ -58,8 +58,8 @@ public final class ParameterBinder {
                 case TIMESTAMP -> parseTimestamp(v);
             };
         } catch (NumberFormatException | DateTimeParseException e) {
-            throw new InvalidRequestException("Parameter '" + p.name() + "' expects " + p.type()
-                    + ", got '" + raw + "'");
+            // not the value itself: it ends up in the execution log and the parameter may be sensitive
+            throw new InvalidRequestException("Parameter '" + p.name() + "' expects " + p.type());
         }
     }
 

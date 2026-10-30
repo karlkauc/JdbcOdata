@@ -17,6 +17,10 @@ public final class DbErrorClassifier {
         if (isAuthFailure(sql)) {
             return new DbAuthenticationException(datasourceName, sql);
         }
+        if (sql.getMessage() != null && sql.getMessage().startsWith("No suitable driver")) {
+            return new DbExecutionException("No JDBC driver for the URL of '" + datasourceName
+                    + "'; put the driver JAR into lib/ (Oracle is not bundled)", false, sql);
+        }
         boolean timeout = sql instanceof SQLTimeoutException
                 || "57014".equals(sql.getSQLState())      // PostgreSQL query_canceled
                 || sql.getErrorCode() == 1013              // Oracle ORA-01013 user requested cancel

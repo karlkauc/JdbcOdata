@@ -23,4 +23,10 @@ class BasicCredentialsTest {
         assertThat(BasicCredentials.fromHeader("Basic !!!")).isEmpty();
         assertThat(BasicCredentials.fromHeader("Basic " + Base64.getEncoder().encodeToString("nocolon".getBytes()))).isEmpty();
     }
+
+    @Test
+    void rejectsLineBreaksInUsernames() {
+        String header = "Basic " + Base64.getEncoder().encodeToString("maria\r\nforged log line:pw".getBytes());
+        assertThat(BasicCredentials.fromHeader(header)).isEmpty();
+    }
 }

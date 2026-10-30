@@ -15,6 +15,8 @@ public record BasicCredentials(String username, String password) {
             String decoded = new String(Base64.getDecoder().decode(trimmed.substring(6).trim()), StandardCharsets.UTF_8);
             int colon = decoded.indexOf(':');
             if (colon <= 0) return Optional.empty();
+            // the name goes into logs: no forged lines
+            if (decoded.substring(0, colon).chars().anyMatch(Character::isISOControl)) return Optional.empty();
             return Optional.of(new BasicCredentials(decoded.substring(0, colon), decoded.substring(colon + 1)));
         } catch (IllegalArgumentException e) {
             return Optional.empty();

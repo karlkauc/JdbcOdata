@@ -39,13 +39,13 @@ public class JsonErrorProcessor implements ErrorProcessor {
         Exception ex = error.getException();
         if (ex instanceof ODataApplicationException || ex instanceof ODataLibraryException || ex == null) {
             if (error.getStatusCode() >= 500) {
-                log.error("OData request {} failed: {}", request.getRawRequestUri(), error.getMessage(), ex);
+                log.error("OData request {} failed: {}", request.getRawODataPath(), error.getMessage(), ex);
             } else {
-                log.debug("OData request {} rejected with {}: {}", request.getRawRequestUri(), error.getStatusCode(),
+                log.debug("OData request {} rejected with {}: {}", request.getRawODataPath(), error.getStatusCode(),
                         error.getMessage());
             }
         } else {
-            log.error("Unexpected error on OData request {}", request.getRawRequestUri(), ex);
+            log.error("Unexpected error on OData request {}", request.getRawODataPath(), ex);
             error.setStatusCode(HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode());
             error.setMessage("Internal server error");
         }

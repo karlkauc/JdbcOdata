@@ -25,8 +25,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class JdbcUrlPolicy {
 
-    static final List<String> DEFAULT_PREFIXES = List.of(
-            "jdbc:postgresql:", "jdbc:mariadb:", "jdbc:oracle:thin:", "jdbc:h2:tcp:", "jdbc:h2:ssl:");
+    /** Not H2 over TCP: its server can hand this JVM serialized Java objects, so it needs an explicit prefix. */
+    static final List<String> DEFAULT_PREFIXES = List.of("jdbc:postgresql:", "jdbc:mariadb:", "jdbc:oracle:thin:");
 
     /** Lower-case option names that load classes or files, run SQL on connect or switch off read-only mode. */
     static final Set<String> FORBIDDEN_OPTIONS = Set.of(
@@ -34,11 +34,13 @@ public class JdbcUrlPolicy {
             "socketfactory", "socketfactoryarg", "sslfactory", "sslfactoryarg", "sslhostnameverifier",
             "sslpasswordcallback", "authenticationpluginclassname", "loggerfile", "readonlymode",
             "allowlocalinfile", "allowloadlocalinfile", "allowurlinlocalinfile", "allowmultiqueries", "initsql",
-            "autodeserialize", "queryinterceptors", "statementinterceptors", "connectionlifecycleinterceptors");
+            "autodeserialize", "queryinterceptors", "statementinterceptors", "connectionlifecycleinterceptors",
+            "connectexecutor", "connectexecutorarg", "classloaderstrategy", "xmlfactoryfactory", "gsslib", "jaaslogin",
+            "options", "service", "sessionvariables", "credentialtype", "tlssockettype", "localsocket", "pipe");
 
     /** {@code password=}/{@code pwd=} options, {@code //user:pass@host} and Oracle's {@code thin:user/pass@host}. */
     private static final Pattern CREDENTIALS_IN_URL = Pattern.compile(
-            "[;?&:]\\s*(password|pwd)\\s*=|//[^/@?;]*:[^/@?;]*@|^jdbc:oracle:thin:[^@/]+/[^@]+@");
+            "[;?&:]\\s*(password|pwd|sslpassword|keystorepassword|truststorepassword)\\s*=|//[^/@?;]*:[^/@?;]*@|^jdbc:oracle:thin:[^@/]+/[^@]+@");
 
     private static final Pattern DRIVER_PROPERTY_NAME = Pattern.compile("[a-z0-9_.\\-]{1,200}");
     private static final Pattern CREDENTIAL_PROPERTY = Pattern.compile("password|passwd|pwd|secret|credential|token");
@@ -66,8 +68,7 @@ public class JdbcUrlPolicy {
     public void check(String jdbcUrl, String driverClass) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) throw new InvalidRequestException("JDBC URL is required");
         String url = decode(jdbcUrl.strip()).toLowerCase(Locale.ROOT);
-        boolean embeddedH2 = url.startsWith("jdbc:h2:") && !url.startsWith("jdbc:h2:tcp:") && !url.startsWith("jdbc:h2:ssl:");
-        if (!(embeddedH2 ? allowEmbeddedH2 : prefixes.stream().anyMatch(url::startsWith))) {
+        if (!(isEmbeddedH2(jdbcUrl.strip(), url) ? allowEmbeddedH2 : prefixes.stream().anyMatch(url::startsWith))) {
             throw new InvalidRequestException("JDBC URL not allowed. Allowed: " + String.join(", ", prefixes)
                     + " (more via jdbcodata.security.allowed-jdbc-urls; embedded H2 only with allow-embedded-h2)");
         }
@@ -86,6 +87,15 @@ public class JdbcUrlPolicy {
             throw new InvalidRequestException("JDBC URL must not contain SQL");
         }
         if (driverClass != null && !driverClass.isBlank()) checkDriverClass(driverClass.strip());
+    }
+
+    /**
+     * Decided on the raw URL, because H2 matches {@code tcp:} and {@code ssl:} case-sensitively and without decoding:
+     * {@code jdbc:h2:TCP:/x} and {@code jdbc:h2:%74cp:/x} open an embedded file database.
+     */
+    private static boolean isEmbeddedH2(String rawUrl, String normalizedUrl) {
+        return normalizedUrl.startsWith("jdbc:h2:")
+                && !rawUrl.startsWith("jdbc:h2:tcp:") && !rawUrl.startsWith("jdbc:h2:ssl:");
     }
 
     /**

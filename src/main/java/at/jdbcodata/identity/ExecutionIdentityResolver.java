@@ -85,6 +85,7 @@ public class ExecutionIdentityResolver {
         if (context.isServiceUser() || context.isAnonymous() || visible.isEmpty()) return visible;
         Set<UUID> accepted = new HashSet<>();
         DbAuthenticationException rejected = null;
+        RuntimeException unreachable = null;
         for (UUID datasourceId : visible.stream().map(QueryDefinition::datasourceId).collect(Collectors.toSet())) {
             try {
                 verifyLogin(datasourceService.require(datasourceId), context.credentials().username(),
@@ -93,10 +94,12 @@ public class ExecutionIdentityResolver {
             } catch (DbAuthenticationException e) {
                 rejected = e;
             } catch (RuntimeException e) {
-                accepted.add(datasourceId);
+                // an unreachable database proves nothing about the login, so its schema stays hidden
+                unreachable = e;
             }
         }
         if (accepted.isEmpty() && rejected != null) throw rejected;
+        if (accepted.isEmpty() && unreachable != null) throw unreachable;
         return visible.stream().filter(q -> accepted.contains(q.datasourceId())).toList();
     }
 

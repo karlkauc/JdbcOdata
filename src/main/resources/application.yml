@@ -40,9 +40,9 @@ management:
 jdbcodata:
   admin:
     user: admin
-    password: ""          # empty: a random password is generated and logged at startup
+    password: ""          # empty: a random password is written to <data-dir>/initial-admin-password
   odata:
-    max-rows: 500000       # hard upper bound per result
+    max-rows: 100000       # hard upper bound per result; results are held in memory, raise it together with the heap
     default-timeout-sec: 60
     concurrency-wait-ms: 2000   # wait for a free execution slot of a datasource before answering 503
     anonymous-user: ""          # service user for requests without Basic credentials (public demo); empty = off

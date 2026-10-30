@@ -164,6 +164,18 @@ class ProtocolFeaturesTest extends DemoProfileTest {
     }
 
     @Test
+    void batchRejectsTooManyRequests() throws Exception {
+        StringBuilder body = new StringBuilder();
+        for (int i = 0; i <= QueryEntityCollectionProcessor.MAX_BATCH_REQUESTS; i++) {
+            body.append(String.join("\r\n", "--batch_1", "Content-Type: application/http",
+                    "Content-Transfer-Encoding: binary", "", "GET Sales(1) HTTP/1.1", "", "", ""));
+        }
+        HttpResponse<String> r = sendRaw(body + "--batch_1--\r\n");
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(400);
+        assertThat(r.body()).contains("limited to");
+    }
+
+    @Test
     void batchPartsGetTheSameRewritesAsSingleRequests() throws Exception {
         String body = String.join("\r\n",
                 "--batch_1",

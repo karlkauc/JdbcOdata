@@ -38,7 +38,7 @@ public class DatasourceEntity {
     private int defaultTimeoutSec = 60;
 
     @Column(name = "max_rows", nullable = false)
-    private int maxRows = 500_000;
+    private int maxRows = 100_000;
 
     @Column(name = "max_concurrent", nullable = false)
     private int maxConcurrent = 10;
