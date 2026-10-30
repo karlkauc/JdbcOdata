@@ -15,7 +15,31 @@
   <artifactId>jdbcodata</artifactId>
   <version>1.0.0</version>
   <name>JdbcOdata</name>
-  <description>OData V4 feeds for company databases, for Excel and PowerBI</description>
+  <description>OData V4 feeds for company databases, for Excel and Power BI</description>
+  <url>https://github.com/karlkauc/JdbcOdata</url>
+  <inceptionYear>2026</inceptionYear>
+
+  <licenses>
+    <license>
+      <name>MIT License</name>
+      <url>https://opensource.org/license/mit</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>karlkauc</id>
+      <name>Karl Kauc</name>
+      <url>https://github.com/karlkauc</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/karlkauc/JdbcOdata.git</connection>
+    <developerConnection>scm:git:git@github.com:karlkauc/JdbcOdata.git</developerConnection>
+    <url>https://github.com/karlkauc/JdbcOdata</url>
+  </scm>
 
   <properties>
     <java.version>21</java.version>
@@ -150,11 +174,6 @@
       <artifactId>mariadb-java-client</artifactId>
       <scope>runtime</scope>
     </dependency>
-    <dependency>
-      <groupId>com.oracle.database.jdbc</groupId>
-      <artifactId>ojdbc11</artifactId>
-      <scope>runtime</scope>
-    </dependency>
 
     <!-- YAML seed -->
     <dependency>
@@ -285,6 +304,18 @@
     </plugins>
   </build>
   <profiles>
+    <!-- ./mvnw -Poracle clean package: builds in the Oracle driver for your own use. It is proprietary (Oracle Free Use Terms),
+         so released artefacts do not contain it; there it goes into lib/ like any other extra driver. -->
+    <profile>
+      <id>oracle</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.oracle.database.jdbc</groupId>
+          <artifactId>ojdbc11</artifactId>
+          <scope>runtime</scope>
+        </dependency>
+      </dependencies>
+    </profile>
     <!-- ./mvnw -Psecurity verify: known CVEs in dependencies (NFR-05). NVD_API_KEY speeds up the database download. -->
     <profile>
       <id>security</id>
