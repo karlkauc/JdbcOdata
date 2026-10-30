@@ -1,0 +1,28 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Remove passwords, host names and real data.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: JdbcOdata version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Database and client
+      placeholder: PostgreSQL 16, Excel 365

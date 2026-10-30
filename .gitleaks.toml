@@ -1,0 +1,8 @@
+# Default rules plus known fixtures: the bytes 0..31 as master key, a sample delta token and curl examples in the docs.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures and documentation examples, not secrets"
+regexes = ['''AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=''', '''^demo:demo$''', '''^report_ro:secret$''']
+paths = ['''src/test/java/at/jdbcodata/odata/DeltaLinkTest\.java''']

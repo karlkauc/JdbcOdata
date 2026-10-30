@@ -14,7 +14,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.data-dir` | `./data` | Verzeichnis für Key-Datei und H2-Dateien |
 | `jdbcodata.meta.url` | H2-Datei in `data/` | JDBC-URL der Metadaten-DB (H2 oder PostgreSQL) |
 | `jdbcodata.meta.username` / `password` | `sa` / leer | Login der Metadaten-DB |
-| `jdbcodata.odata.max-rows` | `500000` | Harte Obergrenze pro Ergebnis (über Datenquelle und Query nur unterschreitbar) |
+| `jdbcodata.odata.max-rows` | `100000` | Harte Obergrenze pro Ergebnis (über Datenquelle und Query nur unterschreitbar) |
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout, wenn die Datenquelle keinen setzt |
 | `jdbcodata.odata.concurrency-wait-ms` | `2000` | Wartezeit auf einen freien Ausführungsplatz der Datenquelle, danach 503 |
 | `jdbcodata.odata.page-size` | `0` | Serverseitiges Paging: Zeilen pro Antwort, danach `@odata.nextLink` mit `$skiptoken`. `0` = aus. Clients können mit `Prefer: odata.maxpagesize=n` kleinere Seiten anfordern (bei gesetztem Wert nie größer). Excel und Power BI folgen den Links automatisch. |
@@ -26,7 +26,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.stats.async` | `true` | Protokoll über eigenen Writer-Thread schreiben |
 | `jdbcodata.security.allow-plain-http` | `false` | Start ohne TLS erlauben (nur hinter TLS-Proxy oder lokal) |
 | `jdbcodata.security.rate-limit-per-minute` | `20` | Fehlversuche pro Client-IP, danach 429; pro Benutzername gilt das Fünffache (verteilte Angriffe), damit ein einzelner Client keinen fremden User aussperren kann. Ein Zähler läuft eine Minute nach dem letzten Fehlversuch ab; `0` deaktiviert |
-| `jdbcodata.security.allowed-jdbc-urls` | leer | Zusätzliche JDBC-URL-Präfixe für Treiber aus `lib/`, z. B. `jdbc:sqlserver:`. Immer erlaubt: `jdbc:postgresql:`, `jdbc:mariadb:`, `jdbc:oracle:thin:`, `jdbc:h2:tcp:`, `jdbc:h2:ssl:`. Optionen, die Klassen oder Dateien laden, beim Verbinden SQL ausführen oder Read-only abschalten (`INIT`, `socketFactory`, `sslfactory`, `readOnlyMode`, `allowLocalInfile`, `allowMultiQueries`, `initSql` …), und Passwörter in der URL werden abgelehnt |
+| `jdbcodata.security.allowed-jdbc-urls` | leer | Zusätzliche JDBC-URL-Präfixe für Treiber aus `lib/`, z. B. `jdbc:sqlserver:`. Immer erlaubt: `jdbc:postgresql:`, `jdbc:mariadb:`, `jdbc:oracle:thin:`. H2 über TCP/SSL nur mit eigenem Präfix (`jdbc:h2:tcp:`). Optionen, die Klassen oder Dateien laden, beim Verbinden SQL ausführen oder Read-only abschalten (`INIT`, `socketFactory`, `sslfactory`, `readOnlyMode`, `allowLocalInfile`, `allowMultiQueries`, `initSql` …), und Passwörter in der URL werden abgelehnt |
 | `jdbcodata.security.allow-embedded-h2` | `false` | Eingebettete H2-Datenbanken (`jdbc:h2:mem:`, `jdbc:h2:file:`) als Datenquelle erlauben. Sie laufen in der JVM des Service und könnten dessen Dateien lesen (Master-Key, Metadaten-DB): nur Demo-Profil und Tests |
 | `jdbcodata.seed.file` | leer | YAML mit Datenquellen und Queries, beim Start per Name eingespielt |
 | `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator-Endpunkte; `/actuator/prometheus` nur für Admin-Konten |
@@ -37,3 +37,5 @@ Profile: `demo` legt eine lokale H2-Beispieldatenbank an, lädt `seed-demo.yml` 
 
 Zusätzliche JDBC-Treiber: JAR-Dateien in `lib/` legen; die Start-Skripte und das Docker-Image laden sie über
 `-Dloader.path=lib`.
+
+**Oracle:** Der Treiber wird nicht mitgeliefert. `ojdbc11.jar` nach `lib/` legen (ZIP: `-Dloader.path=lib`, Docker: Volume `/app/lib`) oder selbst mit `./mvnw -Poracle clean package` bauen. Die URL-Regel `jdbc:oracle:thin:` ist bereits erlaubt.
