@@ -11,5 +11,9 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "desktop", use: { ...devices["Desktop Chrome"] } }],
+  // the suffix keeps test runs out of the usage statistics of the public demo
+  projects: [{
+    name: "desktop",
+    use: { ...devices["Desktop Chrome"], userAgent: `${devices["Desktop Chrome"].userAgent} jdbcodata-e2e` },
+  }],
 });

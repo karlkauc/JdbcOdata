@@ -15,8 +15,8 @@ final class UsageClassifier {
     static final String SCRIPT = "script";
     static final String OTHER = "other";
 
-    private static final List<String> BOTS = List.of("bot", "crawl", "spider", "scan", "headlesschrome", "audit",
-            "leakix", "zgrab", "censys", "nmap", "nuclei", "masscan", "expanse", "slurp");
+    private static final List<String> BOTS = List.of("bot", "crawl", "spider", "scan", "headlesschrome", "jdbcodata-e2e",
+            "audit", "leakix", "zgrab", "censys", "nmap", "nuclei", "masscan", "expanse", "slurp");
     private static final List<String> SCRIPTS = List.of("curl", "wget", "python-requests", "postman", "insomnia",
             "java/", "okhttp", "powershell", "go-http-client", "node", "axios");
     private static final List<String> MOBILE = List.of("mobile", "android", "iphone", "ipad");
