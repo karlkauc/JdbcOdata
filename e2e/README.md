@@ -25,13 +25,6 @@ Screenshots landen in `$PW_DIR/shots`. Der Check ist nicht Teil von `mvnw verify
 `screenshots/` enthält die Aufnahmen des letzten Laufs: Login, Übersicht, Datenquelle mit Verbindungstest,
 Query-Editor nach Testlauf und Snapshot, Service-User mit hinterlegten Credentials, FIXED-Query mit Freigaben,
 Statistik, Einstellungen, Query-Liste, Cache, Audit-Log, Admin-Konten sowie die Übersicht bei 420 px Breite.
-`screenshots/before/` hält den Stand von Release 1.0.0 vor dem UI-Polishing; `screenshots/compare.html` zeigt
-beide Stände nebeneinander (einfach im Browser öffnen). Ein neuer Lauf schreibt nach `$PW_DIR/shots`; zum
-Aktualisieren von dort kopieren.
-
-`14-live-status20-dashboard.png` und `15-live-status20-queries.png` stammen nicht aus `check.mjs`, sondern aus dem
-Live-Deployment `https://odata.status20.net` (siehe `deploy/odata.status20.net/`): Übersicht mit der Datenquelle
-`demo_postgres` und die Query-Liste mit den vier PostgreSQL-Queries, aufgenommen durch den Host-Apache.
 
 ## Live-Tests gegen eine laufende Instanz (`npx playwright test`)
 
@@ -94,8 +87,8 @@ Ein zweiter Test prüft, dass **Run** die im Daten-Explorer eingetippten Zugangs
 anonymen Zugang hat, fiele eine fehlende Anmeldung sonst nicht als 401 auf, sondern nur durch andere Daten.
 
 ```bash
-cd ~/webdav/odata-online-viewer/e2e
-set -a && . ~/webdav/JdbcOdata/deploy/odata.status20.net/.env && set +a
+cd ../odata-online-viewer/e2e   # Repo karlkauc/odata-online-viewer neben diesem Repo
+set -a && . ../../JdbcOdata/deploy/odata.status20.net/.env && set +a
 E2E_EXTERNAL=1 E2E_BASE_URL=https://www.odata-viewer.online \
 JDBCODATA_PASSWORD=$DEMO_READER_PASSWORD JDBCODATA_NORD_PASSWORD=$DEMO_NORD_PASSWORD \
 JDBCODATA_ANNA_PASSWORD=$DEMO_ANNA_PASSWORD JDBCODATA_BERND_PASSWORD=$DEMO_BERND_PASSWORD \

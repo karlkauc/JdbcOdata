@@ -2,6 +2,7 @@ package at.jdbcodata.odata;
 
 import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.datasource.DbAuthenticationException;
+import at.jdbcodata.datasource.DbExecutionException;
 import at.jdbcodata.identity.BasicCredentials;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.identity.IdentityContext;
@@ -94,6 +95,10 @@ public class ODataServlet extends HttpServlet {
                 identityResolver.onRejectedLogin(context);
                 support.rateLimiter().recordFailure(req.getRemoteAddr(), context.caller());
                 unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
+                return;
+            } catch (DbExecutionException e) {
+                log.warn("Login of '{}' could not be verified: {}", context.caller(), e.getMessage());
+                writeJsonError(resp, 503, "Database temporarily unavailable");
                 return;
             }
             ServiceMetadata metadata = edmRegistry.serviceMetadata(visible);

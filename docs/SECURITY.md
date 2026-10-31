@@ -7,8 +7,8 @@ Bedrohungsmodell, Betriebsregeln und Ergebnis der Security Review vom 19.10.2026
 
 | Akteur | Darf | Darf nicht |
 |---|---|---|
-| Anonymer Internet-Client | Bei gesetztem `anonymous-user`: Queries, die genau diesem Service-User (oder seiner Gruppe) freigegeben sind | Schema oder Daten anderer Queries sehen, Logins unbegrenzt raten, fremde User aussperren |
-| Pass-Through-Aufrufer | Queries der Datenquellen, an denen sein DB-Login gilt; die DB entscheidet über Zeilen (RLS, Grants) | `$metadata` ohne gültigen Login, Ergebnisse oder Async-Jobs anderer Aufrufer |
+| Anonymer Internet-Client | Bei gesetztem `anonymous-user`: Daten der Queries, die diesem Service-User (oder seiner Gruppe) freigegeben sind oder für die er hinterlegte Credentials hat. `$metadata` zeigt zusätzlich das Schema aller CALLER-Queries (gewollt: Explorer sehen, wofür sich ein Login lohnt) | Schema von FIXED-Queries ohne Freigabe sehen, Daten anderer Queries lesen, Logins unbegrenzt raten, fremde User aussperren |
+| Pass-Through-Aufrufer | Queries der Datenquellen, an denen sein DB-Login gilt; die DB entscheidet über Zeilen (RLS, Grants) | `$metadata` ohne gültigen Login (auch nicht während eines DB-Ausfalls: dann 503 oder nur die erreichbaren Datenquellen), Ergebnisse oder Async-Jobs anderer Aufrufer |
 | Service-User | Hinterlegte Credentials, FIXED-Queries mit Freigabe | Hinterlegte Passwörter auslesen |
 | VIEWER (Admin-UI) | Lesen von Konfiguration, Statistik, Cache, Audit | Ändern; Passwörter oder sensible Parameterwerte sehen |
 | ADMIN (Admin-UI) | Datenquellen, Queries, Konten verwalten | Code auf dem Server ausführen, Dateien des Service lesen (Master-Key, Metadaten-DB) |
@@ -23,7 +23,7 @@ der Feed jede unbekannte Basic-Auth-Anmeldung als DB-Login weiterreicht.
 |---|---|
 | Client-IP | `getRemoteAddr()`; hinter dem Proxy setzt sie Tomcats RemoteIpValve (`server.forward-headers-strategy=native`) nur aus `X-Forwarded-For` vertrauenswürdiger Proxies. `framework` erzeugt eine Warnung beim Start |
 | Rate-Limit | `RateLimitFilter` prüft jede Anfrage mit Basic Auth (auch auf UI-Pfaden), `/odata`, `/api` und den Login-POST auf dem dekodierten Pfad. Sperre pro IP ab dem Limit, pro Benutzername erst ab dem Fünffachen; Zähler läuft eine Minute nach dem letzten Fehlversuch ab |
-| JDBC-URLs | `JdbcUrlPolicy`: nur bekannte Netzwerk-Treiber (erweiterbar), keine Optionen, die Klassen/Dateien laden, SQL beim Verbinden ausführen oder Read-only abschalten, keine Passwörter in der URL, Treiberklasse muss `java.sql.Driver` sein. Eingebettetes H2 nur mit `allow-embedded-h2` (Demo, Tests) |
+| JDBC-URLs | `JdbcUrlPolicy`: nur bekannte Netzwerk-Treiber (erweiterbar), keine Optionen, die Klassen/Dateien laden, SQL beim Verbinden ausführen oder Read-only abschalten, keine Passwörter in der URL, Treiberklasse muss `java.sql.Driver` sein. Eingebettetes H2 nur mit `allow-embedded-h2` (Demo, Tests); H2 über TCP/SSL nur mit eigenem Präfix, die Einstufung folgt der unveränderten URL wie in H2 selbst. Die Optionen sind eine Sperrliste, keine Freigabeliste: Sie deckt die bekannten Optionen ab, nicht jede eines künftigen Treibers |
 | Session/Treiber | `SessionSettings`: nur bekannte Schlüssel pro Dialekt, Werte ohne Hochkomma, Semikolon und Backslash; das Statement erzeugt der Service. `JdbcUrlPolicy.checkDriverProperties`: dieselben verbotenen Optionen wie in der URL, keine Credentials, keine Steuerzeichen, kein SQL |
 | Admin-SQL | `SqlValidator`: nur `SELECT`, keine schreibenden CTEs, kein `SELECT INTO` (auch in UNION-Zweigen), kein `FOR UPDATE/SHARE`, keine `/*! */`-Kommentare |
 | OData-Identität | `$metadata` und Service-Dokument erst nach gültigem DB-Login (Pass-Through) bzw. Service-Passwort; einheitliche 401-Meldung ohne Datasource- oder User-Namen. „Alle Authentifizierten“ schließt den anonymen Zugang aus |

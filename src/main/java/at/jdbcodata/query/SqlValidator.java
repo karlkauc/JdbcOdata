@@ -28,8 +28,8 @@ public final class SqlValidator {
             throw new InvalidRequestException("Only SELECT statements are allowed, found "
                     + statement.getClass().getSimpleName().toUpperCase());
         }
-        // MySQL/MariaDB run the content of /*! ... */ although every parser treats it as a comment
-        if (sql.contains("/*!")) {
+        // MySQL/MariaDB run the content of /*! ... */ and MariaDB also /*M! ... */, although every parser treats it as a comment
+        if (sql.contains("/*!") || sql.contains("/*M!") || sql.contains("/*m!")) {
             throw new InvalidRequestException("Executable comments (/*! ... */) are not allowed");
         }
         checkReadOnly(select);

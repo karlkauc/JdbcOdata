@@ -24,7 +24,7 @@ Secrets gehören in `/etc/jdbcodata/jdbcodata.env` (Vorlage `contrib/jdbcodata.e
 # selbstsigniert für Tests; produktiv ein Zertifikat der Firmen-CA als PKCS12 exportieren
 export SERVER_SSL_KEY_STORE_PASSWORD="$(openssl rand -base64 24)"   # in /etc/jdbcodata/jdbcodata.env übernehmen
 keytool -genkeypair -alias jdbcodata -keyalg RSA -keysize 2048 -validity 365 \
-  -dname "CN=odata.firma.local" -keystore certs/jdbcodata.p12 -storetype PKCS12 -storepass "$SERVER_SSL_KEY_STORE_PASSWORD"
+  -dname "CN=odata.example.org" -keystore certs/jdbcodata.p12 -storetype PKCS12 -storepass "$SERVER_SSL_KEY_STORE_PASSWORD"
 ```
 
 ```yaml
@@ -85,7 +85,7 @@ RequestHeader set X-Forwarded-Port  "443"
 ```
 
 `/actuator/` bleibt intern; `/actuator/health` nutzt nur der Docker-Healthcheck. Der Hostname darf `odata`
-enthalten (z. B. `odata.firma.at`): der Service reicht Olingo den Pfad so weiter, dass die Suche nach dem
+enthalten (z. B. `odata.example.org`): der Service reicht Olingo den Pfad so weiter, dass die Suche nach dem
 Servlet-Pfad im Hostnamen keine Rolle spielt.
 
 ## Metadaten-DB

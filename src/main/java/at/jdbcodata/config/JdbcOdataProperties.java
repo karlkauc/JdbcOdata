@@ -26,7 +26,7 @@ public record JdbcOdataProperties(
      * {@code pageSize}: server-driven paging, rows per response before an {@code @odata.nextLink}; 0 = off (clients
      * can still ask for pages with {@code Prefer: odata.maxpagesize}, never larger than this value when it is set).
      */
-    public record OData(@DefaultValue("500000") int maxRows, @DefaultValue("60") int defaultTimeoutSec,
+    public record OData(@DefaultValue("100000") int maxRows, @DefaultValue("60") int defaultTimeoutSec,
                         @DefaultValue("2000") long concurrencyWaitMs, @DefaultValue("") String anonymousUser,
                         @DefaultValue("0") int pageSize) {
     }

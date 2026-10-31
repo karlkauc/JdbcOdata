@@ -24,11 +24,11 @@ INSERT INTO pim.artikel
 SELECT g,
        'ART-' || lpad(g::text, 5, '0'),
        '900' || lpad((g * 7919 % 1000000000)::text, 9, '0') || (g % 10)::text,
-       (ARRAY['Lenovo','Dell','HP','Logitech','Cisco','Jabra','Brother','Fujitsu','Netgear','Samsung'])[1 + (g * 3) % 10],
+       (ARRAY['Nordwerk','Alpina','Kestrel','Fjordtec','Orbis','Veltra','Lumen','Tessera','Quanta','Rivo'])[1 + (g * 3) % 10],
        (ARRAY['CN','TW','US','DE','CH','VN'])[1 + g % 6],
        round(((ARRAY[2.1, 5.4, 0.9, 0.1, 0.8, 0.3, 9.5, 18.0, 2.6, 0.7])[1 + (g - 1) % 10] * (1 + (g - 1) / 10 * 0.15))::numeric, 2),
        (ARRAY[12, 24, 36, 60])[1 + (g - 1) / 10],
-       (ARRAY['Ingram Micro','Also','Tech Data','Bechtle'])[1 + g % 4],
+       (ARRAY['Handel Ost','Großhandel Mitte','Teilewerk Süd','Lager West'])[1 + g % 4],
        (g * 37) % 250
 FROM generate_series(1, 40) AS g;
 

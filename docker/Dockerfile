@@ -6,7 +6,7 @@ COPY pom.xml .
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 mvn -B -q -DskipTests -Dassembly.skipAssembly=true package
 
-FROM eclipse-temurin:21-jre-alpine@sha256:51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555
+FROM eclipse-temurin:21-jre-alpine@sha256:82cf3d9ccbe1ed46252008d51b2f2329e6b9e8a2f4394c4bebefc3ea7f4b1372
 RUN addgroup -S app && adduser -S app -G app \
  && mkdir -p /app/data /app/config /app/lib /app/certs \
  && chown -R app:app /app

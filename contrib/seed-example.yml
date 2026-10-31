@@ -2,11 +2,11 @@
 datasources:
   - name: erp
     description: ERP production (read-only replica)
-    jdbcUrl: jdbc:oracle:thin:@//erp-db.firma.local:1521/ERPPDB
+    jdbcUrl: jdbc:oracle:thin:@//erp-db.example.org:1521/ERPPDB
     driverClass: oracle.jdbc.OracleDriver
     timezone: Europe/Vienna
     defaultTimeoutSec: 60
-    maxRows: 200000
+    maxRows: 50000
     maxConcurrent: 5
     # optional: applied after connecting (ALTER SESSION on Oracle; NLS_LANG is not read by the thin driver)
     sessionSettings:

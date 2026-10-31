@@ -326,7 +326,7 @@ Umgebungs-Badge (`jdbcodata.ui.environment`); die Sidebar zeigt Zähler und Warn
 | Statistiken | siehe Abschnitt 7 |
 | Einstellungen | Retention, Cache-Obergrenzen, Master-Key-Status, Lizenz-/Versionsinfo |
 
-**REST-API** unter `/api/v1` (JSON, OpenAPI-Spezifikation unter `/api/docs`), genutzt von der UI und für Automatisierung:
+**REST-API** unter `/api/v1` (JSON), genutzt von der UI und für Automatisierung:
 
 | Ressource | Endpunkte |
 |---|---|
@@ -336,7 +336,7 @@ Umgebungs-Badge (`jdbcodata.ui.environment`); die Sidebar zeigt Zähler und Warn
 | Cache | `GET /cache`, `DELETE /cache?queryId=&dbUser=` |
 | Statistiken | `GET /stats/summary`, `GET /stats/executions?from=&to=&queryId=&caller=`, `GET /stats/export.csv` |
 
-**Admin-Authentifizierung.** Drei Security-Chains: `/odata/**` ohne Spring-Security-Prüfung (Basic-Credentials gehen an die DB), `/api/**` mit zustandslosem Basic Auth, alles andere mit Session-Login-Formular (`/login`, CSRF aktiv, htmx sendet den Token im Header). Bis M3 gibt es ein Admin-Konto aus `JDBCODATA_ADMIN_USER` / `JDBCODATA_ADMIN_PASSWORD`; danach Admin-Accounts in `admin_user` (bcrypt), API-Token (Bearer) und die Rollen `ADMIN` und `VIEWER`.
+**Admin-Authentifizierung.** Drei Security-Chains: `/odata/**` ohne Spring-Security-Prüfung (Basic-Credentials gehen an die DB), `/api/**` mit zustandslosem Basic Auth, alles andere mit Session-Login-Formular (`/login`, CSRF aktiv, htmx sendet den Token im Header). Bis M3 gibt es ein Admin-Konto aus `JDBCODATA_ADMIN_USER` / `JDBCODATA_ADMIN_PASSWORD`; danach Admin-Accounts in `admin_user` (bcrypt), und die Rollen `ADMIN` und `VIEWER`.
 
 **Endpunkt-Übersicht**
 
@@ -346,7 +346,7 @@ Umgebungs-Badge (`jdbcodata.ui.environment`); die Sidebar zeigt Zähler und Warn
 | `/odata/$metadata` | EDM | Basic |
 | `/odata/{EntitySet}` | Daten | Basic |
 | `/admin/**` | Web-UI | Admin-Session |
-| `/api/v1/**` | REST-API | Admin-Session oder Bearer |
+| `/api/v1/**` | REST-API | Admin-Session oder Basic Auth |
 | `/actuator/health` | Health | offen (nur Status) |
 | `/actuator/prometheus` | Metriken | optional, IP-/Token-geschützt |
 
@@ -365,7 +365,7 @@ Spring Data JPA, Flyway-Migrationen unter `db/migration`. Standard H2 im Dateimo
 | `service_user` | Login, bcrypt-Hash, aktiv, Gruppen |
 | `stored_credential` | Service-User × Datenquelle → verschlüsselter DB-User/Passwort, Key-ID |
 | `fixed_credential` | Technische Accounts für `FIXED`-Queries, verschlüsselt |
-| `admin_user` | Login, bcrypt-Hash, Rolle, API-Token-Hash |
+| `admin_user` | Login, bcrypt-Hash, Rolle |
 | `cache_entry` | Key, Query-Version, DB-User, Parameter-Hash, Blob, Zeilen, Bytes, erzeugt, läuft ab |
 | `execution_log` | siehe Abschnitt 7 |
 | `execution_daily` | Tagesaggregate pro Query/User |
@@ -414,21 +414,20 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 | `jdbcodata.cache.max-size-mb` | 1024 | Persistenter Cache gesamt |
 | `jdbcodata.cache.memory-mb` | 256 | Caffeine-Layer |
 | `jdbcodata.stats.retention-days` | 90 | Protokoll-Aufbewahrung |
-| `jdbcodata.odata.max-rows` | 500000 | Harte Obergrenze pro Ergebnis |
-| `jdbcodata.security.rate-limit` | 20/min | Fehlversuche pro IP bei Basic Auth |
-| `jdbcodata.timezone` | System | Für TIMESTAMP ohne Zone |
+| `jdbcodata.odata.max-rows` | 100000 | Harte Obergrenze pro Ergebnis |
+| `jdbcodata.security.rate-limit-per-minute` | 20 | Fehlversuche pro IP bei Basic Auth |
 
 **TLS** ist Pflicht, weil Basic Auth Klartext-Credentials trägt. Entweder eingebaut (Keystore in `certs/`, `server.ssl.*`) oder Reverse-Proxy (Caddy im Compose-Stack, alternativ Traefik/IIS/nginx mit `server.forward-headers-strategy=native`). Ohne TLS startet der Service nur mit expliziter Flag `jdbcodata.security.allow-plain-http=true` und Warnung im Log (`PlainHttpGuard`). Fehlgeschlagene Logins werden pro IP und Benutzername gezählt (`LoginRateLimiter`, `RateLimitFilter`; die IP kommt aus `getRemoteAddr()`, hinter dem Proxy von Tomcats RemoteIpValve), parallele Ausführungen pro Datenquelle begrenzt (`ConcurrencyLimiter`).
 
-**JDBC-Treiber.** `ojdbc11`, `postgresql`, `mariadb-java-client` werden gebündelt (alle über Maven Central verfügbar; Oracle-Treiber unter Oracle Free Use Terms). Weitere Treiber (DB2, SQL Server, …) legt der Betrieb in `lib/`, der `DriverLoader` registriert sie beim Start.
+**JDBC-Treiber.** `postgresql` und `mariadb-java-client` werden gebündelt; `ojdbc11` nicht (Oracle Free Use Terms), er kommt nach `lib/` oder per `./mvnw -Poracle clean package` ins JAR. Weitere Treiber (DB2, SQL Server, …) legt der Betrieb in `lib/`, der `DriverLoader` registriert sie beim Start.
 
 ## 11. Nicht-funktionale Leitplanken
 
 | Thema | Ziel |
 |---|---|
 | Latenz Cache-Hit | < 200 ms bis zum ersten Byte bei 100 000 Zeilen |
-| Ergebnisgröße | bis 500 000 Zeilen bzw. 256 MB pro Ergebnis (konfigurierbar), darüber Fehler mit Hinweis |
-| Streaming | Antworten werden gestreamt (Olingo-Serializer auf `OutputStream`), nicht vollständig im Speicher aufgebaut |
+| Ergebnisgröße | bis 100 000 Zeilen (Standard) bzw. 256 MB pro Ergebnis (konfigurierbar), darüber Fehler mit Hinweis |
+| Speicher | Ergebnisse werden im Service vollständig im Speicher gehalten, Heap und `max-rows` daher gemeinsam dimensionieren |
 | Parallelität | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503 Retry-After` |
 | Verfügbarkeit | Stateless bis auf Metadaten-DB; mehrere Instanzen hinter Proxy mit PostgreSQL |
 | Logging | Strukturiert (JSON optional), nie Passwörter oder SQL mit Parameterwerten |

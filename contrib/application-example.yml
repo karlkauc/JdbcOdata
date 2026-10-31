@@ -19,7 +19,7 @@ jdbcodata:
     # username: jdbcodata
     # password: secret
   odata:
-    max-rows: 500000
+    max-rows: 100000
     default-timeout-sec: 60
   cache:
     max-size-mb: 1024

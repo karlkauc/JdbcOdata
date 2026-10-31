@@ -24,7 +24,7 @@ public class DatasourceForm {
     @Min(1) @Max(3600)
     private Integer defaultTimeoutSec = 60;
     @Min(1)
-    private Integer maxRows = 500_000;
+    private Integer maxRows = 100_000;
     @Min(1) @Max(1000)
     private Integer maxConcurrent = 10;
     private boolean enabled = true;

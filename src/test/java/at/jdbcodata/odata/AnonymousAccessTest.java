@@ -6,6 +6,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.Base64;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -98,6 +101,35 @@ class AnonymousAccessTest {
         assertThat(wrong.statusCode()).isEqualTo(401);
         HttpResponse<String> right = send("GET", "/odata/Sales?$top=1", null, "demo", "demo");
         assertThat(right.statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void anonymousCallersGetNoDatabaseErrorText() throws Exception {
+        String demoDb = "jdbc:h2:mem:demo-anon;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1";
+        try (Connection c = DriverManager.getConnection(demoDb, "demo", "demo"); Statement st = c.createStatement()) {
+            st.execute("CREATE TABLE vanishing (id INT)");
+            HttpResponse<String> q = send("POST", "/api/v1/queries", """
+                    {"name":"Failing","datasourceId":"%s","sql":"SELECT id FROM vanishing","executionMode":"CALLER"}"""
+                    .formatted(datasourceId), "admin", "secret");
+            assertThat(q.statusCode()).as(q.body()).isEqualTo(201);
+            String qId = json.readTree(q.body()).get("id").asString();
+            send("PUT", "/api/v1/users/" + userId + "/credentials/" + datasourceId,
+                    "{\"dbUsername\":\"demo\",\"dbPassword\":\"demo\"}", "admin", "secret");
+            try {
+                assertThat(send("POST", "/api/v1/queries/" + qId + "/snapshot", "{\"username\":\"demo\",\"password\":\"demo\"}", "admin", "secret").statusCode()).isEqualTo(200);
+                st.execute("DROP TABLE vanishing");
+
+                HttpResponse<String> anonymous = send("GET", "/odata/Failing", null, null, null);
+                assertThat(anonymous.statusCode()).as(anonymous.body()).isEqualTo(500);
+                assertThat(anonymous.body()).contains("(ref ").doesNotContain("SQLState").doesNotContain("vanishing");
+
+                HttpResponse<String> loggedIn = send("GET", "/odata/Failing", null, "demo", "demo");
+                assertThat(loggedIn.body()).contains("SQLState");
+            } finally {
+                send("DELETE", "/api/v1/queries/" + qId, null, "admin", "secret");
+                send("DELETE", "/api/v1/users/" + userId + "/credentials/" + datasourceId, null, "admin", "secret");
+            }
+        }
     }
 
     @Test

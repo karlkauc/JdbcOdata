@@ -22,4 +22,8 @@ certs/
 # WebDAV / OS
 .DAV/
 .DS_Store
+._*
 Thumbs.db
+
+# Doku-Seite
+website/site/

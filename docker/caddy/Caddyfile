@@ -1,4 +1,4 @@
-# JDBCODATA_HOST: public host name (e.g. odata.firma.at). "localhost" uses Caddy's internal CA (self-signed).
+# JDBCODATA_HOST: public host name (e.g. odata.example.org). "localhost" uses Caddy's internal CA (self-signed).
 # JDBCODATA_TLS: "internal" for the internal CA, or an e-mail address for Let's Encrypt (public host required),
 #                or "/certs/cert.pem /certs/key.pem" for your own certificate mounted into the container.
 {$JDBCODATA_HOST:localhost} {

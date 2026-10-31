@@ -82,7 +82,7 @@ JdbcOdata liest sie über die eigene Datenquelle `demo_produktstamm` als Query `
 über `ProduktId` mit der anderen Datenbank: `Umsatz.Produktstamm`, `Produkte.Stammdaten` und zurück
 `Produktstamm.Umsaetze` / `Produktstamm.Produkt`. Beispiele:
 `/odata/Umsatz?$expand=Produktstamm($select=Hersteller,EAN)`, `/odata/Produkte(3)/Stammdaten`,
-`/odata/Umsatz?$filter=Produktstamm/Hersteller eq 'Cisco'`.
+`/odata/Umsatz?$filter=Produktstamm/Hersteller eq 'Orbis'`.
 
 Die Init-Skripte laufen nur bei leerem Volume. Auf einer bestehenden Instanz einmalig:
 

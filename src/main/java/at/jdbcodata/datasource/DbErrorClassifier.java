@@ -17,6 +17,10 @@ public final class DbErrorClassifier {
         if (isAuthFailure(sql)) {
             return new DbAuthenticationException(datasourceName, sql);
         }
+        if (sql.getMessage() != null && sql.getMessage().startsWith("No suitable driver")) {
+            return new DbExecutionException("No JDBC driver for the URL of '" + datasourceName
+                    + "'; put the driver JAR into lib/ (Oracle is not bundled)", false, sql);
+        }
         boolean timeout = sql instanceof SQLTimeoutException
                 || "57014".equals(sql.getSQLState())      // PostgreSQL query_canceled
                 || sql.getErrorCode() == 1013              // Oracle ORA-01013 user requested cancel
@@ -39,6 +43,7 @@ public final class DbErrorClassifier {
     /** Short vendor message without SQL text; the full exception is logged server side. */
     public static String describe(SQLException e) {
         String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        if (msg.startsWith("No suitable driver")) return "No JDBC driver for this URL; put the driver JAR into lib/ (Oracle is not bundled)";
         int nl = msg.indexOf('\n');
         if (nl > 0) msg = msg.substring(0, nl);
         int sqlIdx = msg.indexOf("; SQL statement:");

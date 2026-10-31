@@ -36,6 +36,8 @@ class SqlValidatorTest {
                 "SELECT 1 UNION (SELECT 2 INTO t)",
                 "(SELECT 1 INTO t)",
                 "SELECT 1 /*!50000 INTO OUTFILE '/tmp/x' */",
+                "SELECT 1 /*M! INTO OUTFILE '/tmp/x' */",
+                "SELECT 1 /*m!100100 INTO OUTFILE '/tmp/x' */",
                 "SELECT * FROM t FOR UPDATE",
                 "SELECT * FROM t FOR SHARE"};
         for (String sql : writing) {

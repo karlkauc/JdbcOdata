@@ -35,7 +35,7 @@ Max. Zeilen, parallele Ausführungen). Mit „Test connection“ und eigenen DB-
 Zugangsdaten werden nicht gespeichert.
 
 Beispiele: `jdbc:oracle:thin:@//host:1521/SERVICE`, `jdbc:postgresql://host:5432/db`,
-`jdbc:mariadb://host:3306/db`, `jdbc:mysql://host:3306/db`.
+`jdbc:mariadb://host:3306/db` (auch für MySQL).
 
 ### Session-Einstellungen und Treiber-Properties
 

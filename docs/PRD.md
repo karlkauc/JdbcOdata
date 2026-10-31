@@ -42,7 +42,6 @@ Architektur: siehe [ARCHITECTURE.md](ARCHITECTURE.md)
 - Schreibende Operationen über OData
 - SSO (Kerberos, OIDC, Entra ID)
 - OData V2 / Atom
-- Push-Down von OData-Optionen in SQL
 - Mandantenfähigkeit
 - Redis oder anderer externer Cache
 - Zeitgesteuertes Vorwärmen des Caches
@@ -377,15 +376,15 @@ Payload-Skizze Query (POST/PUT):
 | **M2 – Query-Verwaltung** ✅ 2026-10-16 | Query-CRUD über API und UI, SQL-Validierung mit JSqlParser (nur SELECT), Parameter-Editor, Testlauf mit Vorschau (auch für ungespeicherte Queries), Schema-Snapshot und Spalteneinstellungen (Schlüssel, sichtbar), Versionshistorie mit Wiederherstellen, `$filter` und `$orderby` in-memory, Admin-UI mit Login (Thymeleaf + htmx + CodeMirror), 128 Tests mit 94 % Zeilenabdeckung | Admin pflegt Queries ohne Neustart |
 | **M3 – Identität, Cache, Statistik** ✅ 2026-10-16 | Service-User mit Gruppen und verschlüsselt hinterlegten DB-Credentials (AES-256-GCM, Master-Key aus Konfiguration oder Key-Datei), technische Accounts und `FIXED`-Modus mit Freigaben (User, Gruppe, alle), personalisiertes Service-Dokument, Flag „Pass-Through erzwingen“, persistenter Cache in der Metadaten-DB mit Caffeine-Schicht, Stampede-Schutz, `?refresh=true`, `X-Cache`-Header, Invalidierung über UI/API, Execution-Log mit Statistik-Seite (Kennzahlen, Top-Queries, Aufrufer, Verlauf, Rohdaten, CSV), Retention-Job, Audit-Log, Admin-Konten mit Rollen ADMIN/VIEWER in der DB, 147 Tests mit 94 % Zeilenabdeckung, Browser-Check mit Playwright | Alle MUST-Anforderungen bis auf TLS/Rate-Limiting (M4) erfüllt |
 | **M4 – Betrieb und Härtung** ✅ 2026-10-16 | docker-compose mit PostgreSQL und Caddy (TLS intern, Let's Encrypt oder eigenes Zertifikat), TLS-Guard (Start ohne TLS nur mit Flag), Rate-Limiting pro IP und Benutzername (429), Concurrency-Limits pro Datenquelle (503 mit Retry-After), Prometheus-Metriken, Distributions-ZIP mit Start-Skripten für Linux und Windows, systemd- und WinSW-Vorlagen, Dokumentation (CONFIG, OPERATIONS, ADMIN_GUIDE, EXCEL_POWERBI, ACCEPTANCE), PostgreSQL-Integrationstest mit Testcontainers, Version 1.0.0 | Release 1.0 |
-| **Phase 2 (Kandidaten)** | SQL-Push-Down, Cache-Vorwärmen, Gruppen aus LDAP, OIDC für Admin-UI, i18n, Import/Export | nach Bedarf |
+| **Phase 2 (Kandidaten)** | Cache-Vorwärmen, Gruppen aus LDAP, OIDC für Admin-UI, i18n, Import/Export | nach Bedarf |
 
 ## 12. Offene Punkte und Risiken
 
 | # | Punkt | Auswirkung | Vorschlag |
 |---|---|---|---|
-| O-01 | Sehr große Ergebnismengen (> 500 000 Zeilen) | Speicher und Cache-Größe | **Entschieden 2026-10-16:** harte Grenze 500 000 Zeilen / 256 MB in Phase 1 reicht; Push-Down und Server-Paging (`@odata.nextLink`) in Phase 2 |
+| O-01 | Sehr große Ergebnismengen (> 100 000 Zeilen) | Speicher und Cache-Größe | **Entschieden 2026-10-16, angepasst 2026-10-30:** harte Grenze standardmäßig 100 000 Zeilen, per `jdbcodata.odata.max-rows` erhöhbar. Push-Down und Server-Paging sind umgesetzt |
 | O-02 | PowerBI Service über Gateway: Basic Auth wird unterstützt, aber Credentials liegen im Gateway | Persönliche DB-Passwörter würden im Gateway gespeichert | **Entschieden 2026-10-16:** Für Gateway-Nutzung sind Service-User mit hinterlegten Credentials vorgeschrieben (FR-32a, §9) |
-| O-03 | Oracle-Treiber-Lizenz beim Bundling | Rechtlich prüfen | ojdbc11 steht unter Oracle Free Use Terms auf Maven Central; alternativ `lib/` |
+| O-03 | Oracle-Treiber-Lizenz beim Bundling | Proprietäre Lizenz im MIT-Projekt | **Entschieden 2026-10-30:** ojdbc11 wird nicht mitgeliefert. Betreiber legen den Treiber in `lib/` oder bauen mit `./mvnw -Poracle clean package` |
 | O-04 | Zeitzonen bei `TIMESTAMP` ohne Zone | Falsche Uhrzeiten in Excel | Zeitzone pro Datenquelle konfigurierbar (FR-20), Default dokumentieren |
 | O-05 | Excel-Query-Folding sendet teils `$filter` mit Funktionen, die Olingo in-memory nicht abbildet | `501` statt Daten | Unterstützte Funktionen dokumentieren; Excel fällt bei Fehlern auf lokale Filterung zurück, zu verifizieren in M2 |
 | O-06 | Pass-Through-Pools halten Passwort-Hashes kurzzeitig im Speicher | Akzeptabel? | Mit Security abstimmen; Pool-Lebensdauer konfigurierbar |
@@ -393,7 +392,7 @@ Payload-Skizze Query (POST/PUT):
 | O-08 | Mehrere Instanzen: Caffeine-Cache ist lokal, Invalidierung muss alle Instanzen erreichen | Veraltete Daten für max. TTL der Caffeine-Schicht | Caffeine-TTL kurz (60 s) halten oder Invalidierung über DB-Versionszähler |
 | O-09 | Mehrinstanz-Betrieb mit H2 | Nicht möglich | Für Mehrinstanz PostgreSQL vorschreiben |
 | O-10 | SQL-Validierung mit JSqlParser lehnt herstellerspezifische Syntax ab (z.B. Oracle-Hints in Sonderformen, exotische Funktionen) | Gültige Queries können nicht gespeichert werden | In M2 strikt umgesetzt (FR-12). Bei Bedarf pro Datenquelle ein Flag „nur lexikalische Prüfung“ ergänzen |
-| O-11 | `$filter` wird in-memory nach dem vollständigen Laden ausgewertet | Excel-Query-Folding reduziert die DB-Last nicht | Verhalten wie geplant (ADR 4); Push-Down bleibt Phase 2 |
+| O-11 | `$filter` wird in-memory nach dem vollständigen Laden ausgewertet | Excel-Query-Folding reduziert die DB-Last nicht | **Erledigt:** Push-Down pro Query schaltbar, siehe ARCHITECTURE.md |
 | O-12 | Ohne konfigurierten Master-Key wird beim ersten Start eine Key-Datei unter `data/master.key` erzeugt | Verlust der Datei macht hinterlegte Credentials unlesbar | Für Produktion `JDBCODATA_MASTER_KEY` setzen oder die Datei sichern; Hinweis in Einstellungen und Log |
 | O-13 | Tagesaggregate (`execution_daily`, FR-55) sind noch nicht umgesetzt; Statistiken rechnen direkt auf `execution_log` | Bei sehr vielen Datensätzen langsamere Statistik-Seite | Mit Retention von 90 Tagen unkritisch; Aggregate in Phase 2 |
 | O-14 | Der Concurrency-Test läuft nur als Unit-Test des Limiters; ein Lasttest mit 50 parallelen Excel-Refreshes (Teststrategie §10) steht noch aus | Verhalten unter Last nicht gemessen | Vor Produktivsetzung mit k6 oder Gatling gegen eine Testinstanz ausführen |

@@ -8,7 +8,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "https://odata.status20.net",
+    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8080",
     trace: "retain-on-failure",
   },
   projects: [{ name: "desktop", use: { ...devices["Desktop Chrome"] } }],
