@@ -3,7 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/), versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] – unreleased
+## [1.1.0] – unreleased
+
+### Added
+
+- Optional usage statistics for public instances, off unless `jdbcodata.usage.db-url` is set. Self-hosted
+  installations record and send nothing
+
+## [1.0.0] – 2026-10-31
 
 First public release.
 

@@ -8,7 +8,7 @@ services:
     build:
       context: ../..
       dockerfile: docker/Dockerfile
-    image: jdbcodata:${JDBCODATA_VERSION:-1.0.0}
+    image: jdbcodata:${JDBCODATA_VERSION:-1.1.0}
     container_name: jdbcodata-status20
     restart: unless-stopped
     ports:
@@ -27,6 +27,10 @@ services:
       JDBCODATA_UI_ENVIRONMENT: PROD                # Umgebungs-Badge in der Kopfzeile der Admin-UI (rot)
       SERVER_FORWARD_HEADERS_STRATEGY: native       # X-Forwarded-* nur von internen Proxies (Apache) auswerten
       DEMO_READER_PASSWORD: ${DEMO_READER_PASSWORD:?DEMO_READER_PASSWORD in .env setzen}   # für den Schema-Snapshot im Seed
+      JDBCODATA_USAGE_DB_URL: ${JDBCODATA_USAGE_DB_URL:-}             # Nutzungsstatistik, leer = aus (siehe README)
+      JDBCODATA_USAGE_DB_USER: ${JDBCODATA_USAGE_DB_USER:-}
+      JDBCODATA_USAGE_DB_PASSWORD: ${JDBCODATA_USAGE_DB_PASSWORD:-}
+      JDBCODATA_USAGE_HASH_SECRET: ${JDBCODATA_USAGE_HASH_SECRET:-}
       TZ: Europe/Vienna
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75}
     volumes:

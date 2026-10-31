@@ -49,6 +49,17 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `jdbcodata.health.interval-ms` | `60000` | Active check of datasources with a technical account. `0` is off |
 | `jdbcodata.ui.environment` | empty | Label in the admin top bar, for example `PROD` |
 
+## Usage statistics
+
+Off by default. See [Usage statistics](security.md#usage-statistics).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `jdbcodata.usage.db-url` | empty | PostgreSQL URL of a separate statistics database. Empty: nothing is recorded or sent |
+| `jdbcodata.usage.db-user` | empty | Login of that database |
+| `jdbcodata.usage.db-password` | empty | Password of that database |
+| `jdbcodata.usage.hash-secret` | empty | Required with `db-url`. Keys the daily salt of the visitor hash |
+
 ## Security
 
 | Key | Default | Meaning |

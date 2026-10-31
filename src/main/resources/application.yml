@@ -58,6 +58,11 @@ jdbcodata:
   stats:
     retention-days: 90     # execution log retention
     async: true            # write execution log records off the request thread
+  usage:
+    db-url: ""             # usage statistics of a public instance (PostgreSQL); empty = off, nothing is recorded or sent
+    db-user: ""
+    db-password: ""
+    hash-secret: ""        # required with db-url, keys the daily salt of the visitor hash
   health:
     interval-ms: 60000     # active check of datasources with a technical account (admin UI status); 0 = off
   ui:

@@ -47,6 +47,26 @@ The model assumes:
 - **Resources.** Row limits, timeouts, parallel execution limits per datasource, a 10 MB request body limit and a `$batch` limit.
 - **Base images.** Pinned by digest.
 
+## Usage statistics
+
+JdbcOdata does not phone home. Unless you set `jdbcodata.usage.db-url`, it records nothing, starts no thread for it and
+opens no connection. There is no built-in reporting address, so with that setting the data goes to a database you
+choose.
+
+The public demo at `odata.status20.net` uses this setting. One row per OData request holds:
+
+- the kind of request, the HTTP status and the duration
+- the name of the published query, or `other`
+- the names of the query options, such as `$filter` and `$top`
+- the kind of client and its User-Agent header
+- whether credentials were sent
+- a visitor hash that changes daily
+- the version of JdbcOdata
+
+It never holds SQL, filter or parameter values, result data, user names, passwords, the IP address or the query string.
+There are no cookies and no tracking script. The hash is `sha256(daily salt | IP | User-Agent)`, so a visitor counts once
+per day and cannot be followed from one day to the next.
+
 ## Known limits
 
 These are the things to plan for. Please read them before exposing the service to the internet.

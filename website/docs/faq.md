@@ -50,6 +50,10 @@ If anonymous access is on, a client that sends no credentials stays anonymous an
 
 The public demo runs the same software with a sample PostgreSQL database. Anonymous access is enabled for it. The example deployment is in `deploy/` in the repository.
 
+## Does JdbcOdata send telemetry?
+
+No. Only the public demo records usage, because it is configured to. See [Usage statistics](security.md#usage-statistics).
+
 ## How does it relate to the OData Online Viewer?
 
 They are independent sister projects. JdbcOdata publishes feeds, and the [viewer](https://www.odata-viewer.online) explores any OData service, including these feeds.
