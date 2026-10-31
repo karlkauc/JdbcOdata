@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>4.1.1</version>
+    <version>4.1.2</version>
     <relativePath/>
   </parent>
 
@@ -44,6 +44,7 @@
   <properties>
     <java.version>21</java.version>
     <olingo.version>5.0.0</olingo.version>
+    <mariadb.version>3.5.11</mariadb.version>
     <jacoco.version>0.8.13</jacoco.version>
     <jacoco.minimum-line-coverage>0.85</jacoco.minimum-line-coverage>
   </properties>
