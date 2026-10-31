@@ -16,7 +16,9 @@ import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryService;
 import at.jdbcodata.testutil.DemoProfileTest;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +30,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 class AdminUiTest extends DemoProfileTest {
+
+    private static final Pattern WEBJAR_ASSET = Pattern.compile("(?:href|src)=\"(/webjars/[^\"]+)\"");
 
     @Autowired
     WebApplicationContext context;
@@ -60,9 +64,18 @@ class AdminUiTest extends DemoProfileTest {
         mvc.perform(MockMvcRequestBuilders.get("/").with(admin())).andExpect(redirectedUrl("/admin"));
         String dashboard = body(mvc.perform(MockMvcRequestBuilders.get("/admin").with(admin())).andExpect(status().isOk()).andReturn());
         assertThat(dashboard).contains("Overview").contains("Sales").contains("admin");
-        mvc.perform(MockMvcRequestBuilders.get("/webjars/htmx.org/2.0.11/dist/htmx.min.js")).andExpect(status().isOk());
         mvc.perform(MockMvcRequestBuilders.get("/css/admin.css")).andExpect(status().isOk());
         mvc.perform(MockMvcRequestBuilders.get("/js/admin.js")).andExpect(status().isOk());
+    }
+
+    @Test
+    void allWebjarAssetsResolve() throws Exception {
+        String dashboard = body(mvc.perform(MockMvcRequestBuilders.get("/admin").with(admin())).andExpect(status().isOk()).andReturn());
+        List<String> assets = WEBJAR_ASSET.matcher(dashboard).results().map(m -> m.group(1)).toList();
+        assertThat(assets).anyMatch(a -> a.contains("/htmx.org/")).anyMatch(a -> a.contains("/codemirror/"));
+        for (String asset : assets) {
+            mvc.perform(MockMvcRequestBuilders.get(asset)).andExpect(status().isOk());
+        }
     }
 
     @Test

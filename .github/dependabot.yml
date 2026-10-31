@@ -12,3 +12,10 @@ updates:
     directory: /docker
     schedule:
       interval: weekly
+    # Java bleibt auf 21, ein Wechsel ist Handarbeit. Digest-Updates laufen weiter.
+    # Dependabot liest 3.9-eclipse-temurin-21 als 3.9.21.
+    ignore:
+      - dependency-name: eclipse-temurin
+        versions: [">= 22"]
+      - dependency-name: maven
+        versions: [">= 3.9.22"]
