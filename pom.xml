@@ -107,7 +107,7 @@
     <dependency>
       <groupId>org.webjars.npm</groupId>
       <artifactId>codemirror</artifactId>
-      <version>5.65.21</version>
+      <version>6.65.7</version>
     </dependency>
 
     <!-- Metrics for Prometheus (/actuator/prometheus) -->
