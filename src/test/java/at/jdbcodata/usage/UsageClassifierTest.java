@@ -19,6 +19,7 @@ class UsageClassifierTest {
             "TLM-Audit-Scanner/2.0|other|bot",
             "Mozilla/5.0 (l9scan/2.0.833313e2032323e26373e2434313; +https://leakix.net)|other|bot",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/156.0.8078.4 Safari/537.36|other|bot",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/156.0.8078.4 Safari/537.36 jdbcodata-e2e|other|bot",
             "something-else/1.0|other|unknown"})
     void sortsClients(String userAgent, String client, String device) {
         assertThat(UsageClassifier.client(userAgent)).isEqualTo(client);
