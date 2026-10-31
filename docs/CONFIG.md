@@ -24,6 +24,9 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.cache.cleanup-interval-ms` | `300000` | Aufräumjob für abgelaufene Einträge und Größenlimit |
 | `jdbcodata.stats.retention-days` | `90` | Aufbewahrung des Ausführungsprotokolls |
 | `jdbcodata.stats.async` | `true` | Protokoll über eigenen Writer-Thread schreiben |
+| `jdbcodata.usage.db-url` | leer | PostgreSQL-URL einer eigenen Statistik-DB; leer = es wird nichts erfasst oder gesendet |
+| `jdbcodata.usage.db-user` / `db-password` | leer | Login dieser Datenbank |
+| `jdbcodata.usage.hash-secret` | leer | Pflicht zusammen mit `db-url`, Schlüssel für das Tages-Salt des Besucher-Hashes |
 | `jdbcodata.security.allow-plain-http` | `false` | Start ohne TLS erlauben (nur hinter TLS-Proxy oder lokal) |
 | `jdbcodata.security.rate-limit-per-minute` | `20` | Fehlversuche pro Client-IP, danach 429; pro Benutzername gilt das Fünffache (verteilte Angriffe), damit ein einzelner Client keinen fremden User aussperren kann. Ein Zähler läuft eine Minute nach dem letzten Fehlversuch ab; `0` deaktiviert |
 | `jdbcodata.security.allowed-jdbc-urls` | leer | Zusätzliche JDBC-URL-Präfixe für Treiber aus `lib/`, z. B. `jdbc:sqlserver:`. Immer erlaubt: `jdbc:postgresql:`, `jdbc:mariadb:`, `jdbc:oracle:thin:`. H2 über TCP/SSL nur mit eigenem Präfix (`jdbc:h2:tcp:`). Optionen, die Klassen oder Dateien laden, beim Verbinden SQL ausführen oder Read-only abschalten (`INIT`, `socketFactory`, `sslfactory`, `readOnlyMode`, `allowLocalInfile`, `allowMultiQueries`, `initSql` …), und Passwörter in der URL werden abgelehnt |

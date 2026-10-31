@@ -145,6 +145,13 @@ curl -s "https://odata.status20.net/odata/Kunden?\$top=1"     # ohne Login → 2
 Das Service-Passwort wird nie gebraucht (anonyme Anfragen prüfen keines); ein Zufallswert genügt.
 Abschalten: Zeile `JDBCODATA_ODATA_ANONYMOUS_USER` entfernen und `docker compose up -d`.
 
+## Nutzungsstatistik
+
+Die Demo schreibt pro OData-Anfrage eine Zeile in die eigene Datenbank `jdbcodata_stats`, das Dashboard
+`usage.status20.net` liest sie direkt. Felder und Grenzen stehen in `website/docs/security.md`. Das Schema liegt in
+`usage/usage_stats.sql` und muss vor dem Deployment eingespielt sein, die Anwendung führt kein DDL aus. Ohne
+`JDBCODATA_USAGE_DB_URL` ist die Erfassung aus.
+
 ## In Excel einbinden
 
 1. **Daten → Daten abrufen → Aus anderen Quellen → Aus OData-Feed**.

@@ -8,7 +8,7 @@
 
 ## Native install (Linux, Windows)
 
-1. Unpack `jdbcodata-1.0.0-dist.zip`, created by `./mvnw package` in `target/`.
+1. Unpack `jdbcodata-<version>-dist.zip`, created by `./mvnw package` in `target/`.
 2. Copy `config/application-example.yml` to `config/application.yml` and adjust port, TLS keystore, metadata database, admin password and
    master key (`openssl rand -base64 32`).
 3. Start `bin/jdbcodata.sh` or `bin\jdbcodata.cmd`. The first start creates `data/`, the metadata database and the admin account.

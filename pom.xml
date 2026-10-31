@@ -13,7 +13,7 @@
 
   <groupId>at.jdbcodata</groupId>
   <artifactId>jdbcodata</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <name>JdbcOdata</name>
   <description>OData V4 feeds for company databases, for Excel and Power BI</description>
   <url>https://github.com/karlkauc/JdbcOdata</url>

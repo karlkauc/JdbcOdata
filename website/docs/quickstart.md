@@ -77,7 +77,7 @@ see [Operations](operations.md#docker-compose).
 
 ## Native install
 
-`./mvnw package` also creates `target/jdbcodata-1.0.0-dist.zip` with start scripts, sample configuration and service
+`./mvnw package` also creates `target/jdbcodata-<version>-dist.zip` with start scripts, sample configuration and service
 templates. See [Operations](operations.md#native-install-linux-windows).
 
 Without the demo profile, JdbcOdata refuses to start until TLS is configured or
