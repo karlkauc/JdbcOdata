@@ -53,4 +53,12 @@ class DbErrorClassifierTest {
         org.assertj.core.api.Assertions.assertThat(e).isInstanceOf(DbExecutionException.class)
                 .hasMessageContaining("lib/").hasMessageContaining("erp");
     }
+
+    /** The connection test and the health check go through describe(), not translate(). */
+    @Test
+    void describeNamesTheLibFolderToo() {
+        org.assertj.core.api.Assertions.assertThat(DbErrorClassifier.describe(
+                new java.sql.SQLException("No suitable driver found for jdbc:oracle:thin:@//db/x", "08001")))
+                .contains("lib/").doesNotContain("jdbc:oracle");
+    }
 }

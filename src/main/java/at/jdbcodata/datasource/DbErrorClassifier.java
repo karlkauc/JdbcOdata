@@ -43,6 +43,7 @@ public final class DbErrorClassifier {
     /** Short vendor message without SQL text; the full exception is logged server side. */
     public static String describe(SQLException e) {
         String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+        if (msg.startsWith("No suitable driver")) return "No JDBC driver for this URL; put the driver JAR into lib/ (Oracle is not bundled)";
         int nl = msg.indexOf('\n');
         if (nl > 0) msg = msg.substring(0, nl);
         int sqlIdx = msg.indexOf("; SQL statement:");
