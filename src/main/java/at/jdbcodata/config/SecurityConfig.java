@@ -1,11 +1,16 @@
 package at.jdbcodata.config;
 
+import at.jdbcodata.security.AdminOidcUserService;
 import at.jdbcodata.security.MetricsTokenMatcher;
+import at.jdbcodata.security.OidcClients;
+import at.jdbcodata.security.OidcFailureHandler;
+import at.jdbcodata.security.OidcProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -13,7 +18,9 @@ import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.session.HttpSessionEventPublisher;
 
@@ -27,7 +34,9 @@ import org.springframework.security.web.session.HttpSessionEventPublisher;
  *   <li>everything else (admin UI, actuator): session login form (Basic Auth also accepted), CSRF enabled,
  *       same role split as the API.</li>
  * </ul>
- * Admin accounts live in the {@code admin_user} table (see {@code AdminUserService}).
+ * Admin accounts live in the {@code admin_user} table (see {@code AdminUserService}). With a client registration
+ * the UI also signs in over OIDC, see {@link OidcProperties}; {@code local-login=false} then turns off password
+ * logins in UI and API.
  */
 @Configuration
 public class SecurityConfig {
@@ -66,20 +75,26 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain apiChain(HttpSecurity http, OidcProperties oidc) throws Exception {
         http.securityMatcher("/api/**")
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("ADMIN", "VIEWER")
                         .anyRequest().hasRole("ADMIN"))
-                .httpBasic(Customizer.withDefaults())
                 .csrf(c -> c.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        if (oidc.localLogin()) {
+            http.httpBasic(Customizer.withDefaults());
+        } else {
+            http.exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
+        }
         return http.build();
     }
 
     @Bean
     @Order(3)
-    SecurityFilterChain uiChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
+    SecurityFilterChain uiChain(HttpSecurity http, SessionRegistry sessionRegistry, OidcProperties oidc,
+                                OidcClients clients, AdminOidcUserService oidcUsers,
+                                OidcFailureHandler oidcFailure) throws Exception {
         http.authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error",
                                 "/webjars/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
@@ -87,16 +102,34 @@ public class SecurityConfig {
                         .requestMatchers("/admin/stats/**").hasAnyRole("ADMIN", "VIEWER")
                         .requestMatchers("/logout").authenticated()
                         .anyRequest().hasRole("ADMIN"))
-                .formLogin(f -> f.loginPage("/login").defaultSuccessUrl("/admin", false).permitAll())
                 .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout"))
                 // a form from an expired session (restart, timeout) leads back to the login instead of a bare 403
                 .exceptionHandling(e -> e.accessDeniedHandler(new ExpiredFormHandler()))
                 // registry, so AdminSessions can end sessions of disabled, deleted or changed accounts
                 .sessionManagement(s -> s.maximumSessions(-1).sessionRegistry(sessionRegistry).expiredUrl("/login?ended"))
-                .headers(h -> h.contentSecurityPolicy(c -> c.policyDirectives(CONTENT_SECURITY_POLICY))
-                        .referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
-                .httpBasic(Customizer.withDefaults());
+                .headers(h -> h.contentSecurityPolicy(c -> c.policyDirectives(contentSecurityPolicy(clients)))
+                        .referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)));
+        if (oidc.localLogin()) {
+            http.formLogin(f -> f.loginPage("/login").defaultSuccessUrl("/admin", false).permitAll())
+                    .httpBasic(Customizer.withDefaults());
+        }
+        if (clients.configured()) {
+            http.oauth2Login(o -> o.loginPage("/login").defaultSuccessUrl("/admin", false)
+                    .userInfoEndpoint(u -> u.oidcUserService(oidcUsers)).failureHandler(oidcFailure));
+            // ends the IdP session too: otherwise the next click on the sign-in link logs straight back in
+            OidcClientInitiatedLogoutSuccessHandler logout = new OidcClientInitiatedLogoutSuccessHandler(clients.repository());
+            logout.setPostLogoutRedirectUri("{baseUrl}/login?logout");
+            logout.setDefaultTargetUrl("/login?logout");
+            http.logout(l -> l.logoutSuccessHandler(logout));
+        }
         return http.build();
+    }
+
+    /** Browsers apply form-action to redirects after a form too, and sign-out is a form that ends at the IdP. */
+    private static String contentSecurityPolicy(OidcClients clients) {
+        String origins = String.join(" ", clients.logoutOrigins());
+        return origins.isEmpty() ? CONTENT_SECURITY_POLICY
+                : CONTENT_SECURITY_POLICY.replace("form-action 'self'", "form-action 'self' " + origins);
     }
 
     @Bean

@@ -3,6 +3,8 @@ package at.jdbcodata.admin.ui;
 import at.jdbcodata.health.DatasourceHealthService;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryService;
+import at.jdbcodata.security.OidcClients;
+import at.jdbcodata.security.OidcProperties;
 import at.jdbcodata.stats.StatsService;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,12 +36,17 @@ public class HomeController {
     private final StatsService stats;
     private final DatasourceHealthService health;
     private final UiFormat fmt;
+    private final OidcProperties oidc;
+    private final OidcClients clients;
 
-    public HomeController(QueryService queryService, StatsService stats, DatasourceHealthService health, UiFormat fmt) {
+    public HomeController(QueryService queryService, StatsService stats, DatasourceHealthService health, UiFormat fmt,
+                          OidcProperties oidc, OidcClients clients) {
         this.queryService = queryService;
         this.stats = stats;
         this.health = health;
         this.fmt = fmt;
+        this.oidc = oidc;
+        this.clients = clients;
     }
 
     @GetMapping("/")
@@ -48,7 +55,9 @@ public class HomeController {
     }
 
     @GetMapping("/login")
-    public String login() {
+    public String login(Model model) {
+        model.addAttribute("localLogin", oidc.localLogin());
+        model.addAttribute("ssoClients", clients.all());
         return "login";
     }
 

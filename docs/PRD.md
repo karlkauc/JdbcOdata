@@ -40,7 +40,7 @@ Architektur: siehe [ARCHITECTURE.md](ARCHITECTURE.md)
 **Out of Scope (Phase 1)**
 
 - Schreibende Operationen über OData
-- SSO (Kerberos, OIDC, Entra ID)
+- SSO für Feeds (Kerberos, OIDC, Entra ID). Die Admin-UI unterstützt OIDC seit 1.1.0
 - OData V2 / Atom
 - Mandantenfähigkeit
 - Redis oder anderer externer Cache
@@ -376,7 +376,7 @@ Payload-Skizze Query (POST/PUT):
 | **M2 – Query-Verwaltung** ✅ 2026-10-16 | Query-CRUD über API und UI, SQL-Validierung mit JSqlParser (nur SELECT), Parameter-Editor, Testlauf mit Vorschau (auch für ungespeicherte Queries), Schema-Snapshot und Spalteneinstellungen (Schlüssel, sichtbar), Versionshistorie mit Wiederherstellen, `$filter` und `$orderby` in-memory, Admin-UI mit Login (Thymeleaf + htmx + CodeMirror), 128 Tests mit 94 % Zeilenabdeckung | Admin pflegt Queries ohne Neustart |
 | **M3 – Identität, Cache, Statistik** ✅ 2026-10-16 | Service-User mit Gruppen und verschlüsselt hinterlegten DB-Credentials (AES-256-GCM, Master-Key aus Konfiguration oder Key-Datei), technische Accounts und `FIXED`-Modus mit Freigaben (User, Gruppe, alle), personalisiertes Service-Dokument, Flag „Pass-Through erzwingen“, persistenter Cache in der Metadaten-DB mit Caffeine-Schicht, Stampede-Schutz, `?refresh=true`, `X-Cache`-Header, Invalidierung über UI/API, Execution-Log mit Statistik-Seite (Kennzahlen, Top-Queries, Aufrufer, Verlauf, Rohdaten, CSV), Retention-Job, Audit-Log, Admin-Konten mit Rollen ADMIN/VIEWER in der DB, 147 Tests mit 94 % Zeilenabdeckung, Browser-Check mit Playwright | Alle MUST-Anforderungen bis auf TLS/Rate-Limiting (M4) erfüllt |
 | **M4 – Betrieb und Härtung** ✅ 2026-10-16 | docker-compose mit PostgreSQL und Caddy (TLS intern, Let's Encrypt oder eigenes Zertifikat), TLS-Guard (Start ohne TLS nur mit Flag), Rate-Limiting pro IP und Benutzername (429), Concurrency-Limits pro Datenquelle (503 mit Retry-After), Prometheus-Metriken, Distributions-ZIP mit Start-Skripten für Linux und Windows, systemd- und WinSW-Vorlagen, Dokumentation (CONFIG, OPERATIONS, ADMIN_GUIDE, EXCEL_POWERBI, ACCEPTANCE), PostgreSQL-Integrationstest mit Testcontainers, Version 1.0.0 | Release 1.0 |
-| **Phase 2 (Kandidaten)** | Cache-Vorwärmen, Gruppen aus LDAP, OIDC für Admin-UI, i18n, Import/Export | nach Bedarf |
+| **Phase 2 (Kandidaten)** | Cache-Vorwärmen, Gruppen aus LDAP, i18n, Import/Export | nach Bedarf |
 
 ## 12. Offene Punkte und Risiken
 

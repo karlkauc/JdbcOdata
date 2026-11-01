@@ -147,6 +147,42 @@ reached the database.
 
 See [Security](security.md) for the threat model and known limits.
 
+## Single sign-on for the admin UI
+
+The admin UI can sign in with OpenID Connect, tested with Keycloak. Feeds keep using Basic Auth. The provider is a
+standard Spring registration, and roles come from a claim:
+
+```yaml
+spring.security.oauth2.client:
+  registration.corp:
+    client-id: jdbcodata
+    client-secret: ${OIDC_CLIENT_SECRET}
+    client-name: Company account      # button label
+    scope: openid,profile
+  provider.corp:
+    issuer-uri: https://login.example.org/realms/corp
+jdbcodata.security.oidc:
+  role-claim: groups
+  admin-values: [jdbcodata-admins]
+  viewer-values: [jdbcodata-viewers]
+```
+
+Register `https://<host>/login/oauth2/code/corp` as redirect URI and `https://<host>/login?logout` as post-logout URI
+at the provider. Behind a proxy, set `server.forward-headers-strategy=native`, or the redirect URI will be wrong.
+
+- **Roles:** Values match exactly. A user in neither `admin-values` nor `viewer-values` cannot sign in, which the audit
+  log records as `LOGIN_FAILED`. A user in both becomes ADMIN.
+- **Revoking access:** The role is read at sign-in only. A running session keeps it until it ends (default: 30 minutes
+  idle, `server.servlet.session.timeout`).
+- **Entra ID:** With more than 200 groups, Entra leaves out the `groups` claim. Use app roles with `role-claim: roles`
+  there. `username-claim` can point to `email` or another claim.
+- **Startup:** With `issuer-uri`, the provider must be reachable at startup, or the feeds will not start either. To avoid
+  that, set `authorization-uri`, `token-uri`, `jwk-set-uri`, `user-info-uri` and `user-name-attribute` instead. Without
+  discovery, signing out no longer ends the provider session.
+- **SSO only:** `jdbcodata.security.oidc.local-login=false` removes password logins. This includes the REST API, which then
+  answers 401 because Basic Auth is all it supports so far. The service refuses to start in this mode without a
+  registration or `admin-values`. For emergency access, set the option back to `true` and restart.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |

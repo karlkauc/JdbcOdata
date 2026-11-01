@@ -162,6 +162,43 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
   Clients, die Zugangsdaten nur auf eine 401-Aufforderung schicken (Browser), bleiben dann anonym und sehen die
   Daten des Service-Users statt ihrer eigenen.
 
+## Single Sign-on für die Admin-UI
+
+Die Admin-UI kann sich per OpenID Connect anmelden, getestet mit Keycloak. Feeds nutzen weiter Basic Auth. Der
+Provider ist eine normale Spring-Registrierung, die Rollen kommen aus einem Claim:
+
+```yaml
+spring.security.oauth2.client:
+  registration.firma:
+    client-id: jdbcodata
+    client-secret: ${OIDC_CLIENT_SECRET}
+    client-name: Firmenkonto          # Text des Buttons
+    scope: openid,profile
+  provider.firma:
+    issuer-uri: https://login.example.org/realms/firma
+jdbcodata.security.oidc:
+  role-claim: groups
+  admin-values: [jdbcodata-admins]
+  viewer-values: [jdbcodata-viewers]
+```
+
+Beim Provider diese Adressen eintragen: als Redirect-URI `https://<host>/login/oauth2/code/firma`, als
+Post-Logout-URI `https://<host>/login?logout`. Hinter einem Proxy braucht es `server.forward-headers-strategy=native`,
+sonst stimmt die Redirect-URI nicht.
+
+- **Rollen:** Die Werte werden exakt verglichen. Wer weder in `admin-values` noch in `viewer-values` steht, kommt nicht
+  hinein; das steht als `LOGIN_FAILED` im Audit-Log. Bei beiden Treffern gilt ADMIN.
+- **Entzug:** Die Rolle wird nur bei der Anmeldung gelesen. Eine laufende Sitzung behält sie bis zum Ende (Standard:
+  30 Minuten Inaktivität, `server.servlet.session.timeout`).
+- **Entra ID:** Bei mehr als 200 Gruppen lässt Entra den Claim `groups` weg. Dort App-Rollen mit `role-claim: roles`
+  verwenden. `username-claim` kann auf `email` oder eine andere Angabe zeigen.
+- **Start:** Mit `issuer-uri` muss der Provider beim Start erreichbar sein, sonst startet auch der Feed nicht. Das
+  vermeiden `authorization-uri`, `token-uri`, `jwk-set-uri`, `user-info-uri` und `user-name-attribute` statt `issuer-uri`;
+  ohne Discovery entfällt allerdings die Abmeldung beim Provider.
+- **Nur noch SSO:** `jdbcodata.security.oidc.local-login=false` entfernt den Passwort-Login. Das gilt auch für die REST-API,
+  die dann mit 401 antwortet, denn sie kennt bisher nur Basic Auth. Ohne Registrierung oder `admin-values` startet der
+  Dienst in dieser Einstellung nicht. Der Notfallzugang ist, die Option wieder auf `true` zu setzen und neu zu starten.
+
 ## Fehlersuche
 
 | Symptom | Ursache / Abhilfe |

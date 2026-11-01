@@ -48,6 +48,11 @@ public class LoginAudit {
         write("LOGIN_FAILED", FEED, username, ip);
     }
 
+    /** Failed OIDC sign-ins do not raise a Spring Security failure event. */
+    public void oidcLoginRejected(String username, String ip) {
+        write("LOGIN_FAILED", ADMIN, username, ip);
+    }
+
     private void write(String action, String type, Authentication authentication) {
         String ip = authentication.getDetails() instanceof WebAuthenticationDetails d ? d.getRemoteAddress() : null;
         write(action, type, authentication.getName(), ip);
