@@ -77,6 +77,7 @@ This is meant for public demo feeds.
 - The user must be enabled, must not force pass-through, and needs stored credentials or FIXED grants.
 - A grant for "all authenticated callers" does not include anonymous callers.
 - `$metadata` also shows the schema of all CALLER queries, so explorers can see what a login would unlock.
+- A request with an `Authorization` header that is not valid HTTP Basic, such as a Bearer token, gets 401 and does not run as this user.
 - The execution log records the caller as `anonymous`.
 - Anonymous callers do not get database error details, only a reference number.
 
