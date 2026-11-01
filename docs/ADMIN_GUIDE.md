@@ -31,7 +31,7 @@ stehen hier im Original, z. B. „Datasources → New datasource“.
 ## 1. Datenquelle anlegen
 
 Datasources → New datasource: Name, JDBC-URL, optional Treiberklasse und Zeitzone, Limits (Timeout,
-Max. Zeilen, parallele Ausführungen). Mit „Test connection“ und eigenen DB-Zugangsdaten prüfen; die
+Max. Zeilen, parallele Ausführungen, Verbindungen pro Login). Mit „Test connection“ und eigenen DB-Zugangsdaten prüfen; die
 Zugangsdaten werden nicht gespeichert.
 
 Beispiele: `jdbc:oracle:thin:@//host:1521/SERVICE`, `jdbc:postgresql://host:5432/db`,

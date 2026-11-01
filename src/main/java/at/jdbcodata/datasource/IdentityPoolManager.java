@@ -95,7 +95,7 @@ public class IdentityPoolManager {
             cfg.setIsolateInternalQueries(true);
         }
         cfg.setPoolName("jdbcodata-" + ds.name() + "-" + username + (settings.isEmpty() ? "" : "-" + sha256(settings.toString()).substring(0, 8)));
-        cfg.setMaximumPoolSize(2);
+        cfg.setMaximumPoolSize(ds.poolSize());
         cfg.setMinimumIdle(0);
         cfg.setIdleTimeout(Duration.ofMinutes(1).toMillis());
         cfg.setConnectionTimeout(Duration.ofSeconds(15).toMillis());

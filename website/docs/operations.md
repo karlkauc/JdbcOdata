@@ -139,6 +139,7 @@ See [Security](security.md) for the threat model and known limits.
 | With a login, the browser shows someone else's data | Anonymous access is on, and browsers send no credentials without a 401. Send the login directly |
 | Query missing in the Navigator | Disabled, no schema snapshot, or FIXED without a grant for the caller |
 | 503 "busy" | Raise the datasource's parallel executions, or enable the cache |
+| Slow responses or connection timeouts with many callers of one technical account | They share its pool, so raise the datasource's connections per login. The limit applies per login and instance, and the database must allow that many connections |
 | 503 "Database temporarily unavailable" | No datasource was reachable to check the login |
 | 413 | Result above the row limit. Use parameters or `$top`, or raise the limit |
 | 429 | Too many failed logins. Wait a minute |

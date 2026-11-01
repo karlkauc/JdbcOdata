@@ -209,7 +209,7 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 Alle Tabellen in der Metadaten-DB; IDs sind UUIDs; Zeitstempel in UTC.
 
 **datasource**
-`id, name (unique), description, jdbc_url, driver_class, jdbc_properties (json), timezone, default_timeout_sec, max_rows, max_concurrent, pool_size_fixed, enabled, created_at, updated_at`
+`id, name (unique), description, jdbc_url, driver_class, jdbc_properties (json), timezone, default_timeout_sec, max_rows, max_concurrent, pool_size, enabled, created_at, updated_at`
 
 **query_definition**
 `id, name (unique), description, datasource_id (FK), sql_text, execution_mode (CALLER|FIXED), fixed_credential_id (FK, nullable), cache_enabled, cache_ttl_sec, cache_max_rows, timeout_sec, max_rows, key_mode (ROWID|COLUMNS), version, enabled, created_by, created_at, updated_by, updated_at`

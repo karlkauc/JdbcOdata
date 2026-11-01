@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -59,6 +60,27 @@ class IdentityPoolManagerTest {
         assertThatThrownBy(() -> pools.connect(ds, "owner", "nope"))
                 .isInstanceOf(DbAuthenticationException.class);
         assertThat(pools.activePoolCount()).isZero();
+    }
+
+    @Test
+    void poolHoldsAsManyConnectionsAsTheDatasourceAllows() throws Exception {
+        Datasource base = datasource("pool", URL);
+        Datasource ds = new Datasource(base.id(), "pool", null, URL, null, null, 30, 10, 10, true, Instant.now(),
+                Instant.now(), Map.of(), Map.of(), 3);
+        try (Connection a = pools.connect(ds, "owner", "pw");
+             Connection b = pools.connect(ds, "owner", "pw");
+             Connection c = pools.connect(ds, "owner", "pw")) {
+            assertThat(List.of(a, b, c)).allMatch(connection -> !isClosed(connection));
+        }
+        assertThat(pools.activePoolCount()).isEqualTo(1);
+    }
+
+    private static boolean isClosed(Connection connection) {
+        try {
+            return connection.isClosed();
+        } catch (java.sql.SQLException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test

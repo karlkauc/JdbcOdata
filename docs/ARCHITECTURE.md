@@ -259,8 +259,8 @@ flowchart TD
 
 **Connections.**
 
-- Pass-Through und hinterlegte Identitäten: HikariCP-Pool pro `(Datenquelle, DB-User, SHA-256(Passwort), Session-Einstellungen)`, `maximumPoolSize=2`, `idleTimeout=5 min`, Pool wird nach Inaktivität komplett geschlossen. Excel-Refreshes treffen damit einen warmen Pool, Credentials bleiben aber nicht dauerhaft offen.
-- `FIXED`-Accounts: regulärer Pool pro Query-Account, Größe konfigurierbar.
+- Pass-Through und hinterlegte Identitäten: HikariCP-Pool pro `(Datenquelle, DB-User, SHA-256(Passwort), Session-Einstellungen)`, `maximumPoolSize` aus der Datenquelle (`pool_size`, Default 2), `idleTimeout=1 min`, Pool wird nach Inaktivität komplett geschlossen. Excel-Refreshes treffen damit einen warmen Pool, Credentials bleiben aber nicht dauerhaft offen.
+- `FIXED`-Accounts: derselbe Pool-Mechanismus. Alle Aufrufer eines technischen Accounts teilen sich einen Pool, `pool_size` begrenzt hier also die parallelen Ausführungen; für stark genutzte FIXED-Queries erhöhen.
 - Session-Einstellungen (Datenquelle, von der Query überschreibbar) setzt `connectionInitSql` einmal pro Connection (`SessionSettings`: Allowlist pro Dialekt, ein generiertes Statement), mit `isolateInternalQueries`, damit das Rollback am Ende einer Ausführung PostgreSQL-`set_config` nicht zurücknimmt. Treiber-Properties gehen über `addDataSourceProperty` an den Treiber.
 - Jede Connection: `setReadOnly(true)`, `setAutoCommit(false)` + Rollback am Ende, Statement-Timeout und `maxRows` aus Datenquelle bzw. Query (Query darf Datenquellen-Limit nur unterschreiten).
 

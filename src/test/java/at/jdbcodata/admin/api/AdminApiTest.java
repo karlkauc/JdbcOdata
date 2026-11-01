@@ -28,6 +28,7 @@ class AdminApiTest extends DemoProfileTest {
         String id = ds.get("id").asString();
         assertThat(ds.get("driverClass").isNull()).isTrue();
         assertThat(ds.get("maxConcurrent").asInt()).isEqualTo(10);
+        assertThat(ds.get("poolSize").asInt()).isEqualTo(2);
 
         assertThat(send("POST", "/api/v1/datasources", body, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(409);
 
@@ -39,6 +40,15 @@ class AdminApiTest extends DemoProfileTest {
         HttpResponse<String> put = send("PUT", "/api/v1/datasources/" + id, updated, ADMIN, ADMIN_PASSWORD);
         assertThat(put.statusCode()).isEqualTo(200);
         assertThat(json.readTree(put.body()).get("description").asString()).isEqualTo("changed");
+
+        String resized = body.replace("\"maxRows\":100", "\"maxRows\":100,\"poolSize\":8");
+        HttpResponse<String> grown = send("PUT", "/api/v1/datasources/" + id, resized, ADMIN, ADMIN_PASSWORD);
+        assertThat(json.readTree(grown.body()).get("poolSize").asInt()).isEqualTo(8);
+        // left out on update: keeps the stored value
+        HttpResponse<String> kept = send("PUT", "/api/v1/datasources/" + id, updated, ADMIN, ADMIN_PASSWORD);
+        assertThat(json.readTree(kept.body()).get("poolSize").asInt()).isEqualTo(8);
+        String tooLarge = body.replace("\"maxRows\":100", "\"maxRows\":100,\"poolSize\":101");
+        assertThat(send("PUT", "/api/v1/datasources/" + id, tooLarge, ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(400);
 
         HttpResponse<String> ok = send("POST", "/api/v1/datasources/" + id + "/test",
                 "{\"username\":\"sa\",\"password\":\"\"}", ADMIN, ADMIN_PASSWORD);

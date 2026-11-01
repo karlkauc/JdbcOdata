@@ -169,7 +169,7 @@ public class SeedLoader implements ApplicationRunner {
         return new DatasourceSpec(str(ds, "name"), str(ds, "description"), str(ds, "jdbcUrl"), str(ds, "driverClass"),
                 str(ds, "timezone"), integer(ds, "defaultTimeoutSec"), integer(ds, "maxRows"),
                 integer(ds, "maxConcurrent"), bool(ds, "enabled", true), stringMap(ds, "sessionSettings"),
-                stringMap(ds, "driverProperties"));
+                stringMap(ds, "driverProperties"), integer(ds, "poolSize"));
     }
 
     /** {@code sessionSettings: {NLS_SORT: GERMAN}}; {@code null} when the key is missing (keeps the current values). */

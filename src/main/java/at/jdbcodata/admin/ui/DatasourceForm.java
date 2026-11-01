@@ -27,6 +27,8 @@ public class DatasourceForm {
     private Integer maxRows = 100_000;
     @Min(1) @Max(1000)
     private Integer maxConcurrent = 10;
+    @Min(1) @Max(100)
+    private Integer poolSize = Datasource.DEFAULT_POOL_SIZE;
     private boolean enabled = true;
     @Size(max = 10_000)
     private String sessionSettings = "";
@@ -43,6 +45,7 @@ public class DatasourceForm {
         f.defaultTimeoutSec = d.defaultTimeoutSec();
         f.maxRows = d.maxRows();
         f.maxConcurrent = d.maxConcurrent();
+        f.poolSize = d.poolSize();
         f.enabled = d.enabled();
         f.sessionSettings = SessionSettings.toLines(d.sessionSettings());
         f.driverProperties = SessionSettings.toLines(d.driverProperties());
@@ -51,7 +54,8 @@ public class DatasourceForm {
 
     public DatasourceSpec toSpec() {
         return new DatasourceSpec(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
-                maxConcurrent, enabled, SessionSettings.fromLines(sessionSettings), SessionSettings.fromLines(driverProperties));
+                maxConcurrent, enabled, SessionSettings.fromLines(sessionSettings), SessionSettings.fromLines(driverProperties),
+                poolSize);
     }
 
     /** Session setting keys for the database of the current JDBC URL, for the hint below the field. */
@@ -75,6 +79,8 @@ public class DatasourceForm {
     public void setMaxRows(Integer maxRows) { this.maxRows = maxRows; }
     public Integer getMaxConcurrent() { return maxConcurrent; }
     public void setMaxConcurrent(Integer maxConcurrent) { this.maxConcurrent = maxConcurrent; }
+    public Integer getPoolSize() { return poolSize; }
+    public void setPoolSize(Integer poolSize) { this.poolSize = poolSize; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getSessionSettings() { return sessionSettings; }

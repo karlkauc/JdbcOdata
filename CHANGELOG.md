@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 - Optional usage statistics for public instances, off unless `jdbcodata.usage.db-url` is set. Self-hosted
   installations record and send nothing
+- Connections per login are configurable for each datasource (`poolSize`, 1 to 100, default 2 as before). All
+  callers of a technical account share one pool, so its parallel executions were limited to 2
 
 ### Fixed
 
