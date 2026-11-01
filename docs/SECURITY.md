@@ -58,6 +58,7 @@ Snapshot), XSS, XXE/Deserialisierung, Secrets im Repository.
 | M10 | Fehlermeldungen nannten Datasource-/Service-User-Namen | mittel | behoben für Login-Fehler; DB-Fehlertexte bei der Ausführung bleiben für angemeldete Aufrufer sichtbar (gewollt, Diagnose) |
 | M11 | commons-io 2.13.0 (CVE-2024-47554), kein CVE-Scan | mittel | behoben (2.22.0, Profil `security`) |
 | M12 | Generiertes Admin-Passwort im Log | mittel | behoben (Datei mit Rechten 600) |
+| M13 | Oracle: Verbindungen waren nicht read-only, weil der Treiber `setReadOnly` nicht durchsetzt; gefunden 2026-11-01 mit dem ersten Test gegen echtes Oracle (`OracleIT`) | mittel | behoben: `SET TRANSACTION READ ONLY` bei jedem Checkout |
 | L1 | CSV-Formel-Injection | niedrig | behoben |
 | L2 | Sessions überleben Deaktivierung/Rollenwechsel/Passwortänderung; `lastLoginAt` auch bei Fehlversuch | niedrig | behoben (`AdminSessions`, Session-Registry; Login-Zeit nur bei Erfolg) |
 | L3 | Keine CSP, doppelte widersprüchliche Header (Apache + Spring) | niedrig | behoben |

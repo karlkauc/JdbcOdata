@@ -164,6 +164,7 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 | Excel fragt immer wieder nach Zugangsdaten | DB lehnt Login ab (401). In Admin-UI → Statistik den Status `AUTH_FAILED` prüfen; bei Service-Usern Passwort/hinterlegte Credentials prüfen |
 | Browser zeigt mit Login fremde Daten (z. B. alle statt einer Region) | Anonymer Zugang aktiv: ohne 401 schickt der Browser keine Zugangsdaten. Login direkt mitsenden (`curl -u`, Excel „Standard“) |
 | Query fehlt im Excel-Navigator | Query inaktiv, ohne Schema-Snapshot, oder FIXED ohne Freigabe für den Aufrufer |
+| Oracle meldet kurz nach einem Ladejob `ORA-01466` | Nach DDL auf einer Tabelle scheitern Read-only-Transaktionen für einige Sekunden. Erneut abrufen |
 | 503 „busy“ | `maxConcurrent` der Datenquelle erhöhen oder Cache aktivieren |
 | Langsame Antworten oder Verbindungs-Timeouts bei vielen Aufrufern eines technischen Accounts | Alle teilen sich dessen Pool: `poolSize` der Datenquelle erhöhen. Das Limit gilt pro Login und Instanz, die Datenbank muss so viele Verbindungen zulassen |
 | 413 | Ergebnis über Zeilenlimit; Parameter oder `$top` nutzen, Limit erhöhen |

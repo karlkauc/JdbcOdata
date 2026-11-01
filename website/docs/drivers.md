@@ -12,7 +12,7 @@ Use the `jdbc:mariadb:` URL for MySQL as well: the included MariaDB driver talks
 MySQL 8 and later log in with `caching_sha2_password` by default. Use TLS, or add `allowPublicKeyRetrieval=true` to the URL on a network you trust. Without either, the connection fails with `RSA public key is not available client side`.
 
 !!! note "How well each database is tested"
-    The automated tests run against H2 and real PostgreSQL, MariaDB 11.4 and MySQL 8.4 servers. Oracle has no automated test against a real server yet, so check your queries before you rely
+    The automated tests run against H2 and real PostgreSQL, MariaDB 11.4, MySQL 8.4 and Oracle 23 Free servers. Older Oracle versions are not tested, so check your queries before you rely
     on them, and please report problems.
 
 ## Adding a driver
@@ -46,6 +46,8 @@ If you build from source for your own use, you can compile it in instead:
 ```bash
 ./mvnw -Poracle clean package
 ```
+
+JdbcOdata starts a read-only transaction for every Oracle connection. For a few seconds after DDL on a table, for example when a load job recreates it, queries on that table can fail with `ORA-01466`. Refreshing again fixes this.
 
 Mind Oracle's terms if you pass such a build on. Without a driver, **Test connection** reports `No JDBC driver for the URL`.
 

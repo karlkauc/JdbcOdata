@@ -20,6 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Fixed
 
+- Oracle: connections were not read-only, because the Oracle driver accepts `setReadOnly` without enforcing it. Only
+  the check that SQL is a `SELECT` protected the data. Each connection now starts a read-only transaction. A function
+  that writes in an autonomous transaction can still do so, so database permissions remain the real limit. Queries
+  on a table can fail with `ORA-01466` for a few seconds after DDL on it
 - MySQL and MariaDB push-down: string comparisons ignored trailing blanks, and `in` compared by the column's
   collation, usually ignoring case. Both returned wrong rows. String grouping, `countdistinct`, `min` and `max`
   now also count values with trailing blanks separately
