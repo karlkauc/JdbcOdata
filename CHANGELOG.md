@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - `jdbcodata.audit.retention-days` deletes old audit records. The default `0` keeps everything
 - Every request has an ID in its log lines and in the `X-Request-Id` response header. JSON logs are available with
   `logging.structured.format.console=ecs`
+- `jdbcodata.security.metrics-token` lets Prometheus scrape without an admin login
+- Metrics for identity pools, running executions, rate-limited requests and dropped log records
 
 ### Fixed
 

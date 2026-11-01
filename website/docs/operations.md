@@ -111,7 +111,8 @@ Cache and execution log are expendable.
 | Endpoint | Purpose |
 |---|---|
 | `GET /actuator/health` | Liveness and readiness, no login |
-| `GET /actuator/prometheus` | Metrics (`jdbcodata_executions_total`, `jdbcodata_execution_duration_seconds`, JVM, HikariCP), Basic Auth with an admin account |
+| `GET /actuator/prometheus` | Metrics (`jdbcodata_executions_total`, `jdbcodata_execution_duration_seconds`, pools, limiters, JVM, HikariCP of the metadata database). Basic Auth with an admin account, or `jdbcodata.security.metrics-token`, set in Prometheus as `authorization: { credentials: … }` |
+| `jdbcodata_pool_connections_pending` | Staying above 0 means the datasource's `poolSize` is too small. Also available: `jdbcodata_pools`, `jdbcodata_pool_connections_active`, `jdbcodata_executions_running`, `jdbcodata_ratelimit_rejected_total`, `jdbcodata_executionlog_dropped_total`. Cache hits are in the `cache` label of `jdbcodata_executions_total` |
 | Admin UI → Statistics | Executions, error rate, cache hit rate, p50/p95 |
 | Admin UI → Settings | Master key source, pools, dropped log records |
 

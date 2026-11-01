@@ -121,6 +121,8 @@ class OperationsApiTest extends DemoProfileTest {
         HttpResponse<String> metrics = get("/actuator/prometheus", ADMIN, ADMIN_PASSWORD);
         assertThat(metrics.statusCode()).isEqualTo(200);
         assertThat(metrics.body()).contains("jdbcodata_executions_total").contains("jdbcodata_execution_duration_seconds");
+        assertThat(metrics.body()).contains("jdbcodata_pools ", "jdbcodata_pool_connections_pending ",
+                "jdbcodata_executions_running ", "jdbcodata_ratelimit_rejected_total ", "jdbcodata_executionlog_dropped_total ");
         assertThat(get("/actuator/prometheus", null, null).statusCode()).isIn(401, 302);
     }
 

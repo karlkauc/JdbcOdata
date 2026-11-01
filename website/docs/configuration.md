@@ -12,7 +12,8 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `server.ssl.key-store` | none | PKCS12 keystore for built-in TLS, with `key-store-password` and `key-store-type: PKCS12` |
 | `server.forward-headers-strategy` | none | Use `native` behind a reverse proxy. Tomcat then trusts `X-Forwarded-*` only from internal proxy addresses. Other proxy networks: `server.tomcat.remoteip.internal-proxies` |
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite of the admin session cookie. Tomcat sets `Secure` on HTTPS |
-| `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator endpoints. `/actuator/prometheus` needs an admin account |
+| `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator endpoints. `/actuator/prometheus` needs an admin account or the metrics token |
+| `jdbcodata.security.metrics-token` | empty | Token for Prometheus, at least 32 characters, sent as `Authorization: Bearer …`. It opens `/actuator/prometheus` only. Empty: off |
 | `logging.file.name` | none | For example `logs/jdbcodata.log` |
 | `logging.structured.format.console` | none | JSON logs on stdout: `ecs`, `logstash` or `gelf`. For files use `logging.structured.format.file` |
 

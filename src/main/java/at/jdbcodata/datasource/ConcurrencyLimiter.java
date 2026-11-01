@@ -38,6 +38,11 @@ public class ConcurrencyLimiter {
         return slot == null ? Math.max(1, ds.maxConcurrent()) : slot.semaphore().availablePermits();
     }
 
+    /** Slots in use across all datasources. */
+    public int usedPermits() {
+        return slots.values().stream().mapToInt(s -> s.permits() - s.semaphore().availablePermits()).sum();
+    }
+
     public static final class Permit implements AutoCloseable {
         private final Semaphore semaphore;
         private boolean released;

@@ -72,6 +72,7 @@ jdbcodata:
   security:
     allow-plain-http: false   # true only behind a TLS reverse proxy or for local demos (Basic Auth needs TLS)
     rate-limit-per-minute: 20 # failed logins per IP before 429 (per username: 5x)
+    metrics-token: ""         # Bearer token for /actuator/prometheus, at least 32 characters; empty = admin login only
     allowed-jdbc-urls: []     # extra JDBC URL prefixes for drivers in lib/, e.g. jdbc:sqlserver:
     allow-embedded-h2: false  # in-process H2 as datasource: local demo and tests only
 
