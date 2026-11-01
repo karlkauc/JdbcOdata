@@ -18,16 +18,16 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** Session settings against a real PostgreSQL target: set_config must survive the executor's rollback. */
 @Testcontainers(disabledWithoutDocker = true)
 class PostgresSessionSettingsIT {
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine");
 
     private static final IdentityPoolManager pools = new IdentityPoolManager();
     private static final QueryExecutor executor = new QueryExecutor(pools, new ConcurrencyLimiter(),

@@ -22,9 +22,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** Real requests into the real schema of the public demo: what ends up in the table, and what must not. */
 @Testcontainers(disabledWithoutDocker = true)
@@ -43,7 +43,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class UsageRecordingIT {
 
     @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine");
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry registry) throws Exception {
