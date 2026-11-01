@@ -41,8 +41,11 @@ public class AdminUserEntity {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword;
+
     AdminUser toRecord() {
-        return new AdminUser(id, username, role, enabled, createdAt, updatedAt, lastLoginAt);
+        return new AdminUser(id, username, role, enabled, createdAt, updatedAt, lastLoginAt, mustChangePassword);
     }
 
     public UUID getId() { return id; }
@@ -54,6 +57,7 @@ public class AdminUserEntity {
     public void setRole(AdminRole role) { this.role = role; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public void setMustChangePassword(boolean mustChangePassword) { this.mustChangePassword = mustChangePassword; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

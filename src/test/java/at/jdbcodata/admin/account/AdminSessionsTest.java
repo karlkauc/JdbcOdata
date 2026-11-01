@@ -41,13 +41,14 @@ class AdminSessionsTest extends DemoProfileTest {
     @Test
     void passwordChangeAndDisablingEndSessions() throws Exception {
         String name = "sess_" + UUID.randomUUID().toString().substring(0, 8);
-        AdminUser account = accounts.create(new AdminUserService.AdminUserSpec(name, "first-pass-1", AdminRole.VIEWER, true), false);
+        AdminUser account = accounts.create(new AdminUserService.AdminUserSpec(name, "first-pass-1", AdminRole.VIEWER, true), false, false);
 
         MockHttpSession session = signIn(name, "first-pass-1");
         accounts.update(account.id(), new AdminUserService.AdminUserSpec(name, "second-pass-2", AdminRole.VIEWER, true));
         mvc.perform(MockMvcRequestBuilders.get("/admin/queries").session(session)).andExpect(redirectedUrl("/login?ended"));
 
-        MockHttpSession again = signIn(name, "second-pass-2");
+        accounts.changeOwnPassword(name, "second-pass-2", "third-pass-3");
+        MockHttpSession again = signIn(name, "third-pass-3");
         accounts.update(account.id(), new AdminUserService.AdminUserSpec(name, null, AdminRole.VIEWER, true));
         mvc.perform(MockMvcRequestBuilders.get("/admin/queries").session(again)).andExpect(status().isOk()); // nothing relevant changed
         accounts.update(account.id(), new AdminUserService.AdminUserSpec(name, null, AdminRole.VIEWER, false));

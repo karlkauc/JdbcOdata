@@ -152,6 +152,11 @@ export. **Audit log** records configuration changes with admin, time and object,
 **Admin accounts** creates `ADMIN` and `VIEWER` accounts. One active `ADMIN` always remains, and you cannot delete your own
 account.
 
+A password set by another admin is temporary: its owner must choose their own at the first sign-in. Until then, only
+that page is reachable and the REST API answers 403. This also applies to the generated initial password, but not to
+`jdbcodata.admin.password` or to existing accounts. Scripts should use [API keys](#8-api-keys) instead of admin accounts.
+Anyone with a local account can change their password under *Change password* in the user menu.
+
 ## 8. API keys
 
 **API keys → New key**. A key is meant for machine clients and works either on feeds or on the REST API, never both:

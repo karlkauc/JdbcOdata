@@ -11,4 +11,6 @@ public interface AdminUserRepository extends JpaRepository<AdminUserEntity, UUID
     List<AdminUserEntity> findAllByOrderByUsername();
 
     long countByRoleAndEnabledTrue(AdminRole role);
+
+    boolean existsByUsernameIgnoreCaseAndMustChangePasswordTrue(String username);
 }

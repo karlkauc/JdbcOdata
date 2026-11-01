@@ -11,7 +11,8 @@
     <tr th:each="a : ${admins}">
       <td><strong th:text="${a.username}"></strong></td>
       <td><span class="badge plain" th:text="${a.role}"></span></td>
-      <td><span th:class="${a.enabled} ? 'badge ok' : 'badge off'" th:text="${a.enabled} ? 'enabled' : 'disabled'"></span></td>
+      <td><span th:class="${a.enabled} ? 'badge ok' : 'badge off'" th:text="${a.enabled} ? 'enabled' : 'disabled'"></span>
+        <span class="badge plain" th:if="${a.mustChangePassword}">temporary password</span></td>
       <td th:text="${a.lastLoginAt != null} ? ${#temporals.format(a.lastLoginAt, 'yyyy-MM-dd HH:mm')} : '–'"></td>
       <td><form th:action="@{/admin/admins/{id}(id=${a.id})}" method="post" class="inline-form" style="margin:0">
         <select name="role" style="width:auto"><option th:each="r : ${roles}" th:value="${r}" th:text="${r}" th:selected="${r == a.role}"></option></select>

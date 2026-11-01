@@ -1,5 +1,7 @@
 package at.jdbcodata.config;
 
+import at.jdbcodata.admin.account.AdminUserService;
+import at.jdbcodata.admin.account.PasswordChangeFilter;
 import at.jdbcodata.apikey.ApiKeyAuthenticationFilter;
 import at.jdbcodata.apikey.ApiKeyService;
 import at.jdbcodata.audit.LoginAudit;
@@ -25,6 +27,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
@@ -82,7 +85,7 @@ public class SecurityConfig {
     @Bean
     @Order(2)
     SecurityFilterChain apiChain(HttpSecurity http, OidcProperties oidc, ApiKeyService keys, LoginRateLimiter limiter,
-                                 LoginAudit audit) throws Exception {
+                                 LoginAudit audit, AdminUserService admins) throws Exception {
         http.securityMatcher("/api/**")
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("ADMIN", "VIEWER")
@@ -92,6 +95,7 @@ public class SecurityConfig {
                                         && auth.get().getAuthorities().stream().anyMatch(g -> "ROLE_ADMIN".equals(g.getAuthority()))))
                         .anyRequest().hasRole("ADMIN"))
                 .addFilterBefore(new ApiKeyAuthenticationFilter(keys, limiter, audit), BasicAuthenticationFilter.class)
+                .addFilterBefore(new PasswordChangeFilter(admins), AuthorizationFilter.class)
                 .csrf(c -> c.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         if (oidc.localLogin()) {
@@ -106,14 +110,16 @@ public class SecurityConfig {
     @Order(3)
     SecurityFilterChain uiChain(HttpSecurity http, SessionRegistry sessionRegistry, OidcProperties oidc,
                                 OidcClients clients, AdminOidcUserService oidcUsers,
-                                OidcFailureHandler oidcFailure) throws Exception {
+                                OidcFailureHandler oidcFailure, AdminUserService admins) throws Exception {
         http.authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/login", "/error",
                                 "/webjars/**", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        .requestMatchers(PasswordChangeFilter.PAGE).authenticated()
                         .requestMatchers(HttpMethod.GET, "/admin/**", "/", "/actuator/**").hasAnyRole("ADMIN", "VIEWER")
                         .requestMatchers("/admin/stats/**").hasAnyRole("ADMIN", "VIEWER")
                         .requestMatchers("/logout").authenticated()
                         .anyRequest().hasRole("ADMIN"))
+                .addFilterBefore(new PasswordChangeFilter(admins), AuthorizationFilter.class)
                 .logout(l -> l.logoutUrl("/logout").logoutSuccessUrl("/login?logout"))
                 // a form from an expired session (restart, timeout) leads back to the login instead of a bare 403
                 .exceptionHandling(e -> e.accessDeniedHandler(new ExpiredFormHandler()))

@@ -55,7 +55,7 @@ public class AdminBootstrap implements ApplicationRunner {
             throw new IllegalStateException("jdbcodata.admin.password must have at least " + MIN_PASSWORD_LENGTH
                     + " characters; set a longer one or leave it empty for a generated one");
         }
-        service.create(new AdminUserService.AdminUserSpec(props.admin().user(), password, AdminRole.ADMIN, true), false);
+        service.create(new AdminUserService.AdminUserSpec(props.admin().user(), password, AdminRole.ADMIN, true), false, generated);
         if (generated) {
             // never in the log: logs end up in log collectors and support tickets
             Path file = Path.of(props.dataDir(), INITIAL_PASSWORD_FILE);

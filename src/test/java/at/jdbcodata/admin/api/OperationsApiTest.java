@@ -2,14 +2,19 @@ package at.jdbcodata.admin.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import at.jdbcodata.admin.account.AdminUserService;
 import at.jdbcodata.testutil.DemoProfileTest;
 import java.net.http.HttpResponse;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 class OperationsApiTest extends DemoProfileTest {
+
+    @Autowired
+    private AdminUserService accounts;
 
     private final JsonMapper json = JsonMapper.builder().build();
 
@@ -88,18 +93,22 @@ class OperationsApiTest extends DemoProfileTest {
         String id = json.readTree(created.body()).get("id").asString();
         assertThat(created.body()).doesNotContain("viewer-pass");
 
-        assertThat(get("/api/v1/queries", viewer, "viewer-pass").statusCode()).as("viewer may read").isEqualTo(200);
-        assertThat(get("/api/v1/stats/summary", viewer, "viewer-pass").statusCode()).isEqualTo(200);
-        assertThat(send("DELETE", "/api/v1/cache", null, viewer, "viewer-pass").statusCode()).as("viewer may not write").isEqualTo(403);
-        assertThat(send("POST", "/api/v1/groups", "{\"name\":\"x_y\"}", viewer, "viewer-pass").statusCode()).isEqualTo(403);
+        assertThat(get("/api/v1/queries", viewer, "viewer-pass").statusCode()).as("temporary password").isEqualTo(403);
+        accounts.changeOwnPassword(viewer, "viewer-pass", "viewer-own");
+
+        assertThat(get("/api/v1/queries", viewer, "viewer-own").statusCode()).as("viewer may read").isEqualTo(200);
+        assertThat(get("/api/v1/stats/summary", viewer, "viewer-own").statusCode()).isEqualTo(200);
+        assertThat(send("DELETE", "/api/v1/cache", null, viewer, "viewer-own").statusCode()).as("viewer may not write").isEqualTo(403);
+        assertThat(send("POST", "/api/v1/groups", "{\"name\":\"x_y\"}", viewer, "viewer-own").statusCode()).isEqualTo(403);
 
         assertThat(send("POST", "/api/v1/admins", "{\"username\":\"%s\",\"password\":\"viewer-pass\"}".formatted(viewer), ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(409);
         assertThat(send("POST", "/api/v1/admins", "{\"username\":\"ok_name\",\"password\":\"short\"}", ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(400);
 
         HttpResponse<String> promoted = send("PUT", "/api/v1/admins/" + id, "{\"username\":\"%s\",\"role\":\"ADMIN\",\"enabled\":true,\"password\":\"viewer-pass2\"}".formatted(viewer), ADMIN, ADMIN_PASSWORD);
         assertThat(promoted.statusCode()).isEqualTo(200);
-        assertThat(get("/api/v1/queries", viewer, "viewer-pass2").statusCode()).isEqualTo(200);
-        assertThat(get("/api/v1/queries", viewer, "viewer-pass").statusCode()).isEqualTo(401);
+        accounts.changeOwnPassword(viewer, "viewer-pass2", "viewer-own2");
+        assertThat(get("/api/v1/queries", viewer, "viewer-own2").statusCode()).isEqualTo(200);
+        assertThat(get("/api/v1/queries", viewer, "viewer-own").statusCode()).isEqualTo(401);
 
         String adminId = null;
         for (JsonNode a : json.readTree(get("/api/v1/admins", ADMIN, ADMIN_PASSWORD).body())) {
