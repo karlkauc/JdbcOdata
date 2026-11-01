@@ -10,6 +10,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write # keyless signing with cosign
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -17,12 +18,27 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
+      - name: Tag and pom must agree
+        run: |
+          version=$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout)
+          test "v$version" = "$GITHUB_REF_NAME"
       - run: ./mvnw -B verify
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" target/jdbcodata.jar target/jdbcodata-*-dist.zip --generate-notes
+      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
+      - uses: sigstore/cosign-installer@v4
+      # scanned before anything is published: a finding stops the release
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: jdbcodata:scan
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: jdbcodata:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
       - uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -35,10 +51,30 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-      - uses: docker/build-push-action@v7
+      - id: push
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
           push: true
+          provenance: mode=max
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+      - name: Sign the image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$(echo "ghcr.io/$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')@$DIGEST"
+      - name: Checksums, signed
+        working-directory: target
+        run: |
+          cp classes/META-INF/sbom/application.cdx.json jdbcodata-sbom.json
+          sha256sum jdbcodata.jar jdbcodata-*-dist.zip jdbcodata-sbom.json > SHA256SUMS
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --generate-notes target/jdbcodata.jar target/jdbcodata-*-dist.zip \
+            target/jdbcodata-sbom.json target/SHA256SUMS target/SHA256SUMS.sigstore.json

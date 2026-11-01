@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # Base images are pinned by digest (reproducible, no silent changes). Update: docker buildx imagetools inspect <tag>
-FROM maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS build
+# The build stage runs natively for every target platform: the JAR is the same, and Maven under emulation takes long.
+FROM --platform=$BUILDPLATFORM maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 AS build
 WORKDIR /build
 COPY pom.xml .
 COPY src ./src

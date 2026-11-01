@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   `logging.structured.format.console=ecs`
 - `jdbcodata.security.metrics-token` lets Prometheus scrape without an admin login
 - Metrics for identity pools, running executions, rate-limited requests and dropped log records
+- Releases carry an SBOM, checksums and cosign signatures. The Docker image is also built for `linux/arm64`
 
 ### Fixed
 
