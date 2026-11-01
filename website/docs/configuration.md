@@ -53,6 +53,7 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `jdbcodata.cache.max-size-mb` | `1024` | Total size of the persistent cache, compressed |
 | `jdbcodata.cache.memory-mb` | `256` | In-memory layer |
 | `jdbcodata.cache.cleanup-interval-ms` | `300000` | Cleanup job for expired entries and the size limit |
+| `jdbcodata.cluster.poll-interval-ms` | `5000` | How soon an instance follows cache invalidations of the others |
 | `jdbcodata.stats.retention-days` | `90` | Retention of the execution log |
 | `jdbcodata.audit.retention-days` | `0` | Retention of the audit log in days; `0` keeps everything. Each deletion is recorded in the audit log |
 | `jdbcodata.stats.async` | `true` | Write the log on a separate thread |

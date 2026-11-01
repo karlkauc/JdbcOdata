@@ -71,6 +71,8 @@ jdbcodata:
     interval-ms: 60000     # active check of datasources with a technical account (admin UI status); 0 = off
   ui:
     environment: ""        # label of this deployment in the admin top bar, e.g. DEV, TEST, PROD; empty = no badge
+  cluster:
+    poll-interval-ms: 5000    # how soon an instance follows cache invalidations of the others
   security:
     allow-plain-http: false   # true only behind a TLS reverse proxy or for local demos (Basic Auth needs TLS)
     rate-limit-per-minute: 20 # failed logins per IP before 429 (per username: 5x)

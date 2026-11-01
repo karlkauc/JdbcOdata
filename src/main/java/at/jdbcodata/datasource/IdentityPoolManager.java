@@ -38,7 +38,9 @@ public class IdentityPoolManager {
     private static final Duration IDLE_EVICTION = Duration.ofMinutes(5);
     private static final Duration REJECTED_LOGIN_MEMORY = Duration.ofMinutes(5);
 
-    private record PoolKey(UUID datasourceId, String username, String passwordHash, Map<String, String> settings) {
+    /** With the datasource's change time: other instances move to a new pool at once, the old one is evicted when idle. */
+    private record PoolKey(UUID datasourceId, Instant datasourceUpdatedAt, String username, String passwordHash,
+                           Map<String, String> settings) {
     }
 
     private record Login(UUID datasourceId, String username, String passwordHash) {
@@ -72,7 +74,7 @@ public class IdentityPoolManager {
     public Connection connect(Datasource ds, Map<String, String> sessionSettings, String username, String password)
             throws SQLException {
         Map<String, String> settings = new TreeMap<>(sessionSettings == null ? Map.of() : sessionSettings);
-        PoolKey key = new PoolKey(ds.id(), username, sha256(password), Map.copyOf(settings));
+        PoolKey key = new PoolKey(ds.id(), ds.updatedAt(), username, sha256(password), Map.copyOf(settings));
         Pool pool = pools.get(key);
         if (pool == null) {
             pool = pools.computeIfAbsent(key, k -> new Pool(createPool(ds, settings, username, password)));

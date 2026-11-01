@@ -29,6 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Fixed
 
+- With several instances, cache invalidations and datasource changes did not reach the other instances: they kept
+  answering from memory until the entry expired, and kept using connection pools for the old database. Invalidations now
+  arrive within `jdbcodata.cluster.poll-interval-ms`, datasource changes at once
 - Many clients refreshing one cached feed could exhaust the heap: cache hits skipped the concurrency limit, so each
   built its complete response in memory at the same time. `jdbcodata.odata.response-rows-budget` now limits these
   responses; further clients wait up to `jdbcodata.odata.response-wait-ms` and then get 503

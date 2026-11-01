@@ -389,7 +389,7 @@ Payload-Skizze Query (POST/PUT):
 | O-05 | Excel-Query-Folding sendet teils `$filter` mit Funktionen, die Olingo in-memory nicht abbildet | `501` statt Daten | Unterstützte Funktionen dokumentieren; Excel fällt bei Fehlern auf lokale Filterung zurück, zu verifizieren in M2 |
 | O-06 | Pass-Through-Pools halten Passwort-Hashes kurzzeitig im Speicher | Akzeptabel? | Mit Security abstimmen; Pool-Lebensdauer konfigurierbar |
 | O-07 | Service-User-Name kollidiert mit DB-Username | Auflösung greift fälschlich den Service-User | **Entschieden 2026-10-16:** Namenskonvention mit Präfix `svc_` für Service-User (FR-32b); zusätzlich Flag „Pass-Through erzwingen“ (FR-32c) |
-| O-08 | Mehrere Instanzen: Caffeine-Cache ist lokal, Invalidierung muss alle Instanzen erreichen | Veraltete Daten für max. TTL der Caffeine-Schicht | Caffeine-TTL kurz (60 s) halten oder Invalidierung über DB-Versionszähler |
+| O-08 | Mehrere Instanzen: Caffeine-Cache ist lokal, Invalidierung muss alle Instanzen erreichen | Veraltete Daten für max. TTL der Caffeine-Schicht | **Erledigt:** Generationszähler in der Metadaten-DB, geprüft mit `TwoNodeIT` |
 | O-09 | Mehrinstanz-Betrieb mit H2 | Nicht möglich | Für Mehrinstanz PostgreSQL vorschreiben |
 | O-10 | SQL-Validierung mit JSqlParser lehnt herstellerspezifische Syntax ab (z.B. Oracle-Hints in Sonderformen, exotische Funktionen) | Gültige Queries können nicht gespeichert werden | In M2 strikt umgesetzt (FR-12). Bei Bedarf pro Datenquelle ein Flag „nur lexikalische Prüfung“ ergänzen |
 | O-11 | `$filter` wird in-memory nach dem vollständigen Laden ausgewertet | Excel-Query-Folding reduziert die DB-Last nicht | **Erledigt:** Push-Down pro Query schaltbar, siehe ARCHITECTURE.md |
