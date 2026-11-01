@@ -14,6 +14,7 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite of the admin session cookie. Tomcat sets `Secure` on HTTPS |
 | `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator endpoints. `/actuator/prometheus` needs an admin account |
 | `logging.file.name` | none | For example `logs/jdbcodata.log` |
+| `logging.structured.format.console` | none | JSON logs on stdout: `ecs`, `logstash` or `gelf`. For files use `logging.structured.format.file` |
 
 ## Admin and storage
 

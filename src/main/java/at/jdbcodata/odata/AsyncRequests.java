@@ -1,5 +1,6 @@
 package at.jdbcodata.odata;
 
+import at.jdbcodata.common.RequestIdFilter;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -14,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 /**
@@ -60,7 +62,7 @@ public class AsyncRequests {
             long running = jobs.values().stream().filter(j -> j.owner().equals(owner) && !j.future().isDone()).count();
             if (running >= MAX_RUNNING_PER_CALLER) return null;
             String id = UUID.randomUUID().toString().replace("-", "");
-            jobs.put(id, new Job(owner, pool.submit(work), clock.instant()));
+            jobs.put(id, new Job(owner, pool.submit(withRequestId(work)), clock.instant()));
             while (jobs.size() > MAX_JOBS) {
                 Iterator<Map.Entry<String, Job>> it = jobs.entrySet().iterator();
                 Job oldest = it.next().getValue();
@@ -69,6 +71,17 @@ public class AsyncRequests {
             }
             return id;
         }
+    }
+
+    /** Log lines of the job keep the ID of the request that started it. */
+    private static Callable<Result> withRequestId(Callable<Result> work) {
+        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
+        if (requestId == null) return work;
+        return () -> {
+            try (MDC.MDCCloseable ignored = MDC.putCloseable(RequestIdFilter.MDC_KEY, requestId)) {
+                return work.call();
+            }
+        };
     }
 
     /** The job {@code id} of {@code owner}, or null. */

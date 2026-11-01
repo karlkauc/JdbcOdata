@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   callers of a technical account share one pool, so its parallel executions were limited to 2
 - The audit log now records admin sign-ins and sign-outs, rejected admin and feed logins, and query test runs
 - `jdbcodata.audit.retention-days` deletes old audit records. The default `0` keeps everything
+- Every request has an ID in its log lines and in the `X-Request-Id` response header. JSON logs are available with
+  `logging.structured.format.console=ecs`
 
 ### Fixed
 
