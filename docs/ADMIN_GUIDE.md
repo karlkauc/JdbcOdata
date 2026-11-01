@@ -191,6 +191,11 @@ Rohdaten mit Filter und CSV-Export. Audit: alle Konfigurationsänderungen mit Ad
 Admin accounts → Create account (ADMIN oder VIEWER), Passwort ändern, deaktivieren. Mindestens ein aktiver ADMIN bleibt
 immer bestehen; das eigene Konto kann nicht gelöscht werden.
 
+Ein Passwort, das ein anderer Admin vergeben hat, ist vorläufig: Beim ersten Login muss die Inhaberin oder der Inhaber
+ein eigenes wählen, bis dahin ist nur diese Seite erreichbar und die REST-API antwortet mit 403. Das gilt auch für das
+generierte Initialpasswort, nicht für `jdbcodata.admin.password` und nicht für bestehende Konten. Skripte nutzen statt
+Admin-Konten [API-Keys](#7-api-keys). Das eigene Passwort lässt sich jederzeit im Benutzermenü unter „Change password“ ändern.
+
 Mit OIDC (siehe [Betriebshandbuch](OPERATIONS.md#single-sign-on-für-die-admin-ui)) erscheint auf der Login-Seite ein
 Button pro Identity Provider. Diese Nutzer stehen nicht in der Liste der Admin-Konten: Die Rolle kommt bei jeder
 Anmeldung vom Provider. Im Audit-Log tragen sie den Präfix `oidc:`, zum Beispiel `oidc:anna`.

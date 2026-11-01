@@ -195,7 +195,14 @@ if (!/\/login/.test(page.url())) throw new Error('Nach Logout nicht auf /login: 
 await page.fill('input[name=username]', 'pw_viewer');
 await page.fill('input[name=password]', 'viewer-pass-1');
 await Promise.all([page.waitForNavigation(), page.click('button[type=submit]')]);
-if (!/\/admin$/.test(page.url())) throw new Error('Viewer-Login nicht auf /admin: ' + page.url());
+if (!/\/admin\/password$/.test(page.url())) throw new Error('Neues Konto nicht zum Passwortwechsel geleitet: ' + page.url());
+await page.goto(`${base}/admin/queries`);
+if (!/\/admin\/password$/.test(page.url())) throw new Error('Passwortwechsel lässt sich umgehen: ' + page.url());
+await page.fill('input[name=current]', 'viewer-pass-1');
+await page.fill('input[name=password]', 'viewer-pass-2');
+await page.fill('input[name=confirm]', 'viewer-pass-2');
+await Promise.all([page.waitForNavigation(), page.click('main button[type=submit]')]);
+if (!/\/admin$/.test(page.url())) throw new Error('Nach Passwortwechsel nicht auf /admin: ' + page.url());
 await page.click('nav >> text=Queries');
 await expectText('Sales', 'VIEWER sieht Query-Liste');
 await page.goto(pwQueryUrl);

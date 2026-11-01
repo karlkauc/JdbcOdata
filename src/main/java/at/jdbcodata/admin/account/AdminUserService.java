@@ -82,12 +82,15 @@ public class AdminUserService implements UserDetailsService {
 
     @Transactional
     public AdminUser create(AdminUserSpec spec) {
-        return create(spec, true);
+        return create(spec, true, true);
     }
 
-    /** {@code enforcePasswordPolicy=false} is used for the configured initial admin only. */
+    /**
+     * {@code enforcePasswordPolicy=false} is used for the configured initial admin only.
+     * {@code temporaryPassword}: the owner must replace the password at the first sign-in.
+     */
     @Transactional
-    public AdminUser create(AdminUserSpec spec, boolean enforcePasswordPolicy) {
+    public AdminUser create(AdminUserSpec spec, boolean enforcePasswordPolicy, boolean temporaryPassword) {
         if (spec.username() == null || !USERNAME.matcher(spec.username()).matches()) {
             throw new InvalidRequestException("Username must be 2-100 characters of letters, digits, _ . @ -");
         }
@@ -102,6 +105,7 @@ public class AdminUserService implements UserDetailsService {
         e.setPasswordHash(encoder.encode(spec.password()));
         e.setRole(spec.role() == null ? AdminRole.ADMIN : spec.role());
         e.setEnabled(spec.enabled() == null || spec.enabled());
+        e.setMustChangePassword(temporaryPassword);
         e.setCreatedAt(Instant.now());
         e.setUpdatedAt(Instant.now());
         AdminUser created = repository.save(e).toRecord();
@@ -117,6 +121,7 @@ public class AdminUserService implements UserDetailsService {
         if (spec.password() != null && !spec.password().isBlank()) {
             if (spec.password().length() < 8) throw new InvalidRequestException("Password must have at least 8 characters");
             e.setPasswordHash(encoder.encode(spec.password()));
+            e.setMustChangePassword(!e.getUsername().equalsIgnoreCase(CurrentUser.name()));
         }
         AdminRole newRole = spec.role() == null ? e.getRole() : spec.role();
         boolean newEnabled = spec.enabled() == null ? e.isEnabled() : spec.enabled();
@@ -136,6 +141,34 @@ public class AdminUserService implements UserDetailsService {
                 Map.of("role", updated.role().name(), "enabled", updated.enabled(),
                         "passwordChanged", spec.password() != null && !spec.password().isBlank()));
         return updated;
+    }
+
+    /** Accounts of the identity provider and API keys carry a prefix that names of local accounts cannot contain. */
+    public boolean isLocal(String username) {
+        return USERNAME.matcher(username).matches();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean mustChangePassword(String username) {
+        return repository.existsByUsernameIgnoreCaseAndMustChangePasswordTrue(username);
+    }
+
+    @Transactional
+    public void changeOwnPassword(String username, String current, String password) {
+        AdminUserEntity e = repository.findByUsernameIgnoreCase(username)
+                .orElseThrow(() -> new NotFoundException("Admin user " + username + " not found"));
+        if (!encoder.matches(current, e.getPasswordHash())) {
+            throw new InvalidRequestException("The current password is wrong");
+        }
+        if (password.length() < 8) throw new InvalidRequestException("Password must have at least 8 characters");
+        if (encoder.matches(password, e.getPasswordHash())) {
+            throw new InvalidRequestException("The new password must differ from the current one");
+        }
+        e.setPasswordHash(encoder.encode(password));
+        e.setMustChangePassword(false);
+        e.setUpdatedAt(Instant.now());
+        sessions.expire(e.getUsername());
+        audit.record("PASSWORD_CHANGE", "ADMIN_USER", e.getId(), e.getUsername(), null);
     }
 
     @Transactional

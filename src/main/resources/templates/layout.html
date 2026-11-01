@@ -109,6 +109,7 @@
           <button type="button" data-theme-choice="dark"><svg th:replace="~{fragments/icons :: icon('moon')}"></svg>Dark</button>
         </div>
         <a th:href="@{/admin/admins}"><svg th:replace="~{fragments/icons :: icon('shield')}"></svg>Admin accounts</a>
+        <a th:href="@{/admin/password}" th:unless="${#strings.contains(currentUser, ':')}"><svg th:replace="~{fragments/icons :: icon('lock')}"></svg>Change password</a>
         <a th:href="@{/admin/settings}"><svg th:replace="~{fragments/icons :: icon('settings')}"></svg>Settings</a>
         <form th:action="@{/logout}" method="post"><button type="submit"><svg th:replace="~{fragments/icons :: icon('logout')}"></svg>Sign out</button></form>
       </div>
