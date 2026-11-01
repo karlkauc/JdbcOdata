@@ -45,10 +45,12 @@ in memory only while the connection pool for this login is alive. Idle pools are
 The service document and `$metadata` need a valid database login. A caller sees the queries of the datasources that accept the
 login. While a database cannot be reached, its queries stay hidden. If no database can be reached, the service answers 503.
 
+A login that a database rejected is not tried again on that database for 5 minutes. So a new account that uses a password the service has just seen rejected can take up to 5 minutes to work. Saving the datasource ends this wait at once, and a different password is always tried.
+
 !!! danger "Every Basic login reaches your database"
     Any login that is not a service user is tried as a database login. Superuser and write accounts must not be able to sign in
     over the network, for example in `pg_hba.conf`: `host all <superuser> all reject`. Accounts with a lockout policy can be
-    locked by repeated failed attempts. See [Security](security.md#known-limits).
+    locked by repeated failed attempts: a user with different passwords on two databases causes one failed login every 5 minutes while working. See [Security](security.md#known-limits).
 
 ## Service users
 
