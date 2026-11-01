@@ -1,5 +1,6 @@
 package at.jdbcodata.datasource;
 
+import at.jdbcodata.query.SqlDialect;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.zaxxer.hikari.HikariConfig;
@@ -10,6 +11,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
@@ -76,7 +78,22 @@ public class IdentityPoolManager {
             pool = pools.computeIfAbsent(key, k -> new Pool(createPool(ds, settings, username, password)));
         }
         pool.lastUsed = Instant.now();
-        return pool.dataSource.getConnection();
+        Connection connection = pool.dataSource.getConnection();
+        if (SqlDialect.of(ds.jdbcUrl()) == SqlDialect.ORACLE) beginReadOnlyTransaction(connection);
+        return connection;
+    }
+
+    /**
+     * Oracle's driver accepts {@code setReadOnly} without enforcing it. This statement does, but only until the
+     * transaction ends, so it runs for every checkout; Hikari rolls back when the connection comes back.
+     */
+    private static void beginReadOnlyTransaction(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("SET TRANSACTION READ ONLY");
+        } catch (SQLException e) {
+            connection.close();
+            throw e;
+        }
     }
 
     private HikariDataSource createPool(Datasource ds, Map<String, String> settings, String username, String password) {
