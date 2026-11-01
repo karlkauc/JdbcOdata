@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   collation, usually ignoring case. Both returned wrong rows. String grouping, `countdistinct`, `min` and `max`
   now also count values with trailing blanks separately
 - MySQL and MariaDB push-down: grouped `TINYINT(1)` columns came back as numbers instead of booleans
+- Pass-through users with accounts on only some datasources paid for a failed login on the others with every
+  request, which cost seconds and could lock accounts. A rejected login is now remembered for 5 minutes
 
 ## [1.0.0] – 2026-10-31
 

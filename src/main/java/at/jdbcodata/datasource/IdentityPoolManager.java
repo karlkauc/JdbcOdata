@@ -1,5 +1,7 @@
 package at.jdbcodata.datasource;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import jakarta.annotation.PreDestroy;
@@ -32,8 +34,12 @@ public class IdentityPoolManager {
 
     private static final Logger log = LoggerFactory.getLogger(IdentityPoolManager.class);
     private static final Duration IDLE_EVICTION = Duration.ofMinutes(5);
+    private static final Duration REJECTED_LOGIN_MEMORY = Duration.ofMinutes(5);
 
     private record PoolKey(UUID datasourceId, String username, String passwordHash, Map<String, String> settings) {
+    }
+
+    private record Login(UUID datasourceId, String username, String passwordHash) {
     }
 
     private static final class Pool {
@@ -46,6 +52,14 @@ public class IdentityPoolManager {
     }
 
     private final Map<PoolKey, Pool> pools = new ConcurrentHashMap<>();
+
+    /**
+     * Logins a database just rejected. Each request checks the caller against every datasource, so without this a
+     * user with accounts on only some of them would fail a slow login on the others every time, which can also lock
+     * those accounts. It only ever saves an attempt: another password is another entry.
+     */
+    private final Cache<Login, Boolean> rejected = Caffeine.newBuilder()
+            .expireAfterWrite(REJECTED_LOGIN_MEMORY).maximumSize(10_000).build();
 
     /** A connection with the session settings of the datasource. */
     public Connection connect(Datasource ds, String username, String password) throws SQLException {
@@ -97,7 +111,16 @@ public class IdentityPoolManager {
         }
     }
 
+    public boolean recentlyRejected(Datasource ds, String username, String password) {
+        return rejected.getIfPresent(new Login(ds.id(), username, sha256(password))) != null;
+    }
+
+    public void rememberRejected(Datasource ds, String username, String password) {
+        rejected.put(new Login(ds.id(), username, sha256(password)), Boolean.TRUE);
+    }
+
     public void closePoolsFor(UUID datasourceId) {
+        rejected.asMap().keySet().removeIf(login -> login.datasourceId().equals(datasourceId));
         pools.entrySet().removeIf(entry -> {
             if (entry.getKey().datasourceId().equals(datasourceId)) {
                 close(entry.getValue());

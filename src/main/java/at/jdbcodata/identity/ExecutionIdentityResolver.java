@@ -72,7 +72,7 @@ public class ExecutionIdentityResolver {
     /**
      * Enabled queries with a snapshot that the caller may see (personalised service document, FR-35). A pass-through
      * caller has proven nothing yet, so each datasource behind these queries must accept the Basic login first
-     * (pooled, so cheap after the first request); queries of datasources that reject it are left out. A datasource
+     * (pooled or remembered, so cheap after the first request); queries of datasources that reject it are left out. A datasource
      * that is merely unreachable keeps its queries, they fail when executed.
      *
      * @throws DbAuthenticationException every datasource rejected the pass-through login
@@ -156,13 +156,19 @@ public class ExecutionIdentityResolver {
     /**
      * Opens (and immediately returns) a pooled connection with the given login. A wrong password surfaces as
      * {@link at.jdbcodata.datasource.DbAuthenticationException}. Used so that a cache hit never hands out a result
-     * to a caller who did not prove the DB password.
+     * to a caller who did not prove the DB password. A login the database just rejected is not tried again.
      */
     public void verifyLogin(Datasource ds, String username, String password) {
-        try (Connection c = pools.connect(ds, username, password)) {
-            c.isValid(2);
-        } catch (SQLException e) {
-            throw DbErrorClassifier.translate(e, ds.name());
+        if (pools.recentlyRejected(ds, username, password)) throw new DbAuthenticationException(ds.name(), null);
+        try {
+            try (Connection c = pools.connect(ds, username, password)) {
+                c.isValid(2);
+            } catch (SQLException e) {
+                throw DbErrorClassifier.translate(e, ds.name());
+            }
+        } catch (DbAuthenticationException e) {
+            pools.rememberRejected(ds, username, password);
+            throw e;
         }
     }
 }
