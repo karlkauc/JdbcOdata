@@ -13,6 +13,11 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `server.forward-headers-strategy` | none | Use `native` behind a reverse proxy. Tomcat then trusts `X-Forwarded-*` only from internal proxy addresses. Other proxy networks: `server.tomcat.remoteip.internal-proxies` |
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite of the admin session cookie. Tomcat sets `Secure` on HTTPS |
 | `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator endpoints. `/actuator/prometheus` needs an admin account or the metrics token |
+| `jdbcodata.security.oidc.local-login` | `true` | `false`: no password logins in UI and API, see [Single sign-on](operations.md#single-sign-on-for-the-admin-ui) |
+| `jdbcodata.security.oidc.username-claim` | `preferred_username` | Claim with the name for UI and audit log |
+| `jdbcodata.security.oidc.role-claim` | `groups` | Claim with groups or app roles |
+| `jdbcodata.security.oidc.admin-values` | empty | Claim values for ADMIN, exact match |
+| `jdbcodata.security.oidc.viewer-values` | empty | Claim values for VIEWER, exact match |
 | `jdbcodata.security.metrics-token` | empty | Token for Prometheus, at least 32 characters, sent as `Authorization: Bearer …`. It opens `/actuator/prometheus` only. Empty: off |
 | `logging.file.name` | none | For example `logs/jdbcodata.log` |
 | `logging.structured.format.console` | none | JSON logs on stdout: `ecs`, `logstash` or `gelf`. For files use `logging.structured.format.file` |

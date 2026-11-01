@@ -77,6 +77,12 @@ jdbcodata:
     metrics-token: ""         # Bearer token for /actuator/prometheus, at least 32 characters; empty = admin login only
     allowed-jdbc-urls: []     # extra JDBC URL prefixes for drivers in lib/, e.g. jdbc:sqlserver:
     allow-embedded-h2: false  # in-process H2 as datasource: local demo and tests only
+    oidc:                     # single sign-on for the admin UI, the IdP is set in spring.security.oauth2.client.*
+      local-login: true       # false: no password logins in UI and API, needs a client registration and admin-values
+      username-claim: preferred_username
+      role-claim: groups      # claim with the groups or app roles of the user
+      admin-values: []        # claim values for ADMIN, exact match; a user with neither list is rejected
+      viewer-values: []       # claim values for VIEWER
 
 logging:
   pattern:

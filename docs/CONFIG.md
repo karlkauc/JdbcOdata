@@ -36,6 +36,11 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.security.allow-embedded-h2` | `false` | Eingebettete H2-Datenbanken (`jdbc:h2:mem:`, `jdbc:h2:file:`) als Datenquelle erlauben. Sie laufen in der JVM des Service und könnten dessen Dateien lesen (Master-Key, Metadaten-DB): nur Demo-Profil und Tests |
 | `jdbcodata.seed.file` | leer | YAML mit Datenquellen und Queries, beim Start per Name eingespielt |
 | `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator-Endpunkte; `/actuator/prometheus` nur für Admin-Konten oder mit Metrik-Token |
+| `jdbcodata.security.oidc.local-login` | `true` | `false`: kein Passwort-Login in UI und API, siehe [Single Sign-on](OPERATIONS.md#single-sign-on-für-die-admin-ui) |
+| `jdbcodata.security.oidc.username-claim` | `preferred_username` | Claim mit dem Namen für UI und Audit-Log |
+| `jdbcodata.security.oidc.role-claim` | `groups` | Claim mit Gruppen oder App-Rollen |
+| `jdbcodata.security.oidc.admin-values` | leer | Claim-Werte für ADMIN, exakter Vergleich |
+| `jdbcodata.security.oidc.viewer-values` | leer | Claim-Werte für VIEWER, exakter Vergleich |
 | `jdbcodata.security.metrics-token` | leer | Token für Prometheus, mindestens 32 Zeichen, gesendet als `Authorization: Bearer …`. Gilt nur für `/actuator/prometheus`. Leer = aus |
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite des Admin-Session-Cookies; `Secure` setzt Tomcat bei HTTPS selbst |
 | `logging.file.name` | – | z.B. `logs/jdbcodata.log` für Datei-Logging |

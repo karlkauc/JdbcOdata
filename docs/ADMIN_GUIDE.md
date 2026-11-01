@@ -191,6 +191,10 @@ Rohdaten mit Filter und CSV-Export. Audit: alle Konfigurationsänderungen mit Ad
 Admin accounts → Create account (ADMIN oder VIEWER), Passwort ändern, deaktivieren. Mindestens ein aktiver ADMIN bleibt
 immer bestehen; das eigene Konto kann nicht gelöscht werden.
 
+Mit OIDC (siehe [Betriebshandbuch](OPERATIONS.md#single-sign-on-für-die-admin-ui)) erscheint auf der Login-Seite ein
+Button pro Identity Provider. Diese Nutzer stehen nicht in der Liste der Admin-Konten: Die Rolle kommt bei jeder
+Anmeldung vom Provider. Im Audit-Log tragen sie den Präfix `oidc:`, zum Beispiel `oidc:anna`.
+
 ## 7. Seed-Datei
 
 Datenquellen und Queries lassen sich versioniert als YAML pflegen (`contrib/seed-example.yml`) und mit

@@ -20,11 +20,17 @@
   <div class="flash ok" th:if="${param.logout}">You have been signed out.</div>
   <div class="flash err" th:if="${param.ended}">Your session was ended because your account was changed or disabled. Please sign in again.</div>
   <div class="flash err" th:if="${param.expired}">Your session has expired, for example after a restart of the service. Please sign in again.</div>
-  <form th:action="@{/login}" method="post">
+  <div class="flash err" th:if="${param.denied}">Your account has no access to this service. Please ask an administrator.</div>
+  <div class="flash err" th:if="${param.ssofailed}">Single sign-on failed. Please try again or contact an administrator.</div>
+  <form th:if="${localLogin}" th:action="@{/login}" method="post">
     <label>User <input type="text" name="username" autofocus required autocomplete="username"></label>
     <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
     <button type="submit" class="primary">Sign in</button>
   </form>
+  <div class="sso-logins" th:unless="${ssoClients.isEmpty()}">
+    <a class="button" th:each="c : ${ssoClients}" th:href="@{/oauth2/authorization/{id}(id=${c.registrationId})}"
+       th:text="|Sign in with ${c.clientName}|">Sign in with Keycloak</a>
+  </div>
 </main>
 </body>
 </html>

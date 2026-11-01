@@ -44,8 +44,8 @@ inspect a JdbcOdata feed. The JdbcOdata live demo is one of its featured samples
 
 ## What it is not
 
-JdbcOdata is read-only: no `POST`, `PATCH` or `DELETE` on feeds. There is no SSO, Kerberos or OpenID Connect; clients use
-HTTP Basic, so TLS is mandatory for real use. OData V2 and the Atom format are not supported.
+JdbcOdata is read-only: no `POST`, `PATCH` or `DELETE` on feeds. Feeds have no SSO, Kerberos or OpenID Connect; clients use
+HTTP Basic, so TLS is mandatory for real use. Only the admin UI can use [single sign-on](operations.md#single-sign-on-for-the-admin-ui). OData V2 and the Atom format are not supported.
 
 ## Licence
 

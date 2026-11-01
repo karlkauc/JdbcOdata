@@ -18,6 +18,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - `jdbcodata.security.metrics-token` lets Prometheus scrape without an admin login
 - Metrics for identity pools, running executions, rate-limited requests and dropped log records
 - Releases carry an SBOM, checksums and cosign signatures. The Docker image is also built for `linux/arm64`
+- Single sign-on for the admin UI with OpenID Connect, tested against Keycloak. Roles come from a claim, sign-out also
+  ends the session at the identity provider, and `jdbcodata.security.oidc.local-login=false` turns off password logins.
+  Feeds still use Basic Auth
 
 ### Fixed
 
