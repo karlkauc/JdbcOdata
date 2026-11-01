@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,6 +21,7 @@ public class LoginRateLimiter {
     static final int USER_FACTOR = 5;
 
     private final int limit;
+    private final AtomicLong rejected = new AtomicLong();
     private final Cache<String, AtomicInteger> failures = Caffeine.newBuilder()
             .expireAfterWrite(WINDOW).maximumSize(100_000).build();
 
@@ -41,6 +43,15 @@ public class LoginRateLimiter {
 
     public int limit() {
         return limit;
+    }
+
+    public void countRejected() {
+        rejected.incrementAndGet();
+    }
+
+    /** Requests refused so far because of too many failures. */
+    public long rejected() {
+        return rejected.get();
     }
 
     /** A write, so the entry's expiry restarts with every failure. */

@@ -45,6 +45,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String username = BasicCredentials.fromHeader(request.getHeader("Authorization"))
                 .map(BasicCredentials::username).orElse(request.getParameter("username"));
         if (limiter.isBlocked(request.getRemoteAddr(), username)) {
+            limiter.countRejected();
             response.setStatus(429);
             response.setHeader("Retry-After", String.valueOf(LoginRateLimiter.WINDOW.toSeconds()));
             response.setContentType("application/json");

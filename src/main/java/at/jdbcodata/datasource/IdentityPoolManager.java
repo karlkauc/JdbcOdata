@@ -147,6 +147,14 @@ public class IdentityPoolManager {
         return pools.size();
     }
 
+    public int activeConnections() {
+        return pools.values().stream().mapToInt(p -> p.dataSource.getHikariPoolMXBean().getActiveConnections()).sum();
+    }
+
+    public int pendingConnections() {
+        return pools.values().stream().mapToInt(p -> p.dataSource.getHikariPoolMXBean().getThreadsAwaitingConnection()).sum();
+    }
+
     @PreDestroy
     public void closeAll() {
         pools.values().forEach(this::close);

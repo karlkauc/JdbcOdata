@@ -1,5 +1,7 @@
 package at.jdbcodata.config;
 
+import at.jdbcodata.security.MetricsTokenMatcher;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -37,6 +39,18 @@ public class SecurityConfig {
     static final String CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self'; "
             + "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; "
             + "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+
+    /** The matcher has checked the token already. Requests with a wrong token go on to the UI chain and its login. */
+    @Bean
+    @Order(0)
+    SecurityFilterChain metricsTokenChain(HttpSecurity http,
+                                          @Value("${jdbcodata.security.metrics-token:}") String metricsToken) throws Exception {
+        http.securityMatcher(new MetricsTokenMatcher(metricsToken))
+                .authorizeHttpRequests(a -> a.anyRequest().permitAll())
+                .csrf(c -> c.disable())
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        return http.build();
+    }
 
     @Bean
     @Order(1)

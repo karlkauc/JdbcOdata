@@ -33,7 +33,8 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.security.allowed-jdbc-urls` | leer | Zusätzliche JDBC-URL-Präfixe für Treiber aus `lib/`, z. B. `jdbc:sqlserver:`. Immer erlaubt: `jdbc:postgresql:`, `jdbc:mariadb:`, `jdbc:oracle:thin:`. H2 über TCP/SSL nur mit eigenem Präfix (`jdbc:h2:tcp:`). Optionen, die Klassen oder Dateien laden, beim Verbinden SQL ausführen oder Read-only abschalten (`INIT`, `socketFactory`, `sslfactory`, `readOnlyMode`, `allowLocalInfile`, `allowMultiQueries`, `initSql` …), und Passwörter in der URL werden abgelehnt |
 | `jdbcodata.security.allow-embedded-h2` | `false` | Eingebettete H2-Datenbanken (`jdbc:h2:mem:`, `jdbc:h2:file:`) als Datenquelle erlauben. Sie laufen in der JVM des Service und könnten dessen Dateien lesen (Master-Key, Metadaten-DB): nur Demo-Profil und Tests |
 | `jdbcodata.seed.file` | leer | YAML mit Datenquellen und Queries, beim Start per Name eingespielt |
-| `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator-Endpunkte; `/actuator/prometheus` nur für Admin-Konten |
+| `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator-Endpunkte; `/actuator/prometheus` nur für Admin-Konten oder mit Metrik-Token |
+| `jdbcodata.security.metrics-token` | leer | Token für Prometheus, mindestens 32 Zeichen, gesendet als `Authorization: Bearer …`. Gilt nur für `/actuator/prometheus`. Leer = aus |
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite des Admin-Session-Cookies; `Secure` setzt Tomcat bei HTTPS selbst |
 | `logging.file.name` | – | z.B. `logs/jdbcodata.log` für Datei-Logging |
 | `logging.structured.format.console` | – | JSON-Logs auf stdout: `ecs`, `logstash` oder `gelf`; für Dateien `logging.structured.format.file` |

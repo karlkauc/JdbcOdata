@@ -110,7 +110,8 @@ verzichtbar.
 | Endpunkt | Zweck |
 |---|---|
 | `GET /actuator/health` | Liveness/Readiness, ohne Login |
-| `GET /actuator/prometheus` | Micrometer-Metriken (`jdbcodata_executions_total`, `jdbcodata_execution_duration_seconds`, JVM, HikariCP), Basic Auth mit Admin-Konto |
+| `GET /actuator/prometheus` | Micrometer-Metriken (`jdbcodata_executions_total`, `jdbcodata_execution_duration_seconds`, Pools, Limiter, JVM, HikariCP der Metadaten-DB). Basic Auth mit Admin-Konto oder `jdbcodata.security.metrics-token`, in Prometheus als `authorization: { credentials: … }` |
+| `jdbcodata_pool_connections_pending` | Dauerhaft über 0: `poolSize` der Datenquelle ist zu klein. Weitere Werte: `jdbcodata_pools`, `jdbcodata_pool_connections_active`, `jdbcodata_executions_running`, `jdbcodata_ratelimit_rejected_total`, `jdbcodata_executionlog_dropped_total`. Cache-Treffer stehen im Label `cache` von `jdbcodata_executions_total` |
 | Admin-UI → Statistik | Ausführungen, Fehlerquote, Cache-Trefferquote, p50/p95 |
 | Admin-UI → Einstellungen | Master-Key-Quelle, Pools, verworfene Protokollsätze |
 
