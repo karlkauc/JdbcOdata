@@ -28,12 +28,13 @@ final class DatasourceDtos {
             @Min(1) @Max(1000) Integer maxConcurrent,
             Boolean enabled,
             Map<String, String> sessionSettings,
-            Map<String, String> driverProperties) {
+            Map<String, String> driverProperties,
+            @Min(1) @Max(100) Integer poolSize) {
 
         /** Missing maps keep the stored session settings and driver properties, empty maps remove them. */
         DatasourceSpec toSpec() {
             return new DatasourceSpec(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
-                    maxConcurrent, enabled, sessionSettings, driverProperties);
+                    maxConcurrent, enabled, sessionSettings, driverProperties, poolSize);
         }
     }
 
@@ -51,12 +52,13 @@ final class DatasourceDtos {
             Instant createdAt,
             Instant updatedAt,
             Map<String, String> sessionSettings,
-            Map<String, String> driverProperties) {
+            Map<String, String> driverProperties,
+            int poolSize) {
 
         static DatasourceResponse from(Datasource d) {
             return new DatasourceResponse(d.id(), d.name(), d.description(), d.jdbcUrl(), d.driverClass(),
                     d.timezone(), d.defaultTimeoutSec(), d.maxRows(), d.maxConcurrent(), d.enabled(),
-                    d.createdAt(), d.updatedAt(), d.sessionSettings(), d.driverProperties());
+                    d.createdAt(), d.updatedAt(), d.sessionSettings(), d.driverProperties(), d.poolSize());
         }
     }
 

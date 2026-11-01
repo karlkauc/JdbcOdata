@@ -70,7 +70,7 @@ public class DatasourceService {
         apply(e, spec);
         Datasource created = repository.save(e).toRecord();
         audit.record("CREATE", "DATASOURCE", created.id(), created.name(), Map.of("jdbcUrl", created.jdbcUrl(),
-                "sessionSettings", created.sessionSettings(), "driverProperties", created.driverProperties()));
+                "poolSize", created.poolSize(), "sessionSettings", created.sessionSettings(), "driverProperties", created.driverProperties()));
         return created;
     }
 
@@ -93,7 +93,7 @@ public class DatasourceService {
         Datasource updated = repository.save(e).toRecord();
         pools.closePoolsFor(id);
         audit.record("UPDATE", "DATASOURCE", updated.id(), updated.name(), Map.of("jdbcUrl", updated.jdbcUrl(), "enabled", updated.enabled(),
-                "sessionSettings", updated.sessionSettings(), "driverProperties", updated.driverProperties()));
+                "poolSize", updated.poolSize(), "sessionSettings", updated.sessionSettings(), "driverProperties", updated.driverProperties()));
         return updated;
     }
 
@@ -177,6 +177,7 @@ public class DatasourceService {
         if (s.defaultTimeoutSec() != null) e.setDefaultTimeoutSec(s.defaultTimeoutSec());
         if (s.maxRows() != null) e.setMaxRows(s.maxRows());
         if (s.maxConcurrent() != null) e.setMaxConcurrent(s.maxConcurrent());
+        if (s.poolSize() != null) e.setPoolSize(s.poolSize());
         if (s.enabled() != null) e.setEnabled(s.enabled());
         // checked again when kept: the JDBC URL may now point to another database
         e.setSessionSettings(SessionSettings.validate(s.jdbcUrl(),

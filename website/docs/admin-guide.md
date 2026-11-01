@@ -17,7 +17,7 @@ Everything happens in the admin UI at `/admin`. Most of it is also available thr
 ## 1. Create a datasource
 
 **Datasources → New datasource**: name, JDBC URL, optional driver class and time zone, and limits (timeout, max. rows,
-parallel executions). **Test connection** checks it with a database login that is not stored.
+parallel executions, connections per login). **Test connection** checks it with a database login that is not stored.
 
 ```text
 jdbc:postgresql://host:5432/db
@@ -163,6 +163,7 @@ datasources:
     jdbcUrl: jdbc:postgresql://erp-db.example.org:5432/erp
     defaultTimeoutSec: 60
     maxConcurrent: 5
+    poolSize: 10
 
 queries:
   - name: Sales

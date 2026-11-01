@@ -44,6 +44,9 @@
         <span class="field-error" th:errors="*{maxRows}"></span></label>
       <label>Max. parallel executions <input type="number" th:field="*{maxConcurrent}" min="1" max="1000">
         <small>Beyond that the service answers 503 with Retry-After.</small></label>
+      <label>Connections per login <input type="number" th:field="*{poolSize}" min="1" max="100">
+        <small>Each login has its own pool. All callers of a technical account share one.</small>
+        <span class="field-error" th:errors="*{poolSize}"></span></label>
     </div>
     <label class="check"><input type="checkbox" th:field="*{enabled}"> Datasource enabled</label>
     <div class="actions">

@@ -160,6 +160,7 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 | Browser zeigt mit Login fremde Daten (z. B. alle statt einer Region) | Anonymer Zugang aktiv: ohne 401 schickt der Browser keine Zugangsdaten. Login direkt mitsenden (`curl -u`, Excel „Standard“) |
 | Query fehlt im Excel-Navigator | Query inaktiv, ohne Schema-Snapshot, oder FIXED ohne Freigabe für den Aufrufer |
 | 503 „busy“ | `maxConcurrent` der Datenquelle erhöhen oder Cache aktivieren |
+| Langsame Antworten oder Verbindungs-Timeouts bei vielen Aufrufern eines technischen Accounts | Alle teilen sich dessen Pool: `poolSize` der Datenquelle erhöhen. Das Limit gilt pro Login und Instanz, die Datenbank muss so viele Verbindungen zulassen |
 | 413 | Ergebnis über Zeilenlimit; Parameter oder `$top` nutzen, Limit erhöhen |
 | 429 | Zu viele Fehlversuche; eine Minute warten, Passwort prüfen |
 | „encrypted with key … but the configured master key is …“ | Master-Key gewechselt; alten Key wieder einsetzen oder Credentials neu hinterlegen |
