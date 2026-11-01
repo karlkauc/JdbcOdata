@@ -36,6 +36,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator-Endpunkte; `/actuator/prometheus` nur für Admin-Konten |
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite des Admin-Session-Cookies; `Secure` setzt Tomcat bei HTTPS selbst |
 | `logging.file.name` | – | z.B. `logs/jdbcodata.log` für Datei-Logging |
+| `logging.structured.format.console` | – | JSON-Logs auf stdout: `ecs`, `logstash` oder `gelf`; für Dateien `logging.structured.format.file` |
 
 Profile: `demo` legt eine lokale H2-Beispieldatenbank an, lädt `seed-demo.yml` und erlaubt Klartext-HTTP.
 

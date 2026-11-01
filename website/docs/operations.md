@@ -115,7 +115,7 @@ Cache and execution log are expendable.
 | Admin UI → Statistics | Executions, error rate, cache hit rate, p50/p95 |
 | Admin UI → Settings | Master key source, pools, dropped log records |
 
-Logs go to stdout, or to a file with `logging.file.name`. Errors during query execution carry a reference such as `ref 1a2b3c4d`, which the client gets too.
+Logs go to stdout, or to a file with `logging.file.name`. Each request has an ID, which appears in its log lines and in the `X-Request-Id` response header. An ID sent by your proxy is kept if it has at most 64 characters from `A-Za-z0-9._-`. For JSON logs, set `logging.structured.format.console=ecs`. The ID is then in the `requestId` field. Spring Boot also offers `logstash` and `gelf`. Errors during query execution carry a reference such as `ref 1a2b3c4d`, which the client gets too.
 
 Datasources with a technical account are checked every minute (`jdbcodata.health.interval-ms`, `0` turns it off). Others show the result of the last execution that
 reached the database.

@@ -76,6 +76,8 @@ jdbcodata:
     allow-embedded-h2: false  # in-process H2 as datasource: local demo and tests only
 
 logging:
+  pattern:
+    correlation: "[%X{requestId:-}] "   # request ID in text logs; logging.structured.format.console=ecs adds it to JSON
   level:
     at.jdbcodata: INFO
     com.zaxxer.hikari: WARN

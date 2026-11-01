@@ -114,7 +114,10 @@ verzichtbar.
 | Admin-UI → Statistik | Ausführungen, Fehlerquote, Cache-Trefferquote, p50/p95 |
 | Admin-UI → Einstellungen | Master-Key-Quelle, Pools, verworfene Protokollsätze |
 
-Logs: stdout (Docker) oder `logs/jdbcodata.log` (`logging.file.name`). Fehler bei Query-Ausführungen tragen
+Logs: stdout (Docker) oder `logs/jdbcodata.log` (`logging.file.name`). Jede Anfrage trägt eine Request-ID, die in den
+Log-Zeilen und als `X-Request-Id` in der Antwort steht; eine ID vom Proxy wird übernommen, wenn sie aus höchstens 64
+Zeichen `A-Za-z0-9._-` besteht. Für JSON-Logs (z. B. für Elastic oder Loki) `logging.structured.format.console=ecs`
+setzen, die Request-ID steht dann im Feld `requestId`. Spring Boot bietet außerdem `logstash` und `gelf`. Fehler bei Query-Ausführungen tragen
 eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 
 ## Sicherheit im Betrieb
