@@ -184,7 +184,7 @@ nie fremde Ergebnisse. Cache → Einträge ansehen, einzeln oder gesamt invalidi
 ## 5. Statistik und Audit
 
 Statistik: Zeitraum wählen, Kennzahlen, Top-Queries, langsamste Queries, Nutzung pro Aufrufer, Verlauf,
-Rohdaten mit Filter und CSV-Export. Audit: alle Konfigurationsänderungen mit Admin, Zeit und Objekt.
+Rohdaten mit Filter und CSV-Export. Audit: alle Konfigurationsänderungen mit Admin, Zeit und Objekt, dazu Admin-Logins und -Logouts, abgelehnte Logins an Admin-Zugang und Feed mit IP sowie Testläufe mit SQL, ohne Parameterwerte.
 
 ## 6. Admin-Konten
 

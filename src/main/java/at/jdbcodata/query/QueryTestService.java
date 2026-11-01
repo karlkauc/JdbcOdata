@@ -1,5 +1,6 @@
 package at.jdbcodata.query;
 
+import at.jdbcodata.audit.AuditService;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.identity.ExecutionIdentity;
@@ -21,15 +22,20 @@ public class QueryTestService {
 
     private final QueryExecutor executor;
     private final DatasourceService datasourceService;
+    private final AuditService audit;
 
-    public QueryTestService(QueryExecutor executor, DatasourceService datasourceService) {
+    public QueryTestService(QueryExecutor executor, DatasourceService datasourceService, AuditService audit) {
         this.executor = executor;
         this.datasourceService = datasourceService;
+        this.audit = audit;
     }
 
     public TestRunResult test(QueryDefinition query, ExecutionIdentity identity, Map<String, String> rawParams) {
         Datasource ds = datasourceService.require(query.datasourceId());
         Map<String, Object> params = ParameterBinder.resolve(query, rawParams == null ? Map.of() : rawParams);
+        // before running, so attempts that fail count too; this may be SQL that was never saved. No parameter values.
+        audit.record("TEST_RUN", "QUERY", query.id(), query.name(), Map.of("datasource", ds.name(),
+                "dbUser", identity.dbUsername(), "sql", query.sqlText()));
         long start = System.nanoTime();
         ResultTable table = executor.preview(query, ds, identity, params, PREVIEW_ROWS,
                 executor.effectiveTimeoutSec(query, ds));

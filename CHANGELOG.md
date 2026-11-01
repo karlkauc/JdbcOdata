@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   installations record and send nothing
 - Connections per login are configurable for each datasource (`poolSize`, 1 to 100, default 2 as before). All
   callers of a technical account share one pool, so its parallel executions were limited to 2
+- The audit log now records admin sign-ins and sign-outs, rejected admin and feed logins, and query test runs
+- `jdbcodata.audit.retention-days` deletes old audit records. The default `0` keeps everything
 
 ### Fixed
 

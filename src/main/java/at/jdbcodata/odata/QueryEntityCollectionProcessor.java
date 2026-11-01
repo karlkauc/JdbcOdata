@@ -2337,6 +2337,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (DbAuthenticationException e) {
             draft.fail(ExecutionStatus.AUTH_FAILED, e.getMessage());
             support.rateLimiter().recordFailure(request.clientIp(), request.identity().caller());
+            support.loginAudit().feedLoginRejected(request.identity().caller(), request.clientIp());
             support.identityResolver().onRejectedLogin(request.identity());
             throw new ODataApplicationException(DbAuthenticationException.CLIENT_MESSAGE,
                     HttpStatusCode.UNAUTHORIZED.getStatusCode(), LOCALE, e);

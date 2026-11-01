@@ -23,6 +23,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.cache.memory-mb` | `256` | In-Memory-Schicht (Caffeine) |
 | `jdbcodata.cache.cleanup-interval-ms` | `300000` | Aufräumjob für abgelaufene Einträge und Größenlimit |
 | `jdbcodata.stats.retention-days` | `90` | Aufbewahrung des Ausführungsprotokolls |
+| `jdbcodata.audit.retention-days` | `0` | Aufbewahrung des Audit-Logs in Tagen; `0` behält alles. Das Löschen steht selbst im Audit-Log |
 | `jdbcodata.stats.async` | `true` | Protokoll über eigenen Writer-Thread schreiben |
 | `jdbcodata.usage.db-url` | leer | PostgreSQL-URL einer eigenen Statistik-DB; leer = es wird nichts erfasst oder gesendet |
 | `jdbcodata.usage.db-user` / `db-password` | leer | Login dieser Datenbank |

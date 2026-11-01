@@ -145,7 +145,7 @@ receives a result created for someone else. **Cache** lists entries and invalida
 ![Statistics](assets/statistics.png)
 
 **Statistics** shows key figures, top and slowest queries, usage per caller, the trend and raw data with filters and CSV
-export. **Audit log** records configuration changes with admin, time and object.
+export. **Audit log** records configuration changes with admin, time and object, admin sign-ins and sign-outs, rejected admin and feed logins with IP address, and test runs with their SQL but without parameter values.
 
 ## 7. Admin accounts
 

@@ -158,7 +158,7 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 | FR-53 | Statistik-UI: Top-Queries, langsamste Queries (p50/p95), Fehlerquote, Nutzung pro User, Cache-Trefferquote, Zeitverlauf; Filter nach Zeitraum, Query, User, Datenquelle, Status. | MUST |
 | FR-54 | Rohdaten-Export als CSV über UI und API. | MUST |
 | FR-55 | Retention konfigurierbar (Default 90 Tage); Tagesaggregate bleiben länger erhalten (Default 2 Jahre). | SHOULD |
-| FR-56 | Audit-Log für Änderungen an Queries, Datenquellen, Usern, Credentials (wer, wann, was). | MUST |
+| FR-56 | Audit-Log für Änderungen an Queries, Datenquellen, Usern, Credentials sowie Logins und Query-Testläufe (wer, wann, was). | MUST |
 | FR-57 | Micrometer-Metriken (Ausführungen, Dauer, Fehler, Cache-Hits) unter `/actuator/prometheus`, optional aktivierbar. | SHOULD |
 | FR-58 | Client-Erkennung aus `User-Agent` (`EXCEL`, `POWERBI`, `OTHER`). | SHOULD |
 

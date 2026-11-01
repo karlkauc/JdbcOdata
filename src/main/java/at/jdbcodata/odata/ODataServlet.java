@@ -80,6 +80,7 @@ public class ODataServlet extends HttpServlet {
             } catch (ServiceAuthenticationException e) {
                 if (credentials.isPresent()) {
                     support.rateLimiter().recordFailure(req.getRemoteAddr(), credentials.get().username());
+                    support.loginAudit().feedLoginRejected(credentials.get().username(), req.getRemoteAddr());
                     // same answer as a rejected database login, so service user names cannot be probed
                     unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
                 } else {
@@ -97,6 +98,7 @@ public class ODataServlet extends HttpServlet {
                 log.debug("Pass-through login of '{}' rejected: {}", context.caller(), e.getMessage());
                 identityResolver.onRejectedLogin(context);
                 support.rateLimiter().recordFailure(req.getRemoteAddr(), context.caller());
+                support.loginAudit().feedLoginRejected(context.caller(), req.getRemoteAddr());
                 unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
                 return;
             } catch (DbExecutionException e) {
