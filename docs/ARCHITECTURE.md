@@ -427,7 +427,7 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 |---|---|
 | Latenz Cache-Hit | < 200 ms bis zum ersten Byte bei 100 000 Zeilen |
 | Ergebnisgröße | bis 100 000 Zeilen (Standard, konfigurierbar), darüber Fehler mit Hinweis. Eine Grenze in Byte gibt es noch nicht (NFR-13, O-15) |
-| Speicher | Ergebnisse werden im Service vollständig im Speicher gehalten, Heap und `max-rows` daher gemeinsam dimensionieren |
+| Speicher | Ergebnisse werden im Service vollständig im Speicher gehalten. `ResponseBudget` begrenzt die gleichzeitig entstehenden Antworten in Zeilen, auch bei Cache-Treffern, die `ConcurrencyLimiter` nicht erreicht; Heap, `max-rows` und Budget gemeinsam dimensionieren |
 | Parallelität | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503 Retry-After` |
 | Verfügbarkeit | Stateless bis auf Metadaten-DB; mehrere Instanzen hinter Proxy mit PostgreSQL |
 | Logging | Strukturiert (JSON optional), nie Passwörter oder SQL mit Parameterwerten |

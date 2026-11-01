@@ -121,14 +121,18 @@ public class ODataServlet extends HttpServlet {
                 return;
             }
             QueryEntityCollectionProcessor processor = new QueryEntityCollectionProcessor(support, requestContext);
-            if (isSpecialResource(req)) {
-                serveSpecial(req, resp, metadata, processor);
-                return;
+            try {
+                if (isSpecialResource(req)) {
+                    serveSpecial(req, resp, metadata, processor);
+                    return;
+                }
+                ODataHttpHandler handler = odata.createHandler(metadata);
+                handler.register(processor);
+                handler.register(new JsonErrorProcessor());
+                handler.process(olingoRequest(req, metadata.getEdm()), resp);
+            } finally {
+                processor.releaseResponseBudget();
             }
-            ODataHttpHandler handler = odata.createHandler(metadata);
-            handler.register(processor);
-            handler.register(new JsonErrorProcessor());
-            handler.process(olingoRequest(req, metadata.getEdm()), resp);
         } catch (RuntimeException e) {
             log.error("OData request {} failed outside Olingo", req.getRequestURI(), e);
             if (!resp.isCommitted()) {
@@ -225,26 +229,30 @@ public class ODataServlet extends HttpServlet {
         java.util.concurrent.Callable<AsyncRequests.Result> work = () -> {
             EntityExpressionVisitor.resetRegexBudget();
             QueryEntityCollectionProcessor processor = new QueryEntityCollectionProcessor(support, requestContext);
-            ODataResponse response;
-            if (special) {
-                response = new ODataResponse();
-                try {
-                    UriInfo uriInfo = new Parser(metadata.getEdm(), odata).parseUri(rw.path(), rw.query(), null, request.getRawBaseUri());
-                    processor.init(odata, metadata);
-                    processor.readSpecial(request, response, uriInfo);
-                } catch (UriParserException | UriValidationException e) {
-                    return jsonError(400, e.getMessage());
-                } catch (ODataApplicationException e) {
-                    return jsonError(e.getStatusCode(), e.getMessage());
+            try {
+                ODataResponse response;
+                if (special) {
+                    response = new ODataResponse();
+                    try {
+                        UriInfo uriInfo = new Parser(metadata.getEdm(), odata).parseUri(rw.path(), rw.query(), null, request.getRawBaseUri());
+                        processor.init(odata, metadata);
+                        processor.readSpecial(request, response, uriInfo);
+                    } catch (UriParserException | UriValidationException e) {
+                        return jsonError(400, e.getMessage());
+                    } catch (ODataApplicationException e) {
+                        return jsonError(e.getStatusCode(), e.getMessage());
+                    }
+                } else {
+                    ODataHttpHandler handler = odata.createHandler(metadata);
+                    handler.register(processor);
+                    handler.register(new JsonErrorProcessor());
+                    response = handler.process(request);
                 }
-            } else {
-                ODataHttpHandler handler = odata.createHandler(metadata);
-                handler.register(processor);
-                handler.register(new JsonErrorProcessor());
-                response = handler.process(request);
+                byte[] body = response.getContent() == null ? new byte[0] : response.getContent().readAllBytes();
+                return new AsyncRequests.Result(response.getStatusCode(), response.getAllHeaders(), body);
+            } finally {
+                processor.releaseResponseBudget();
             }
-            byte[] body = response.getContent() == null ? new byte[0] : response.getContent().readAllBytes();
-            return new AsyncRequests.Result(response.getStatusCode(), response.getAllHeaders(), body);
         };
         String id = support.asyncRequests().submit(requestContext.identity().caller(), work);
         if (id == null) {

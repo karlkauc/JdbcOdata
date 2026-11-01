@@ -45,6 +45,8 @@ jdbcodata:
     max-rows: 100000       # hard upper bound per result; results are held in memory, raise it together with the heap
     default-timeout-sec: 60
     concurrency-wait-ms: 2000   # wait for a free execution slot of a datasource before answering 503
+    response-rows-budget: 0     # rows in responses at the same time, also for cache hits; 0 = half the heap at 1 KB per row
+    response-wait-ms: 30000     # wait for room in that budget before answering 503
     anonymous-user: ""          # service user for requests without Basic credentials (public demo); empty = off
     page-size: 0                # server-driven paging: rows per page before @odata.nextLink; 0 = off
   seed:
