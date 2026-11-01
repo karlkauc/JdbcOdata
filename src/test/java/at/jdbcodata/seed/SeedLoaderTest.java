@@ -10,6 +10,7 @@ import at.jdbcodata.query.SchemaSnapshotService;
 import at.jdbcodata.testutil.DemoProfileTest;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,13 @@ class SeedLoaderTest extends DemoProfileTest {
 
     @TempDir
     Path dir;
+
+    /** The context is shared: a leftover query would show up in the $all and $search of other test classes. */
+    @AfterEach
+    void removeSeedData() {
+        queryService.findAll().stream().filter(q -> q.name().startsWith("Seed")).forEach(q -> queryService.delete(q.id()));
+        datasourceService.findByName("seed_ds").ifPresent(ds -> datasourceService.delete(ds.id()));
+    }
 
     private SeedLoader loader(String file) {
         JdbcOdataProperties props = at.jdbcodata.testutil.TestData.props(10, 10, file);
