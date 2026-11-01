@@ -70,6 +70,16 @@ class AnonymousAccessTest {
     }
 
     @Test
+    void unreadableAuthorizationHeaderIsRefusedInsteadOfRunningAsAnonymous() throws Exception {
+        for (String header : new String[] {"Bearer some.jwt.token", "Basic !!!", "Basic Og=="}) {
+            HttpResponse<String> response = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/odata/"))
+                    .header("Authorization", header).GET().build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).as(header).isEqualTo(401);
+            assertThat(response.headers().firstValue("WWW-Authenticate")).as(header).isPresent();
+        }
+    }
+
+    @Test
     void withStoredCredentialsAnonymousRequestsReturnData() throws Exception {
         HttpResponse<String> stored = send("PUT", "/api/v1/users/" + userId + "/credentials/" + datasourceId,
                 "{\"dbUsername\":\"demo\",\"dbPassword\":\"demo\"}", "admin", "secret");

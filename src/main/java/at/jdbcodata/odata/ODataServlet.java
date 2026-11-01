@@ -63,8 +63,11 @@ public class ODataServlet extends HttpServlet {
             return;
         }
         HttpServletRequest req = new BoundedRequest(rawReq);
-        Optional<BasicCredentials> credentials = BasicCredentials.fromHeader(req.getHeader("Authorization"));
-        if (credentials.isEmpty() && anonymousUser.isEmpty()) {
+        String authorization = req.getHeader("Authorization");
+        Optional<BasicCredentials> credentials = BasicCredentials.fromHeader(authorization);
+        // a client that tried to log in must not silently get the anonymous user's data
+        boolean loginUnreadable = credentials.isEmpty() && authorization != null && !authorization.isBlank();
+        if (credentials.isEmpty() && (anonymousUser.isEmpty() || loginUnreadable)) {
             unauthorized(resp, "Authentication required. Send HTTP Basic credentials for the target database.");
             return;
         }

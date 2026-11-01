@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - MySQL and MariaDB push-down: grouped `TINYINT(1)` columns came back as numbers instead of booleans
 - Pass-through users with accounts on only some datasources paid for a failed login on the others with every
   request, which cost seconds and could lock accounts. A rejected login is now remembered for 5 minutes
+- With anonymous access on, a request with a Bearer token or a malformed Basic header ran as the anonymous user.
+  It now gets 401, so a failed login no longer looks like a working one with other data
 
 ## [1.0.0] – 2026-10-31
 
