@@ -1,7 +1,8 @@
 # Abnahme-Checkliste (Release 1.0)
 
-Automatisch geprüft: `./mvnw verify` (Unit- und Integrationstests, 85 % Zeilenabdeckung), PostgreSQL-Test
-mit Testcontainers (`PostgresMetadataIT`, läuft nur mit Docker), Browser-Check `e2e/check.mjs`.
+Automatisch geprüft: `./mvnw verify` (Unit- und Integrationstests, 85 % Zeilenabdeckung), Tests gegen
+echte PostgreSQL-, MariaDB-, MySQL- und Oracle-Server (Testcontainers, laufen nur mit Docker), Browser-Check `e2e/check.mjs`.
+Die Tabellen unten sind noch nicht abgenommen: Kein Haken bedeutet, dass der manuelle Lauf aussteht, nicht dass ein Fehler bekannt ist.
 Manuell mit Excel 365 und PowerBI Desktop abzunehmen:
 
 | # | Use Case | Schritte | Erwartung | OK |

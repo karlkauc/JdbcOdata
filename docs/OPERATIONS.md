@@ -58,7 +58,7 @@ docker compose logs -f jdbcodata
   `JDBCODATA_HTTP_PORT` und `JDBCODATA_HTTPS_PORT`.
 - Demo ohne TLS und PostgreSQL: `docker compose -f docker-compose.demo.yml up -d` (Port 8080).
 
-Update: `JDBCODATA_VERSION` in `.env` erhöhen, `docker compose pull && docker compose up -d --build`.
+Update: `JDBCODATA_VERSION` in `.env` erhöhen, `docker compose up -d --build`.
 Flyway migriert das Schema beim Start.
 
 ## Apache als Reverse Proxy
