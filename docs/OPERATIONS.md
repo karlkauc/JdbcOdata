@@ -88,6 +88,12 @@ RequestHeader set X-Forwarded-Port  "443"
 enthalten (z. B. `odata.example.org`): der Service reicht Olingo den Pfad so weiter, dass die Suche nach dem
 Servlet-Pfad im Hostnamen keine Rolle spielt.
 
+## Release prüfen
+
+Releases ab 1.1.0 sind ohne langlebigen Schlüssel signiert: cosign belegt, dass der Release-Workflow dieses Repositorys
+sie gebaut hat. Jedes Release enthält außerdem eine SBOM im CycloneDX-Format (`jdbcodata-sbom.json`). Die Befehle zum
+Prüfen stehen auf der Website unter *Operations → Verifying a release*.
+
 ## Metadaten-DB
 
 | | H2 (Default) | PostgreSQL |

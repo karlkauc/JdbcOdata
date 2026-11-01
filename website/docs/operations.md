@@ -87,6 +87,23 @@ RequestHeader unset X-Forwarded-Host early
 
 A complete example with Docker, Let's Encrypt and a sample PostgreSQL is in `deploy/` in the repository.
 
+## Verifying a release
+
+Releases from 1.1.0 on are signed without a long-lived key: [cosign](https://docs.sigstore.dev/) records that the release workflow of this repository built them. Each release also carries an SBOM in CycloneDX format (`jdbcodata-sbom.json`).
+
+```bash
+# files: download SHA256SUMS and SHA256SUMS.sigstore.json from the release, next to the JAR and ZIP
+cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/karlkauc/JdbcOdata/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+sha256sum -c --ignore-missing SHA256SUMS
+
+# image
+cosign verify ghcr.io/karlkauc/jdbcodata:1.1.0 \
+  --certificate-identity-regexp '^https://github.com/karlkauc/JdbcOdata/\.github/workflows/release\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 ## Metadata database
 
 | | H2 (default) | PostgreSQL |
