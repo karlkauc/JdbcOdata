@@ -395,7 +395,7 @@ Payload-Skizze Query (POST/PUT):
 | O-11 | `$filter` wird in-memory nach dem vollständigen Laden ausgewertet | Excel-Query-Folding reduziert die DB-Last nicht | **Erledigt:** Push-Down pro Query schaltbar, siehe ARCHITECTURE.md |
 | O-12 | Ohne konfigurierten Master-Key wird beim ersten Start eine Key-Datei unter `data/master.key` erzeugt | Verlust der Datei macht hinterlegte Credentials unlesbar | Für Produktion `JDBCODATA_MASTER_KEY` setzen oder die Datei sichern; Hinweis in Einstellungen und Log |
 | O-13 | Tagesaggregate (`execution_daily`, FR-55) sind noch nicht umgesetzt; Statistiken rechnen direkt auf `execution_log` | Bei sehr vielen Datensätzen langsamere Statistik-Seite | Mit Retention von 90 Tagen unkritisch; Aggregate in Phase 2 |
-| O-14 | Der Concurrency-Test läuft nur als Unit-Test des Limiters; ein Lasttest mit 50 parallelen Excel-Refreshes (Teststrategie §10) steht noch aus | Verhalten unter Last nicht gemessen | Vor Produktivsetzung mit k6 oder Gatling gegen eine Testinstanz ausführen |
+| O-14 | Lasttest mit 50 parallelen Excel-Refreshes (Teststrategie §10) | Fand einen Speicherfehler bei Cache-Treffern | **Erledigt:** Skripte und Messwerte in `loadtest/`, Fehler mit `ResponseBudget` behoben |
 | O-15 | NFR-11 (Streaming) und die Byte-Grenze aus NFR-13 sind nicht umgesetzt: Ergebnisse liegen vollständig im Speicher | Heap begrenzt große und parallele Abrufe | Stufe 2 der Enterprise-Roadmap |
 
 ## 13. Glossar
