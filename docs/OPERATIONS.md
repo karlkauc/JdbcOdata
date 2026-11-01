@@ -195,8 +195,8 @@ sonst stimmt die Redirect-URI nicht.
 - **Start:** Mit `issuer-uri` muss der Provider beim Start erreichbar sein, sonst startet auch der Feed nicht. Das
   vermeiden `authorization-uri`, `token-uri`, `jwk-set-uri`, `user-info-uri` und `user-name-attribute` statt `issuer-uri`;
   ohne Discovery entfällt allerdings die Abmeldung beim Provider.
-- **Nur noch SSO:** `jdbcodata.security.oidc.local-login=false` entfernt den Passwort-Login. Das gilt auch für die REST-API,
-  die dann mit 401 antwortet, denn sie kennt bisher nur Basic Auth. Ohne Registrierung oder `admin-values` startet der
+- **Nur noch SSO:** `jdbcodata.security.oidc.local-login=false` entfernt den Passwort-Login, auch für die REST-API. Sie
+  ist dann nur noch mit [API-Keys](ADMIN_GUIDE.md#7-api-keys) erreichbar. Ohne Registrierung oder `admin-values` startet der
   Dienst in dieser Einstellung nicht. Der Notfallzugang ist, die Option wieder auf `true` zu setzen und neu zu starten.
 
 ## Fehlersuche

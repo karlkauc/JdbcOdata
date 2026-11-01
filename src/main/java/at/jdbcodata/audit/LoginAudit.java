@@ -1,5 +1,6 @@
 package at.jdbcodata.audit;
 
+import at.jdbcodata.apikey.ApiKeyService;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,11 @@ public class LoginAudit {
     /** Failed OIDC sign-ins do not raise a Spring Security failure event. */
     public void oidcLoginRejected(String username, String ip) {
         write("LOGIN_FAILED", ADMIN, username, ip);
+    }
+
+    /** The API authenticates keys in its own filter. The key itself stays out of the log. */
+    public void adminKeyRejected(String ip) {
+        write("LOGIN_FAILED", ADMIN, ApiKeyService.BASIC_USER, ip);
     }
 
     private void write(String action, String type, Authentication authentication) {

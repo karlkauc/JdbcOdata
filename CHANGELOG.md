@@ -21,6 +21,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - Single sign-on for the admin UI with OpenID Connect, tested against Keycloak. Roles come from a claim, sign-out also
   ends the session at the identity provider, and `jdbcodata.security.oidc.local-login=false` turns off password logins.
   Feeds still use Basic Auth
+- API keys for machine clients: stored as a hash, with an expiry, and revocable at once. A key reads feeds as a service
+  user or calls the REST API with a role. Excel uses it as password of the user `apikey`
 
 ### Fixed
 

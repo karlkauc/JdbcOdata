@@ -39,6 +39,7 @@ public class UiModelAdvice {
             new Area("/admin/stats", "Operations", "Statistics"),
             new Area("/admin/audit", "Operations", "Audit log"),
             new Area("/admin/admins", "System", "Admin accounts"),
+            new Area("/admin/api-keys", "System", "API keys"),
             new Area("/admin/settings", "System", "Settings"),
             new Area("/admin/search", "Home", "Search"));
 

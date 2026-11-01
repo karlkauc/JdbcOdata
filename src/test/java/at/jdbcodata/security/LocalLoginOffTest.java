@@ -2,8 +2,11 @@ package at.jdbcodata.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import at.jdbcodata.admin.account.AdminRole;
+import at.jdbcodata.apikey.ApiKeyService;
 import at.jdbcodata.testutil.DemoProfileTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 
 /** With {@code local-login=false} no password gets anybody in. The provider URLs are never called here. */
@@ -22,6 +25,9 @@ import org.springframework.test.context.TestPropertySource;
 })
 class LocalLoginOffTest extends DemoProfileTest {
 
+    @Autowired
+    private ApiKeyService keys;
+
     @Test
     void loginPageOffersOnlySingleSignOn() throws Exception {
         String page = get("/login", null, null).body();
@@ -34,6 +40,13 @@ class LocalLoginOffTest extends DemoProfileTest {
     void passwordsAreRefusedByUiAndApi() throws Exception {
         assertThat(get("/admin", ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(302);
         assertThat(get("/api/v1/datasources", ADMIN, ADMIN_PASSWORD).statusCode()).isEqualTo(401);
+    }
+
+    @Test
+    void apiKeysKeepTheRestApiUsable() throws Exception {
+        String secret = keys.create("automation", null, AdminRole.VIEWER, 30).secret();
+
+        assertThat(send("GET", "/api/v1/datasources", null, null, null, "Authorization", "Bearer " + secret).statusCode()).isEqualTo(200);
     }
 
     @Test

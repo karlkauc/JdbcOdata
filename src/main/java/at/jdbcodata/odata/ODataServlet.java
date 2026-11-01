@@ -1,5 +1,6 @@
 package at.jdbcodata.odata;
 
+import at.jdbcodata.apikey.ApiKeyService;
 import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
@@ -64,23 +65,26 @@ public class ODataServlet extends HttpServlet {
         }
         HttpServletRequest req = new BoundedRequest(rawReq);
         String authorization = req.getHeader("Authorization");
+        Optional<String> apiKey = ApiKeyService.keyIn(authorization);
         Optional<BasicCredentials> credentials = BasicCredentials.fromHeader(authorization);
         // a client that tried to log in must not silently get the anonymous user's data
-        boolean loginUnreadable = credentials.isEmpty() && authorization != null && !authorization.isBlank();
-        if (credentials.isEmpty() && (anonymousUser.isEmpty() || loginUnreadable)) {
+        boolean loginUnreadable = apiKey.isEmpty() && credentials.isEmpty() && authorization != null && !authorization.isBlank();
+        if (apiKey.isEmpty() && credentials.isEmpty() && (anonymousUser.isEmpty() || loginUnreadable)) {
             unauthorized(resp, "Authentication required. Send HTTP Basic credentials for the target database.");
             return;
         }
         try {
             IdentityContext context;
             try {
-                context = credentials.isPresent()
-                        ? identityResolver.authenticate(credentials.get())
+                context = apiKey.isPresent() ? identityResolver.authenticateKey(apiKey.get())
+                        : credentials.isPresent() ? identityResolver.authenticate(credentials.get())
                         : identityResolver.anonymous(anonymousUser);
             } catch (ServiceAuthenticationException e) {
-                if (credentials.isPresent()) {
-                    support.rateLimiter().recordFailure(req.getRemoteAddr(), credentials.get().username());
-                    support.loginAudit().feedLoginRejected(credentials.get().username(), req.getRemoteAddr());
+                if (apiKey.isPresent() || credentials.isPresent()) {
+                    String username = apiKey.isPresent() ? ApiKeyService.BASIC_USER : credentials.get().username();
+                    // all keys share one user name: nobody may block it
+                    support.rateLimiter().recordFailure(req.getRemoteAddr(), apiKey.isPresent() ? null : username);
+                    support.loginAudit().feedLoginRejected(username, req.getRemoteAddr());
                     // same answer as a rejected database login, so service user names cannot be probed
                     unauthorized(resp, DbAuthenticationException.CLIENT_MESSAGE);
                 } else {

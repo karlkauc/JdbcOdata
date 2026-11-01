@@ -179,8 +179,8 @@ at the provider. Behind a proxy, set `server.forward-headers-strategy=native`, o
 - **Startup:** With `issuer-uri`, the provider must be reachable at startup, or the feeds will not start either. To avoid
   that, set `authorization-uri`, `token-uri`, `jwk-set-uri`, `user-info-uri` and `user-name-attribute` instead. Without
   discovery, signing out no longer ends the provider session.
-- **SSO only:** `jdbcodata.security.oidc.local-login=false` removes password logins. This includes the REST API, which then
-  answers 401 because Basic Auth is all it supports so far. The service refuses to start in this mode without a
+- **SSO only:** `jdbcodata.security.oidc.local-login=false` removes password logins, also for the REST API. It then only
+  accepts [API keys](admin-guide.md#8-api-keys). The service refuses to start in this mode without a
   registration or `admin-values`. For emergency access, set the option back to `true` and restart.
 
 ## Troubleshooting
