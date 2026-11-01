@@ -1,5 +1,6 @@
 package at.jdbcodata.odata;
 
+import at.jdbcodata.audit.LoginAudit;
 import at.jdbcodata.cache.ResultCache;
 import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.datasource.DatasourceService;
@@ -22,5 +23,6 @@ public record ProcessorSupport(
         LoginRateLimiter rateLimiter,
         JdbcOdataProperties properties,
         DeltaTracker deltaTracker,
-        AsyncRequests asyncRequests) {
+        AsyncRequests asyncRequests,
+        LoginAudit loginAudit) {
 }

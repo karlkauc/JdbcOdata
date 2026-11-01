@@ -142,7 +142,8 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 - `./mvnw -Psecurity verify` prüft die Abhängigkeiten gegen bekannte CVEs (OWASP Dependency-Check, bricht ab
   CVSS 7 ab; `NVD_API_KEY` beschleunigt den Download).
 - Pro Datenquelle gelten Timeout, Zeilenlimit und maximale parallele Ausführungen; darüber 503 mit `Retry-After`.
-- Konfigurationsänderungen stehen im Audit-Log (Admin-UI → Audit, `GET /api/v1/audit`).
+- Konfigurationsänderungen, Logins und Query-Testläufe stehen im Audit-Log (Admin-UI → Audit, `GET /api/v1/audit`).
+  Bei abgelehnten Logins steht der eingegebene Name im Log, auch wenn jemand dort versehentlich ein Passwort eintippt.
 - `jdbcodata.odata.anonymous-user` öffnet den Feed ohne Login unter einem Service-User. Nur für öffentliche
   Demo-Daten verwenden: der Service-User sieht alle Queries, für die er selbst (oder seine Gruppe) freigegeben ist
   – Freigaben für „alle Authentifizierten“ gelten für anonyme Aufrufer nicht –, und läuft mit seinen

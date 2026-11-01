@@ -45,6 +45,7 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `jdbcodata.cache.memory-mb` | `256` | In-memory layer |
 | `jdbcodata.cache.cleanup-interval-ms` | `300000` | Cleanup job for expired entries and the size limit |
 | `jdbcodata.stats.retention-days` | `90` | Retention of the execution log |
+| `jdbcodata.audit.retention-days` | `0` | Retention of the audit log in days; `0` keeps everything. Each deletion is recorded in the audit log |
 | `jdbcodata.stats.async` | `true` | Write the log on a separate thread |
 | `jdbcodata.health.interval-ms` | `60000` | Active check of datasources with a technical account. `0` is off |
 | `jdbcodata.ui.environment` | empty | Label in the admin top bar, for example `PROD` |

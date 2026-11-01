@@ -1,5 +1,6 @@
 package at.jdbcodata.odata;
 
+import at.jdbcodata.audit.LoginAudit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -17,7 +18,7 @@ class ODataServletTest {
 
     private static ProcessorSupport support() {
         return new ProcessorSupport(null, null, null, null, null, null, new LoginRateLimiter(TestData.props(10, 10, "")),
-                TestData.props(10, 10, ""), new DeltaTracker(null), new AsyncRequests());
+                TestData.props(10, 10, ""), new DeltaTracker(null), new AsyncRequests(), mock(LoginAudit.class));
     }
 
     private static at.jdbcodata.config.JdbcOdataProperties props() {

@@ -58,6 +58,8 @@ jdbcodata:
   stats:
     retention-days: 90     # execution log retention
     async: true            # write execution log records off the request thread
+  audit:
+    retention-days: 0      # audit log retention; 0 = keep everything
   usage:
     db-url: ""             # usage statistics of a public instance (PostgreSQL); empty = off, nothing is recorded or sent
     db-user: ""
