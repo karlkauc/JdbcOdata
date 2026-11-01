@@ -890,6 +890,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                                     .stripTrailingZeros();
                 } else {
                     value = FilterValues.canonical(row[table.indexOf(slot.label())]);
+                    // MySQL's TINYINT(1) loses its boolean mapping once it is grouped
+                    if ("Edm.Boolean".equals(slot.edmType()) && value instanceof java.math.BigDecimal n) value = n.signum() != 0;
                 }
                 e.addProperty(new Property(slot.kind().equals("group") ? slot.edmType() : null, slot.name(),
                         org.apache.olingo.commons.api.data.ValueType.PRIMITIVE, value));

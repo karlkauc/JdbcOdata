@@ -10,7 +10,7 @@ public enum SqlDialect {
     POSTGRES,
     /** Oracle 12c and later: like STANDARD, but no time parts via EXTRACT on DATE and {@code LENGTH}. */
     ORACLE,
-    /** MySQL, MariaDB: backtick quoting, {@code LIMIT ? OFFSET ?}; strings via {@code COLLATE utf8mb4_bin}. */
+    /** MySQL, MariaDB: backtick quoting, {@code LIMIT ? OFFSET ?}; strings compare as utf8mb4 bytes. */
     MYSQL;
 
     /** The dialect of a JDBC URL, or {@code null} when push-down is not supported for that database. */
@@ -40,17 +40,22 @@ public enum SqlDialect {
     /**
      * A string expression in binary (code point) order and equality, as Java compares strings: the database
      * collation would otherwise order umlauts, case and blanks differently, and MySQL's default collations even
-     * compare case-insensitively. PostgreSQL and MySQL take an explicit collation on one side (bind placeholders
-     * stay as they are), Oracle compares NLSSORT keys; H2 already compares like Java. A column in another
-     * character set than utf8mb4 makes MySQL reject the statement, and the request falls back to memory.
+     * compare case-insensitively. PostgreSQL takes an explicit collation on one side (bind placeholders stay as they
+     * are), Oracle compares NLSSORT keys; H2 already compares like Java. MySQL and MariaDB compare the utf8mb4 bytes,
+     * because utf8mb4_bin ignores trailing blanks and the collations without that padding differ between the two.
      */
     public String binary(String expression) {
         return switch (this) {
             case POSTGRES -> "?".equals(expression) ? expression : "(" + expression + ") COLLATE \"C\"";
-            case MYSQL -> "?".equals(expression) ? expression : "(" + expression + ") COLLATE utf8mb4_bin";
+            case MYSQL -> "?".equals(expression) ? expression : "CAST(CONVERT(" + expression + " USING utf8mb4) AS BINARY)";
             case ORACLE -> "NLSSORT(" + expression + ", 'NLS_SORT=BINARY')";
             case STANDARD -> expression;
         };
+    }
+
+    /** A {@link #binary} expression as a selected value: MySQL's binary strings would arrive as bytes. */
+    public String text(String binaryExpression) {
+        return this == MYSQL ? "CONVERT(" + binaryExpression + " USING utf8mb4)" : binaryExpression;
     }
 
     /** Can MIN/MAX run over {@link #binary} strings and return the string itself? */

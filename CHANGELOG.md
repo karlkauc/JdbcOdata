@@ -10,6 +10,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - Optional usage statistics for public instances, off unless `jdbcodata.usage.db-url` is set. Self-hosted
   installations record and send nothing
 
+### Fixed
+
+- MySQL and MariaDB push-down: string comparisons ignored trailing blanks, and `in` compared by the column's
+  collation, usually ignoring case. Both returned wrong rows. String grouping, `countdistinct`, `min` and `max`
+  now also count values with trailing blanks separately
+- MySQL and MariaDB push-down: grouped `TINYINT(1)` columns came back as numbers instead of booleans
+
 ## [1.0.0] – 2026-10-31
 
 First public release.
