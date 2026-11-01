@@ -188,7 +188,7 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 | NFR-10 | Performance | Cache-Hit: Time-to-first-byte < 200 ms bei 100 000 Zeilen auf Referenz-Hardware (4 vCPU, 4 GB RAM). | SHOULD |
 | NFR-11 | Performance | Ergebnisse werden gestreamt; Speicherbedarf pro Request ist unabhängig von der Zeilenzahl bis zum Cache-Limit. | MUST |
 | NFR-12 | Performance | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503` mit `Retry-After`. | MUST |
-| NFR-13 | Performance | Ergebnisgrenze Default 500 000 Zeilen / 256 MB pro Abruf, konfigurierbar. | MUST |
+| NFR-13 | Performance | Ergebnisgrenze Default 100 000 Zeilen / 256 MB pro Abruf, konfigurierbar; die Byte-Grenze fehlt noch (O-15). | MUST |
 | NFR-20 | Kompatibilität | Excel 365 (Windows) „Aus OData-Feed“; PowerBI Desktop und PowerBI Service über On-Premises Data Gateway mit Basic Auth (im Gateway nur Service-User, siehe FR-32a). | MUST |
 | NFR-21 | Kompatibilität | Oracle 19c+, PostgreSQL 13+, MySQL 8+ / MariaDB 10.6+. | MUST |
 | NFR-30 | Portabilität | Läuft auf Linux (x86_64, glibc) und Windows 10/11 bzw. Server 2019+ mit Java 21; ein identisches JAR. | MUST |
@@ -346,7 +346,7 @@ Payload-Skizze Query (POST/PUT):
 1. `.env` aus `.env.example` befüllen (Master-Key, Admin, PostgreSQL-Passwort, Hostname für TLS).
 2. `docker compose up -d` startet `caddy` (TLS, automatisch oder mit eigenem Zertifikat), `jdbcodata`, `postgres`.
 3. Zusätzliche JDBC-Treiber über Volume `./lib:/app/lib`.
-4. Update: neues Image-Tag in `.env`, `docker compose pull && docker compose up -d`; Flyway migriert automatisch.
+4. Update: neue Version in `.env`, `docker compose up -d --build`; Flyway migriert automatisch.
 
 **PowerBI Service / Gateway.** Datasets, die im PowerBI Service über das On-Premises Data Gateway aktualisiert werden, verwenden im Gateway einen Service-User (`svc_…`) mit hinterlegten DB-Credentials. Persönliche DB-Konten werden nicht im Gateway hinterlegt. Für Reports, die Row-Level-Security der DB brauchen, bleibt PowerBI Desktop mit persönlichem Login der Weg.
 
@@ -396,6 +396,7 @@ Payload-Skizze Query (POST/PUT):
 | O-12 | Ohne konfigurierten Master-Key wird beim ersten Start eine Key-Datei unter `data/master.key` erzeugt | Verlust der Datei macht hinterlegte Credentials unlesbar | Für Produktion `JDBCODATA_MASTER_KEY` setzen oder die Datei sichern; Hinweis in Einstellungen und Log |
 | O-13 | Tagesaggregate (`execution_daily`, FR-55) sind noch nicht umgesetzt; Statistiken rechnen direkt auf `execution_log` | Bei sehr vielen Datensätzen langsamere Statistik-Seite | Mit Retention von 90 Tagen unkritisch; Aggregate in Phase 2 |
 | O-14 | Der Concurrency-Test läuft nur als Unit-Test des Limiters; ein Lasttest mit 50 parallelen Excel-Refreshes (Teststrategie §10) steht noch aus | Verhalten unter Last nicht gemessen | Vor Produktivsetzung mit k6 oder Gatling gegen eine Testinstanz ausführen |
+| O-15 | NFR-11 (Streaming) und die Byte-Grenze aus NFR-13 sind nicht umgesetzt: Ergebnisse liegen vollständig im Speicher | Heap begrenzt große und parallele Abrufe | Stufe 2 der Enterprise-Roadmap |
 
 ## 13. Glossar
 

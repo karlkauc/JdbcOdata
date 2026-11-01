@@ -79,7 +79,7 @@ Ein einzelner Spring-Boot-Prozess, intern in Packages unter `at.jdbcodata.*` ges
 | `identity` | Auflösung der Ausführungsidentität, Service-User, hinterlegte Credentials, Verschlüsselung | `ExecutionIdentityResolver`, `CredentialVault`, `ServiceUser` |
 | `cache` | Ergebnis-Cache pro (Query, DB-User, Parameter), TTL, Invalidierung | `ResultCache`, `CacheKey`, `CacheEntry` |
 | `stats` | Ausführungsprotokoll, Aggregationen, Retention, Micrometer-Metriken | `ExecutionLog`, `StatsService`, `RetentionJob` |
-| `datasource` | Datenquellen-Registry, Connection-Pools pro Identität, Treiber-Laden | `DatasourceRegistry`, `IdentityPoolManager`, `DriverLoader` |
+| `datasource` | Datenquellen-Registry, Connection-Pools pro Identität, Treiber-Laden | `DatasourceRegistry`, `IdentityPoolManager` |
 | `config` | `application.yml`, Env-Vars, Master-Key, TLS, Initial-Admin | `JdbcOdataProperties`, `MasterKeyProvider` |
 
 ## 3. Request-Fluss (OData-Abruf aus Excel)
@@ -419,14 +419,14 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 
 **TLS** ist Pflicht, weil Basic Auth Klartext-Credentials trägt. Entweder eingebaut (Keystore in `certs/`, `server.ssl.*`) oder Reverse-Proxy (Caddy im Compose-Stack, alternativ Traefik/IIS/nginx mit `server.forward-headers-strategy=native`). Ohne TLS startet der Service nur mit expliziter Flag `jdbcodata.security.allow-plain-http=true` und Warnung im Log (`PlainHttpGuard`). Fehlgeschlagene Logins werden pro IP und Benutzername gezählt (`LoginRateLimiter`, `RateLimitFilter`; die IP kommt aus `getRemoteAddr()`, hinter dem Proxy von Tomcats RemoteIpValve), parallele Ausführungen pro Datenquelle begrenzt (`ConcurrencyLimiter`).
 
-**JDBC-Treiber.** `postgresql` und `mariadb-java-client` werden gebündelt; `ojdbc11` nicht (Oracle Free Use Terms), er kommt nach `lib/` oder per `./mvnw -Poracle clean package` ins JAR. Weitere Treiber (DB2, SQL Server, …) legt der Betrieb in `lib/`, der `DriverLoader` registriert sie beim Start.
+**JDBC-Treiber.** `postgresql` und `mariadb-java-client` werden gebündelt; `ojdbc11` nicht (Oracle Free Use Terms), er kommt nach `lib/` oder per `./mvnw -Poracle clean package` ins JAR. Weitere Treiber (DB2, SQL Server, …) legt der Betrieb in `lib/`, `-Dloader.path=lib` nimmt sie in den Classpath auf.
 
 ## 11. Nicht-funktionale Leitplanken
 
 | Thema | Ziel |
 |---|---|
 | Latenz Cache-Hit | < 200 ms bis zum ersten Byte bei 100 000 Zeilen |
-| Ergebnisgröße | bis 100 000 Zeilen (Standard) bzw. 256 MB pro Ergebnis (konfigurierbar), darüber Fehler mit Hinweis |
+| Ergebnisgröße | bis 100 000 Zeilen (Standard, konfigurierbar), darüber Fehler mit Hinweis. Eine Grenze in Byte gibt es noch nicht (NFR-13, O-15) |
 | Speicher | Ergebnisse werden im Service vollständig im Speicher gehalten, Heap und `max-rows` daher gemeinsam dimensionieren |
 | Parallelität | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503 Retry-After` |
 | Verfügbarkeit | Stateless bis auf Metadaten-DB; mehrere Instanzen hinter Proxy mit PostgreSQL |
