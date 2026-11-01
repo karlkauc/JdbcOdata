@@ -96,16 +96,18 @@ final class SqlFilterTranslator {
                 case IN -> {
                     Value left = value(b.getLeftOperand());
                     if (left.nullLiteral()) throw new Untranslatable("null in IN");
+                    boolean string = "Edm.String".equals(left.edmType());
                     List<Object> binds = new ArrayList<>(left.sql().binds());
                     List<String> items = new ArrayList<>();
                     for (Expression item : b.getExpressions()) {
                         Value v = value(item);
                         if (v.nullLiteral()) continue; // never equal
-                        items.add(v.sql().text());
+                        items.add(string ? dialect.binary(v.sql().text()) : v.sql().text());
                         binds.addAll(v.sql().binds());
                     }
                     if (items.isEmpty()) return Sql.of("1=0");
-                    return new Sql("(" + left.sql().text() + " IN (" + String.join(", ", items) + "))", binds);
+                    String subject = string ? dialect.binary(left.sql().text()) : left.sql().text();
+                    return new Sql("(" + subject + " IN (" + String.join(", ", items) + "))", binds);
                 }
                 default -> throw new Untranslatable("operator " + op);
             }
@@ -483,7 +485,7 @@ final class SqlFilterTranslator {
             String col = "jdbcodata_q." + dialect.quote(c.name());
             // MySQL groups 'a' and 'A' together under its default collations
             if (dialect == SqlDialect.MYSQL && "Edm.String".equals(c.edmType())) col = dialect.binary(col);
-            select.add(col + " AS " + dialect.quote(label));
+            select.add(("Edm.String".equals(c.edmType()) ? dialect.text(col) : col) + " AS " + dialect.quote(label));
             group.add(col);
             slots.add(new Slot("group", c.propertyName(), label, c.edmType()));
         }
@@ -524,7 +526,8 @@ final class SqlFilterTranslator {
                     if (!SUMMABLE.contains(c.edmType()) && !"Edm.Date".equals(c.edmType()) && !string) {
                         throw new Untranslatable(agg.getStandardMethod() + " of " + c.edmType());
                     }
-                    select.add(agg.getStandardMethod().name() + "(" + (string ? dialect.binary(col) : col) + ") AS " + dialect.quote(label));
+                    String extreme = agg.getStandardMethod().name() + "(" + (string ? dialect.binary(col) : col) + ")";
+                    select.add((string ? dialect.text(extreme) : extreme) + " AS " + dialect.quote(label));
                     slots.add(new Slot("minmax", agg.getAlias(), label, c.edmType()));
                 }
                 case COUNT_DISTINCT -> {
@@ -578,7 +581,7 @@ final class SqlFilterTranslator {
                 }
             }
             String expr = in.size() == groupings.size() ? col : "CASE WHEN " + level + " IN (" + String.join(", ", in) + ") THEN " + col + " END";
-            select.add(expr + " AS " + dialect.quote(label));
+            select.add(("Edm.String".equals(c.edmType()) ? dialect.text(expr) : expr) + " AS " + dialect.quote(label));
             group.add(expr);
             slots.add(new Slot("group", c.propertyName(), label, c.edmType()));
         }

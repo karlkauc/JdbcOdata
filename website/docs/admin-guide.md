@@ -132,6 +132,8 @@ This is useful for large results that clients rarely load in full.
 It requires key mode "Columns" with a key column, and PostgreSQL, H2, Oracle, MySQL or MariaDB. Pushed requests bypass the
 cache. The response header `X-Push-Down` tells you what ran in the database.
 
+Results match the in-memory evaluation with one known exception: `toupper` uses the database's rules, so `ß` stays `ß` there and becomes `SS` in memory.
+
 ## 5. Cache
 
 Enable **Result cache** and set a TTL in the query editor. Entries are kept per database user and parameter values, so nobody

@@ -9,8 +9,10 @@
 
 Use the `jdbc:mariadb:` URL for MySQL as well: the included MariaDB driver talks to MySQL. `jdbc:mysql:` would need MySQL Connector/J in `lib/` and an allowed prefix.
 
+MySQL 8 and later log in with `caching_sha2_password` by default. Use TLS, or add `allowPublicKeyRetrieval=true` to the URL on a network you trust. Without either, the connection fails with `RSA public key is not available client side`.
+
 !!! note "How well each database is tested"
-    The automated tests run against H2 and a real PostgreSQL. Oracle, MySQL and MariaDB have no automated test against a real server yet, so check your queries before you rely
+    The automated tests run against H2 and real PostgreSQL, MariaDB 11.4 and MySQL 8.4 servers. Oracle has no automated test against a real server yet, so check your queries before you rely
     on them, and please report problems.
 
 ## Adding a driver
