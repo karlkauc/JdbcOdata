@@ -8,6 +8,7 @@ import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.identity.ServiceAuthenticationException;
 import at.jdbcodata.datasource.DbExecutionException;
+import at.jdbcodata.datasource.ResponseBudget;
 import at.jdbcodata.datasource.TooManyExecutionsException;
 import at.jdbcodata.datasource.SessionSettings;
 import at.jdbcodata.identity.ExecutionIdentity;
@@ -119,9 +120,16 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     private final ProcessorSupport support;
     private final ODataServlet.RequestContext request;
+    private final List<ResponseBudget.Reservation> reservations = new ArrayList<>();
 
     private OData odata;
     private ServiceMetadata serviceMetadata;
+
+    /** Once the response is written: until then its rows and body are on the heap. */
+    void releaseResponseBudget() {
+        reservations.forEach(ResponseBudget.Reservation::close);
+        reservations.clear();
+    }
 
     public QueryEntityCollectionProcessor(ProcessorSupport support, ODataServlet.RequestContext request) {
         this.support = support;
@@ -2323,6 +2331,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             draft.cacheStatus = exec.cacheStatus();
             draft.dbDurationMs = dbNanos.get() == 0 ? null : dbNanos.get() / 1_000_000;
             draft.rows = exec.table().rows().size();
+            reservations.add(support.responseBudget().reserve(exec.table().rows().size()));
             draft.status = ExecutionStatus.OK;
             return exec;
         } catch (SchemaSnapshotMissingException e) {

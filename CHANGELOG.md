@@ -21,6 +21,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Fixed
 
+- Many clients refreshing one cached feed could exhaust the heap: cache hits skipped the concurrency limit, so each
+  built its complete response in memory at the same time. `jdbcodata.odata.response-rows-budget` now limits these
+  responses; further clients wait up to `jdbcodata.odata.response-wait-ms` and then get 503
 - Oracle: connections were not read-only, because the Oracle driver accepts `setReadOnly` without enforcing it. Only
   the check that SQL is a `SELECT` protected the data. Each connection now starts a read-only transaction. A function
   that writes in an autonomous transaction can still do so, so database permissions remain the real limit. Queries

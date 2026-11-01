@@ -90,7 +90,7 @@ metadata database accordingly.
 ### Further points
 
 - `UMask=0077` is set only in the systemd unit. With other start methods, files in `data/` and logs follow the user's umask.
-- Results are held in memory, so large `max-rows` values and many parallel calls can exhaust the heap. Size them together.
+- Results are held in memory. `jdbcodata.odata.response-rows-budget` limits parallel large responses, but its 1 KB per row is an estimate, so size `max-rows`, the budget and the heap together for wide tables.
 - Signed-in callers see the database's error text, which helps diagnosis. Anonymous callers get a reference number only.
 - JDBC options are checked against a denylist of known dangerous options, not an allowlist. Treat `ADMIN` accounts as highly trusted.
 - Admin login has no MFA and no forced password change. Restrict the admin UI to known networks where possible.

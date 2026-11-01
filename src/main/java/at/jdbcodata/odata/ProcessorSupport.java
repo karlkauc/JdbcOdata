@@ -4,6 +4,7 @@ import at.jdbcodata.audit.LoginAudit;
 import at.jdbcodata.cache.ResultCache;
 import at.jdbcodata.config.JdbcOdataProperties;
 import at.jdbcodata.datasource.DatasourceService;
+import at.jdbcodata.datasource.ResponseBudget;
 import at.jdbcodata.identity.ExecutionIdentityResolver;
 import at.jdbcodata.query.QueryExecutor;
 import at.jdbcodata.query.QueryService;
@@ -24,5 +25,6 @@ public record ProcessorSupport(
         JdbcOdataProperties properties,
         DeltaTracker deltaTracker,
         AsyncRequests asyncRequests,
-        LoginAudit loginAudit) {
+        LoginAudit loginAudit,
+        ResponseBudget responseBudget) {
 }

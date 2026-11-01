@@ -35,6 +35,8 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 |---|---|---|
 | `jdbcodata.odata.max-rows` | `100000` | Hard limit per result. Datasource and query can only lower it. Results are held in memory |
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout if the datasource sets none |
+| `jdbcodata.odata.response-rows-budget` | `0` | Rows turned into responses at the same time, including cache hits, because each response is built completely in memory. `0`: half the heap at 1 KB per row, about 524,000 for 1 GB. Results under 1,000 rows do not count. Lower it for wide tables |
+| `jdbcodata.odata.response-wait-ms` | `30000` | Wait for room in this budget, then `503` with `Retry-After` |
 | `jdbcodata.odata.concurrency-wait-ms` | `2000` | Wait for a free execution slot of the datasource, then 503 |
 | `jdbcodata.odata.page-size` | `0` | Server-driven paging, rows per response. `0` is off. Without the result cache, data can change between pages; see [Paging](odata-reference.md#paging) |
 | `jdbcodata.odata.anonymous-user` | empty | Service user for requests without an `Authorization` header. Empty: every request needs Basic Auth. See [Anonymous access](identity.md#anonymous-access) |
