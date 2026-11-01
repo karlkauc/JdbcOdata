@@ -4,6 +4,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Hauptversionen sind Handarbeit: Der Webjar-Test prüft nur, ob die Dateien da sind, nicht, ob sie noch passen.
+    # codemirror 6.65.7 ist ein falsch nummerierter Stand von 2022, also älter als 5.65.21.
+    ignore:
+      - dependency-name: org.webjars.npm:codemirror
+        update-types: ["version-update:semver-major"]
+      - dependency-name: org.webjars.npm:htmx.org
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

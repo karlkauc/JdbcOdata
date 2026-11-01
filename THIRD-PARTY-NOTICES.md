@@ -145,6 +145,7 @@ Worth knowing:
 (The Apache Software License, Version 2.0) unbescape (org.unbescape:unbescape:1.1.6.RELEASE - http://www.unbescape.org)
 (MIT) codemirror (org.webjars.npm:codemirror:5.65.21 - https://www.webjars.org)
 (0BSD) htmx.org (org.webjars.npm:htmx.org:2.0.11 - https://www.webjars.org)
+(MIT) webjars-locator-lite (org.webjars:webjars-locator-lite:1.1.5 - https://webjars.org)
 (Apache License, Version 2.0) SnakeYAML (org.yaml:snakeyaml:2.6 - https://bitbucket.org/snakeyaml/snakeyaml)
 (The Apache Software License, Version 2.0) Jackson-core (tools.jackson.core:jackson-core:3.1.7 - https://github.com/FasterXML/jackson-core)
 (The Apache Software License, Version 2.0) jackson-databind (tools.jackson.core:jackson-databind:3.1.7 - https://github.com/FasterXML/jackson)
