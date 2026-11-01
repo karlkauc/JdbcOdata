@@ -273,7 +273,7 @@ flowchart TD
 | Key | `(queryId, queryVersion, effektiver DB-User, normalisierte Parameterwerte)` – User sehen nur Ergebnisse, die unter ihren eigenen DB-Rechten entstanden sind |
 | Konfiguration pro Query | `cacheEnabled`, `ttlSeconds`, `maxCachedRows`; Datenquelle setzt Obergrenzen |
 | Storage | Tabelle `cache_entry` in der Metadaten-DB: Rows als GZIP-komprimierte Spalten-Blobs (Columnar, damit `$select` billig ist). Caffeine davor für heiße Einträge (Größe in MB begrenzt) |
-| Mehrinstanz | Mit PostgreSQL als Metadaten-DB teilen sich alle Instanzen den persistenten Cache; Caffeine ist lokal und nur Beschleunigung |
+| Mehrinstanz | Mit PostgreSQL als Metadaten-DB teilen sich alle Instanzen den persistenten Cache. Caffeine ist lokal: Eine Invalidierung erhöht `cluster_generation`, die anderen Instanzen leeren ihren Speicher-Cache beim nächsten Abfragen (Standard: alle 5 Sekunden). Pools tragen `updatedAt` der Datenquelle im Schlüssel, Änderungen wirken dadurch sofort überall. `?refresh=true` aktualisiert nur die eigene Instanz und den persistenten Cache, andere Instanzen behalten bis zum TTL-Ende ihren Speicherstand |
 | Invalidierung | TTL-Ablauf; manuell per Admin-UI/API pro Query oder Query+User; per Request `?refresh=true` (nur für authentifizierte Aufrufer, zählt als Miss); automatisch bei Änderung der Query (Versionsnummer im Key) |
 | Stampede-Schutz | Pro Key ein Lock: parallele Excel-Refreshes desselben Users lösen nur eine DB-Ausführung aus |
 | Transparenz | Response-Header `X-Cache: HIT|MISS|BYPASS` und `X-Cache-Age: <Sekunden>` |

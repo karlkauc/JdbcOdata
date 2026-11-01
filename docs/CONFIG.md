@@ -24,6 +24,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.cache.max-size-mb` | `1024` | Gesamtgröße des persistenten Caches (komprimiert) |
 | `jdbcodata.cache.memory-mb` | `256` | In-Memory-Schicht (Caffeine) |
 | `jdbcodata.cache.cleanup-interval-ms` | `300000` | Aufräumjob für abgelaufene Einträge und Größenlimit |
+| `jdbcodata.cluster.poll-interval-ms` | `5000` | So schnell folgt eine Instanz den Cache-Invalidierungen der anderen |
 | `jdbcodata.stats.retention-days` | `90` | Aufbewahrung des Ausführungsprotokolls |
 | `jdbcodata.audit.retention-days` | `0` | Aufbewahrung des Audit-Logs in Tagen; `0` behält alles. Das Löschen steht selbst im Audit-Log |
 | `jdbcodata.stats.async` | `true` | Protokoll über eigenen Writer-Thread schreiben |

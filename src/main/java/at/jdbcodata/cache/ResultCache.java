@@ -50,14 +50,17 @@ public class ResultCache {
     private final JdbcOdataProperties.Cache config;
     private final Cache<CacheKey, Cached> memory;
     private final ConcurrentHashMap<CacheKey, Object> locks = new ConcurrentHashMap<>();
+    private final CacheGeneration generation;
+    private volatile Long seenGeneration;
 
     public ResultCache(CacheEntryRepository repository, QueryService queryService, AuditService audit,
-                       TransactionTemplate tx, JdbcOdataProperties props) {
+                       TransactionTemplate tx, JdbcOdataProperties props, CacheGeneration generation) {
         this.repository = repository;
         this.queryService = queryService;
         this.audit = audit;
         this.tx = tx;
         this.config = props.cache();
+        this.generation = generation;
         this.memory = Caffeine.newBuilder()
                 .maximumWeight(Math.max(1L, config.memoryMb()) * 1024L * 1024L)
                 .weigher((CacheKey k, Cached c) -> Math.max(1, estimateBytes(c.table())))
@@ -147,6 +150,7 @@ public class ResultCache {
     @Transactional
     public int invalidateQuery(UUID queryId) {
         memory.asMap().keySet().removeIf(k -> k.queryId().equals(queryId));
+        generation.bump();
         int n = repository.deleteByQuery(queryId);
         if (n > 0) log.debug("Invalidated {} cache entries of query {}", n, queryId);
         return n;
@@ -156,12 +160,14 @@ public class ResultCache {
     public int invalidateQueryAndUser(UUID queryId, String dbUser) {
         String user = dbUser == null ? "" : dbUser.toLowerCase();
         memory.asMap().keySet().removeIf(k -> k.queryId().equals(queryId) && k.dbUser().equals(user));
+        generation.bump();
         return repository.deleteByQueryAndUser(queryId, user);
     }
 
     @Transactional
     public long invalidateAll() {
         memory.invalidateAll();
+        generation.bump();
         long n = repository.count();
         repository.deleteAllInBatch();
         return n;
@@ -187,6 +193,19 @@ public class ResultCache {
     public void onQueriesChanged(QueryDefinitionsChangedEvent event) {
         // versions are part of the key; drop in-memory entries so that deleted queries free memory immediately
         memory.invalidateAll();
+    }
+
+    /**
+     * Invalidation on another instance: all in-memory results go, the persistent cache still answers. Entries are
+     * deleted with the same transaction that raises the counter, so nothing outdated can be reloaded from it.
+     */
+    @Scheduled(fixedDelayString = "${jdbcodata.cluster.poll-interval-ms:5000}")
+    public void followOtherInstances() {
+        long current = generation.current();
+        if (seenGeneration != null && seenGeneration != current) {
+            memory.invalidateAll();
+        }
+        seenGeneration = current;
     }
 
     @Transactional(readOnly = true)
