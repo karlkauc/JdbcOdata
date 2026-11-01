@@ -152,7 +152,22 @@ export. **Audit log** records configuration changes with admin, time and object,
 **Admin accounts** creates `ADMIN` and `VIEWER` accounts. One active `ADMIN` always remains, and you cannot delete your own
 account.
 
-## 8. Configuration as code
+## 8. API keys
+
+**API keys → New key**. A key is meant for machine clients and works either on feeds or on the REST API, never both:
+
+- **Feeds:** The key acts as a service user, with its stored logins and grants. It is not a database login itself, so a
+  force-pass-through service user cannot have a key, and there is no fallback to pass-through. Disabling the service
+  user also blocks its keys.
+- **REST API:** The key acts with the role ADMIN or VIEWER. It cannot create or revoke keys, otherwise a leaked key could
+  extend itself.
+
+The key is shown once, and only its hash is stored. It expires after 1 to 3650 days, and *Revoke* takes effect at once.
+To rotate, create a second key, switch the client over and revoke the old one. Send it as
+`Authorization: Bearer jdo_…`. Clients that only support Basic Auth use the user `apikey` with the key as password.
+The execution and audit logs show the caller as `apikey:<name>`.
+
+## 9. Configuration as code
 
 Datasources and queries can be kept in a versioned YAML file. Set `jdbcodata.seed.file` to load it at start; entries are
 upserted by name.

@@ -61,6 +61,8 @@ A login that a database rejected is not tried again on that database for 5 minut
 - *Force pass-through* ignores stored credentials.
 - A service user without stored credentials for a datasource falls back to pass-through.
 
+A service user can also have [API keys](admin-guide.md#8-api-keys) for machine clients.
+
 ## Technical accounts and FIXED queries
 
 **Technical accounts → New account** stores a database account per datasource. A FIXED query runs under such an account, whoever

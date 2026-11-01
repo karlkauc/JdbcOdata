@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('API keys', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <div><h1>API keys</h1><p class="lead">For machine clients. A key reads feeds as a service user or calls the REST API with a role. It expires, and revoking it works at once.</p></div>
+  </div>
+  <div class="flash ok" th:if="${created}">
+    <p>Key <strong th:text="${created.key.name}"></strong> created. Copy it now, it will not be shown again.</p>
+    <code th:text="${created.secret}"></code>
+  </div>
+  <table class="list">
+    <thead><tr><th>Name</th><th>Key</th><th>Access</th><th>Status</th><th>Expires</th><th>Last used</th><th>Created by</th><th></th></tr></thead>
+    <tbody>
+    <tr th:each="r : ${keys}">
+      <td><strong th:text="${r.key.name}"></strong></td>
+      <td><code th:text="${r.key.keyPrefix} + '…'"></code></td>
+      <td th:text="${r.target}"></td>
+      <td><span th:class="${r.status == 'active'} ? 'badge ok' : 'badge off'" th:text="${r.status}"></span></td>
+      <td th:text="${#temporals.format(r.key.expiresAt, 'yyyy-MM-dd')}"></td>
+      <td th:text="${r.key.lastUsedAt != null} ? ${#temporals.format(r.key.lastUsedAt, 'yyyy-MM-dd HH:mm')} : '–'"></td>
+      <td th:text="${r.key.createdBy}"></td>
+      <td><form th:if="${r.status == 'active'}" th:action="@{/admin/api-keys/{id}/revoke(id=${r.key.id})}" method="post" data-confirm="Revoke this key? Clients using it stop working at once."><button type="submit" class="small">Revoke</button></form></td>
+    </tr>
+    <tr th:if="${keys.isEmpty()}"><td colspan="8" class="muted">No API keys yet.</td></tr>
+    </tbody>
+  </table>
+  <h2>New key</h2>
+  <form th:action="@{/admin/api-keys}" method="post" class="card inline-form">
+    <label>Name <input type="text" name="name" required maxlength="80" pattern="[A-Za-z0-9_.\-]{2,80}" autocomplete="off"></label>
+    <label>Access <select name="target" required>
+      <optgroup label="Feeds as service user"><option th:each="u : ${serviceUsers}" th:value="${u.id}" th:text="${u.username}"></option></optgroup>
+      <optgroup label="REST API"><option th:each="r : ${roles}" th:value="|role:${r}|" th:text="${r}"></option></optgroup>
+    </select></label>
+    <label>Expires after <select name="expiresInDays">
+      <option value="30">30 days</option><option value="90" selected>90 days</option><option value="365">1 year</option><option value="730">2 years</option>
+    </select></label>
+    <button type="submit" class="primary">Create key</button>
+  </form>
+</main>
+</body>
+</html>

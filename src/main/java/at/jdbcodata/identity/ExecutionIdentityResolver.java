@@ -1,5 +1,6 @@
 package at.jdbcodata.identity;
 
+import at.jdbcodata.apikey.ApiKeyService;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.datasource.DbAuthenticationException;
@@ -38,21 +39,29 @@ public class ExecutionIdentityResolver {
     private final QueryService queryService;
     private final DatasourceService datasourceService;
     private final IdentityPoolManager pools;
+    private final ApiKeyService apiKeys;
 
     public ExecutionIdentityResolver(ServiceUserService serviceUsers, FixedCredentialService fixedCredentials,
                                      QueryService queryService, DatasourceService datasourceService,
-                                     IdentityPoolManager pools) {
+                                     IdentityPoolManager pools, ApiKeyService apiKeys) {
         this.serviceUsers = serviceUsers;
         this.fixedCredentials = fixedCredentials;
         this.queryService = queryService;
         this.datasourceService = datasourceService;
         this.pools = pools;
+        this.apiKeys = apiKeys;
     }
 
     /** @throws ServiceAuthenticationException wrong service password */
     public IdentityContext authenticate(BasicCredentials credentials) {
         Optional<ServiceUser> user = serviceUsers.authenticate(credentials.username(), credentials.password());
         return new IdentityContext(credentials, user.orElse(null));
+    }
+
+    /** @throws ServiceAuthenticationException the key is unknown, expired, revoked or not meant for feeds */
+    public IdentityContext authenticateKey(String secret) {
+        return apiKeys.authenticateForFeed(secret).map(e -> IdentityContext.apiKey(e.getKey().caller(), e.getValue()))
+                .orElseThrow(() -> new ServiceAuthenticationException(ApiKeyService.BASIC_USER));
     }
 
     /**

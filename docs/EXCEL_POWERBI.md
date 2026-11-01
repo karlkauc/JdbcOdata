@@ -46,6 +46,11 @@ zu laden und die Beziehung in Power BI über die Schlüsselspalten (z. B. `Kunde
   persönlichem Login der Weg.
 - Geplante Aktualisierung: Intervall an die Cache-TTL der Query anpassen.
 
+## API-Keys statt Passwort
+
+Mit einem [API-Key](ADMIN_GUIDE.md#7-api-keys) in Excel und PowerBI „Standard“ beziehungsweise „Basic“ wählen, `apikey` als
+Benutzer und den Key als Passwort eintragen. Skripte senden `Authorization: Bearer jdo_…`.
+
 ## Fehlerbilder
 
 | Meldung | Bedeutung |

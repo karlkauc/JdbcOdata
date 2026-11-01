@@ -195,7 +195,23 @@ Mit OIDC (siehe [Betriebshandbuch](OPERATIONS.md#single-sign-on-für-die-admin-u
 Button pro Identity Provider. Diese Nutzer stehen nicht in der Liste der Admin-Konten: Die Rolle kommt bei jeder
 Anmeldung vom Provider. Im Audit-Log tragen sie den Präfix `oidc:`, zum Beispiel `oidc:anna`.
 
-## 7. Seed-Datei
+## 7. API-Keys
+
+API keys → New key. Ein Key ist für Maschinen-Clients gedacht und gilt entweder für Feeds oder für die REST-API, nie für
+beides:
+
+- **Feeds:** Der Key arbeitet als Service-User, mit dessen hinterlegten Credentials und Freigaben. Er ist selbst kein
+  Datenbank-Login. Ein Service-User mit „force passthrough“ kann deshalb keinen Key haben, und einen Rückfall auf
+  Pass-Through gibt es nicht. Ein deaktivierter Service-User sperrt auch seine Keys.
+- **REST-API:** Der Key arbeitet mit der Rolle ADMIN oder VIEWER. Er kann keine Keys anlegen oder widerrufen, sonst könnte
+  ein abgeflossener Key sich selbst verlängern.
+
+Der Key wird nur einmal angezeigt, gespeichert ist nur sein Hash. Er läuft nach 1 bis 3650 Tagen ab, „Revoke“ wirkt sofort.
+Zum Wechseln einen zweiten Key anlegen, den Client umstellen und den alten widerrufen. Gesendet wird er als
+`Authorization: Bearer jdo_…`. Clients, die nur Basic Auth können, nutzen den Benutzer `apikey` und den Key als Passwort.
+Ausführungsprotokoll und Audit-Log führen den Aufrufer als `apikey:<name>`.
+
+## 8. Seed-Datei
 
 Datenquellen und Queries lassen sich versioniert als YAML pflegen (`contrib/seed-example.yml`) und mit
 `jdbcodata.seed.file` beim Start einspielen (Upsert nach Name). Mit `snapshotCredentials` wird der

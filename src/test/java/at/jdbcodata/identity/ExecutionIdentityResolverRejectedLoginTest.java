@@ -34,7 +34,7 @@ class ExecutionIdentityResolverRejectedLoginTest {
     private final DatasourceService datasources = mock(DatasourceService.class);
     private final IdentityPoolManager pools = spy(new IdentityPoolManager());
     private final ExecutionIdentityResolver resolver = new ExecutionIdentityResolver(
-            mock(ServiceUserService.class), mock(FixedCredentialService.class), queries, datasources, pools);
+            mock(ServiceUserService.class), mock(FixedCredentialService.class), queries, datasources, pools, null);
     private final IdentityContext caller = new IdentityContext(new BasicCredentials("anna", "secret"), null);
 
     private final Datasource own = datasource("own");

@@ -58,6 +58,14 @@ curl -u report_ro:secret 'https://<host>/odata/Sales?p_year=2025&$filter=region%
 Send the password right away. If a service has anonymous access enabled, clients that only send credentials after a
 401, such as browsers, stay anonymous and see the anonymous user's data instead of their own.
 
+With an [API key](admin-guide.md#8-api-keys), send it as Bearer token:
+
+```bash
+curl -H 'Authorization: Bearer jdo_…' 'https://<host>/odata/Sales?$top=10'
+```
+
+In Excel and Power BI, choose *Basic*, enter `apikey` as user and the key as password.
+
 ## Error messages
 
 | Message | Meaning |

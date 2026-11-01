@@ -1,6 +1,10 @@
 package at.jdbcodata.config;
 
+import at.jdbcodata.apikey.ApiKeyAuthenticationFilter;
+import at.jdbcodata.apikey.ApiKeyService;
+import at.jdbcodata.audit.LoginAudit;
 import at.jdbcodata.security.AdminOidcUserService;
+import at.jdbcodata.security.LoginRateLimiter;
 import at.jdbcodata.security.MetricsTokenMatcher;
 import at.jdbcodata.security.OidcClients;
 import at.jdbcodata.security.OidcFailureHandler;
@@ -11,6 +15,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -21,6 +26,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.session.HttpSessionEventPublisher;
 
@@ -75,11 +81,17 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
-    SecurityFilterChain apiChain(HttpSecurity http, OidcProperties oidc) throws Exception {
+    SecurityFilterChain apiChain(HttpSecurity http, OidcProperties oidc, ApiKeyService keys, LoginRateLimiter limiter,
+                                 LoginAudit audit) throws Exception {
         http.securityMatcher("/api/**")
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("ADMIN", "VIEWER")
+                        // a leaked key must not be able to mint keys that outlive its own expiry or revocation
+                        .requestMatchers("/api/v1/api-keys/**").access((auth, context) -> new AuthorizationDecision(
+                                !auth.get().getName().startsWith(ApiKeyService.CALLER_PREFIX)
+                                        && auth.get().getAuthorities().stream().anyMatch(g -> "ROLE_ADMIN".equals(g.getAuthority()))))
                         .anyRequest().hasRole("ADMIN"))
+                .addFilterBefore(new ApiKeyAuthenticationFilter(keys, limiter, audit), BasicAuthenticationFilter.class)
                 .csrf(c -> c.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         if (oidc.localLogin()) {

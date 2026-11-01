@@ -27,7 +27,7 @@ class ExecutionIdentityResolverOutageTest {
     private final DatasourceService datasources = mock(DatasourceService.class);
     private final IdentityPoolManager pools = mock(IdentityPoolManager.class);
     private final ExecutionIdentityResolver resolver = new ExecutionIdentityResolver(
-            mock(ServiceUserService.class), mock(FixedCredentialService.class), queries, datasources, pools);
+            mock(ServiceUserService.class), mock(FixedCredentialService.class), queries, datasources, pools, null);
     private final IdentityContext caller = new IdentityContext(new BasicCredentials("bogus", "bogus"), null);
 
     private final Datasource down = datasource("down");

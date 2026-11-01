@@ -56,6 +56,8 @@
     <div class="nav-group"><span>System</span>
       <a th:href="@{/admin/admins}" th:classappend="${#strings.startsWith(p, '/admin/admins')} ? 'active'">
         <svg th:replace="~{fragments/icons :: icon('shield')}"></svg><span class="nav-label">Admin accounts</span></a>
+      <a th:href="@{/admin/api-keys}" th:classappend="${#strings.startsWith(p, '/admin/api-keys')} ? 'active'">
+        <svg th:replace="~{fragments/icons :: icon('key')}"></svg><span class="nav-label">API keys</span></a>
       <a th:href="@{/admin/settings}" th:classappend="${#strings.startsWith(p, '/admin/settings')} ? 'active'">
         <svg th:replace="~{fragments/icons :: icon('settings')}"></svg><span class="nav-label">Settings</span></a>
     </div>

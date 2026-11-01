@@ -366,6 +366,7 @@ Spring Data JPA, Flyway-Migrationen unter `db/migration`. Standard H2 im Dateimo
 | `stored_credential` | Service-User × Datenquelle → verschlüsselter DB-User/Passwort, Key-ID |
 | `fixed_credential` | Technische Accounts für `FIXED`-Queries, verschlüsselt |
 | `admin_user` | Login, bcrypt-Hash, Rolle |
+| `api_key` | SHA-256-Hash, Ablauf, Widerruf; Ziel ist ein Service-User oder eine Admin-Rolle |
 | `cache_entry` | Key, Query-Version, DB-User, Parameter-Hash, Blob, Zeilen, Bytes, erzeugt, läuft ab |
 | `execution_log` | siehe Abschnitt 7 |
 | `execution_daily` | Tagesaggregate pro Query/User |
