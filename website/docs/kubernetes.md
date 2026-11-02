@@ -29,6 +29,8 @@ helm install jdbcodata deploy/helm/jdbcodata \
 
 `deploy/helm/jdbcodata/values.yaml` describes all settings. Pods run as a non-root user with a read-only root file system and no service account token.
 
+Secrets can also be read from files instead of environment variables, see [Secrets from files](security.md#secrets-from-files).
+
 ## Replicas and limits
 
 The chart starts two replicas. They can start at the same time, and a PodDisruptionBudget keeps at least one running during node maintenance. Sticky sessions are not needed.

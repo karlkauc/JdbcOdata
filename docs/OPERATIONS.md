@@ -199,6 +199,18 @@ eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
   Clients, die Zugangsdaten nur auf eine 401-Aufforderung schicken (Browser), bleiben dann anonym und sehen die
   Daten des Service-Users statt ihrer eigenen.
 
+## Secrets aus Dateien
+
+Jede Variable `JDBCODATA_*` oder `SPRING_*` lässt sich mit der Endung `_FILE` aus einer Datei lesen, etwa
+`JDBCODATA_MASTER_KEY_FILE=/run/secrets/master_key`. Das passt zu Docker Secrets, Kubernetes und Vault Agent, und das
+Secret steht nicht in der Prozessumgebung. Zeilenumbrüche am Ende zählen nicht. Sind Variable und `_FILE` gleichzeitig
+gesetzt oder fehlt die Datei, startet der Dienst nicht. `JDBCODATA_SEED_FILE` ist eine eigene Einstellung und bleibt ein
+Pfad.
+
+Liegen mehrere Secrets in einem Verzeichnis, geht es auch ohne einzelne Variablen:
+`SPRING_CONFIG_IMPORT=optional:configtree:/run/secrets/`. Der Dateiname ist dann der Property-Name, zum Beispiel
+`jdbcodata.master-key`.
+
 ## Master-Key wechseln
 
 Der Wechsel läuft ohne Ausfall, wenn alle Instanzen den neuen Key kennen, bevor ihn die erste benutzt:

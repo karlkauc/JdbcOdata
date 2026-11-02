@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Added
 
+- Secrets can come from files: `JDBCODATA_MASTER_KEY_FILE=/run/secrets/key` works for every `JDBCODATA_*` and `SPRING_*`
+  variable, and Spring's `configtree` is documented for mounted Kubernetes secrets and Vault Agent
 - Helm chart in `deploy/helm/jdbcodata` with probes, resource limits, PodDisruptionBudget, Secret references, optional
   ServiceMonitor, alert rules and Grafana dashboard
 - The master key can be replaced: `jdbcodata.master-key-previous` lists older keys that only decrypt, and stored
