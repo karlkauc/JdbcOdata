@@ -22,7 +22,6 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.session.SessionRegistry;
-import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
@@ -31,7 +30,9 @@ import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
-import org.springframework.security.web.session.HttpSessionEventPublisher;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.security.SpringSessionBackedSessionRegistry;
 
 /**
  * Three security chains:
@@ -150,15 +151,10 @@ public class SecurityConfig {
                 : CONTENT_SECURITY_POLICY.replace("form-action 'self'", "form-action 'self' " + origins);
     }
 
+    /** Reads the sessions in the metadata DB, so an account can be locked out on all instances. */
     @Bean
-    SessionRegistry sessionRegistry() {
-        return new SessionRegistryImpl();
-    }
-
-    /** Lets the session registry forget sessions that time out or log out. */
-    @Bean
-    static HttpSessionEventPublisher httpSessionEventPublisher() {
-        return new HttpSessionEventPublisher();
+    SessionRegistry sessionRegistry(FindByIndexNameSessionRepository<? extends Session> sessions) {
+        return new SpringSessionBackedSessionRegistry<>(sessions);
     }
 
     @Bean

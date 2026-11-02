@@ -2,6 +2,10 @@ package at.jdbcodata.cluster;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import at.jdbcodata.admin.account.AdminRole;
+import at.jdbcodata.admin.account.AdminUser;
+import at.jdbcodata.admin.account.AdminUserService;
+import at.jdbcodata.admin.account.AdminUserService.AdminUserSpec;
 import at.jdbcodata.cluster.TwoNodes.Node;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceService;
@@ -87,6 +91,51 @@ class TwoNodeIT {
         first.bean(DatasourceService.class).update(ds.id(), spec(ds.name(), newUrl));
 
         assertThat(value(second, name)).isEqualTo(2);
+    }
+
+    @Test
+    void aSessionWorksOnEveryNode() throws Exception {
+        String name = "both" + suffix();
+        account(name, true);
+        String cookie = first.signIn(name, PASSWORD);
+
+        assertThat(second.page("/admin/queries", cookie).statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void disablingAnAccountEndsItsSessionOnTheOtherNode() throws Exception {
+        String name = "gone" + suffix();
+        AdminUser account = account(name, true);
+        String cookie = second.signIn(name, PASSWORD);
+        assertThat(second.page("/admin/queries", cookie).statusCode()).isEqualTo(200);
+
+        first.bean(AdminUserService.class).update(account.id(), new AdminUserSpec(name, null, AdminRole.VIEWER, false));
+
+        assertThat(second.page("/admin/queries", cookie).headers().firstValue("Location"))
+                .hasValueSatisfying(l -> assertThat(l).endsWith("/login?ended"));
+    }
+
+    /** What updates of Spring Security do to stored sessions: those users have to sign in again, nothing more. */
+    @Test
+    void aSessionThatCannotBeReadMeansSigningInAgain() throws Exception {
+        String name = "old" + suffix();
+        account(name, true);
+        String cookie = first.signIn(name, PASSWORD);
+        try (Connection c = DriverManager.getConnection(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             Statement st = c.createStatement()) {
+            st.executeUpdate("""
+                    UPDATE spring_session_attributes SET attribute_bytes = '\\x00'
+                    WHERE session_primary_id IN (SELECT primary_id FROM spring_session WHERE principal_name = '%s')""".formatted(name));
+        }
+
+        HttpResponse<String> response = second.page("/admin/queries", cookie);
+
+        assertThat(response.statusCode()).isEqualTo(302);
+        assertThat(response.headers().firstValue("Location")).hasValueSatisfying(l -> assertThat(l).endsWith("/login"));
+    }
+
+    private static AdminUser account(String name, boolean enabled) {
+        return first.bean(AdminUserService.class).create(new AdminUserSpec(name, PASSWORD, AdminRole.VIEWER, enabled), false, false);
     }
 
     private static int value(Node node, String query) throws Exception {

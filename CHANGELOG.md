@@ -29,6 +29,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Changed
 
+- Admin UI sessions are stored in the metadata database. They work on every instance, survive restarts, and disabling
+  an account ends its sessions everywhere, not only on the instance that made the change. The session cookie is now
+  called `SESSION`, so everybody has to sign in once after the update
 - With PostgreSQL as metadata database the service refuses to start without `JDBCODATA_MASTER_KEY`: a key file would
   differ per instance, and passwords stored by one could not be read by another. **When upgrading** an installation that
   uses `data/master.key`, set `JDBCODATA_MASTER_KEY` to the content of that file. The Docker Compose setup already does

@@ -3,7 +3,6 @@ package at.jdbcodata.admin.account;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -23,12 +22,8 @@ public class AdminSessions {
 
     public void expire(String username) {
         String current = currentSessionId();
-        for (Object principal : registry.getAllPrincipals()) {
-            if (principal instanceof UserDetails u && u.getUsername().equalsIgnoreCase(username)) {
-                for (SessionInformation s : registry.getAllSessions(principal, false)) {
-                    if (!s.getSessionId().equals(current)) s.expireNow();
-                }
-            }
+        for (SessionInformation s : registry.getAllSessions(username, false)) {
+            if (!s.getSessionId().equals(current)) s.expireNow();
         }
     }
 
