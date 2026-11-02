@@ -10,7 +10,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `server.forward-headers-strategy` | – | `native` hinter einem Reverse-Proxy: Tomcat wertet `X-Forwarded-*` nur von internen Proxies aus (127.x, 10.x, 172.16–31.x, 192.168.x), damit Redirects und Feed-URLs `https` verwenden, das Session-Cookie `Secure` bekommt und das Rate-Limit die echte Client-IP sieht. **Nicht** `framework`: dann zählt der erste, vom Client fälschbare `X-Forwarded-For`-Eintrag (Warnung im Log). Andere Proxy-Netze: `server.tomcat.remoteip.internal-proxies` |
 | `jdbcodata.admin.user` | `admin` | Name des ersten Admin-Kontos (nur beim ersten Start verwendet) |
 | `jdbcodata.admin.password` | leer | Passwort des ersten Admin-Kontos; leer = generiert und in `<data-dir>/initial-admin-password` (Rechte 600) abgelegt, nie im Log. Datei nach dem ersten Login löschen |
-| `jdbcodata.master-key` | leer | AES-256-Schlüssel (Base64, 32 Byte) für hinterlegte DB-Passwörter; leer = Key-Datei `data/master.key` |
+| `jdbcodata.master-key` | leer | AES-256-Schlüssel (Base64, 32 Byte) für hinterlegte DB-Passwörter; leer = Key-Datei `data/master.key`, nur mit H2 als Metadaten-DB. Mit PostgreSQL Pflicht, sonst startet der Dienst nicht |
 | `jdbcodata.data-dir` | `./data` | Verzeichnis für Key-Datei und H2-Dateien |
 | `jdbcodata.meta.url` | H2-Datei in `data/` | JDBC-URL der Metadaten-DB (H2 oder PostgreSQL) |
 | `jdbcodata.meta.username` / `password` | `sa` / leer | Login der Metadaten-DB |

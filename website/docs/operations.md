@@ -109,7 +109,7 @@ cosign verify ghcr.io/karlkauc/jdbcodata:1.1.0 \
 | | H2 (default) | PostgreSQL |
 |---|---|---|
 | Use | Single instance | Production, several instances |
-| Configuration | None | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` and login |
+| Configuration | None | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata`, login and `JDBCODATA_MASTER_KEY` (the same on all instances) |
 | Backup | Stop the service, copy `data/*.mv.db` | `pg_dump jdbcodata` |
 
 To move from H2 to PostgreSQL, recreate datasources and queries in the new instance through a seed file or the REST API. The cache does not need to be migrated.

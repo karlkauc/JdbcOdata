@@ -13,6 +13,8 @@ import org.junit.jupiter.api.io.TempDir;
 class CredentialVaultTest {
 
     private static final String KEY = Base64.getEncoder().encodeToString(new byte[32]);
+    private static final String H2 = "jdbc:h2:file:./data/jdbcodata";
+    private static final String POSTGRES = "jdbc:postgresql://db:5432/jdbcodata";
 
     @TempDir
     Path dir;
@@ -24,7 +26,7 @@ class CredentialVaultTest {
 
     @Test
     void roundTripsAndRejectsOtherKeys() {
-        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir)));
+        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2));
         String ct = vault.encrypt("s3cret", "ctx");
         assertThat(ct).startsWith("2:").isNotEqualTo(vault.encrypt("s3cret", "ctx")).doesNotContain("s3cret");
         assertThat(CredentialVault.isLegacy(ct)).isFalse();
@@ -38,7 +40,7 @@ class CredentialVaultTest {
 
     @Test
     void ciphertextIsBoundToItsRecord() {
-        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir)));
+        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2));
         String ct = vault.encrypt("s3cret", "stored:user-a:ds-1:alice");
         assertThatThrownBy(() -> vault.decrypt(ct, vault.keyId(), "stored:user-b:ds-1:alice"))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Decryption failed");
@@ -46,7 +48,7 @@ class CredentialVaultTest {
 
     @Test
     void readsLegacyValuesWithoutRecordBinding() throws Exception {
-        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir)));
+        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2));
         byte[] iv = new byte[12];
         javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(new byte[32], "AES"),
@@ -61,24 +63,39 @@ class CredentialVaultTest {
 
     @Test
     void generatesAndReusesKeyFile() throws Exception {
-        MasterKeyProvider first = new MasterKeyProvider(props("", dir));
+        MasterKeyProvider first = new MasterKeyProvider(props("", dir), H2);
         assertThat(first.source()).isEqualTo("key file");
         Path file = dir.resolve("master.key");
         assertThat(Files.exists(file)).isTrue();
-        MasterKeyProvider second = new MasterKeyProvider(props("", dir));
+        MasterKeyProvider second = new MasterKeyProvider(props("", dir), H2);
         assertThat(second.keyId()).isEqualTo(first.keyId());
-        assertThat(new MasterKeyProvider(props(KEY, dir)).source()).isEqualTo("configuration");
+        assertThat(new MasterKeyProvider(props(KEY, dir), H2).source()).isEqualTo("configuration");
     }
 
     @Test
     void rejectsInvalidConfiguredKeys() throws Exception {
-        assertThatThrownBy(() -> new MasterKeyProvider(props("not base64!", dir))).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new MasterKeyProvider(props(Base64.getEncoder().encodeToString(new byte[5]), dir)))
+        assertThatThrownBy(() -> new MasterKeyProvider(props("not base64!", dir), H2)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new MasterKeyProvider(props(Base64.getEncoder().encodeToString(new byte[5]), dir), H2))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("32 bytes");
         Path empty = dir.resolve("empty");
         Files.createDirectories(empty);
         Files.writeString(empty.resolve("master.key"), "");
-        assertThatThrownBy(() -> new MasterKeyProvider(props("", empty))).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new MasterKeyProvider(props("", empty), H2)).isInstanceOf(IllegalStateException.class);
         assertThat(MasterKeyProvider.computeKeyId(new byte[32])).hasSize(8);
+    }
+
+    @Test
+    void sharedMetadataDbNeedsAConfiguredKey() {
+        assertThatThrownBy(() -> new MasterKeyProvider(props("", dir), POSTGRES))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("JDBCODATA_MASTER_KEY");
+        assertThat(dir.resolve("master.key")).doesNotExist();
+        assertThat(new MasterKeyProvider(props(KEY, dir), POSTGRES).source()).isEqualTo("configuration");
+    }
+
+    @Test
+    void sharedMetadataDbIgnoresAnExistingKeyFile() throws Exception {
+        String keyFile = java.nio.file.Files.writeString(dir.resolve("master.key"), KEY).toString();
+        assertThatThrownBy(() -> new MasterKeyProvider(props("", dir), POSTGRES))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining(keyFile).hasMessageNotContaining(KEY);
     }
 }
