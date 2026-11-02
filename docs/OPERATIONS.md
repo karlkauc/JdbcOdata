@@ -102,6 +102,7 @@ Prüfen stehen auf der Website unter *Operations → Verifying a release*.
 | Konfiguration | nichts | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` + Login + `JDBCODATA_MASTER_KEY` (auf allen Instanzen derselbe) |
 | Backup | Service stoppen, `data/*.mv.db` kopieren | `pg_dump jdbcodata` |
 
+Admin-Sitzungen liegen in der Metadaten-DB. Ein Load Balancer braucht deshalb keine Sticky Sessions für die Admin-UI.
 Mehrere Instanzen dürfen gleichzeitig starten: Admin-Anlage und Seed laufen nacheinander, gesichert über eine
 Zeilensperre in `cluster_lock`. Hängt ein Start dabei, warten die anderen mit der Meldung `Waiting for other instances`;
 stirbt die Instanz, gibt die Datenbank die Sperre frei. Das generierte Admin-Passwort liegt nur in `data/` der Instanz,

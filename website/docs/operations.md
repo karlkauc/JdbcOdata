@@ -112,7 +112,7 @@ cosign verify ghcr.io/karlkauc/jdbcodata:1.1.0 \
 | Configuration | None | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata`, login and `JDBCODATA_MASTER_KEY` (the same on all instances) |
 | Backup | Stop the service, copy `data/*.mv.db` | `pg_dump jdbcodata` |
 
-Several instances may start at the same time: creating the first admin and applying the seed happen one instance at a time, guarded by a row lock in `cluster_lock`. If one start hangs there, the others wait and log `Waiting for other instances`. When an instance dies, the database releases the lock. A generated admin password is only in the `data/` directory of the instance that created the account, so set `JDBCODATA_ADMIN_PASSWORD` when running several instances. Cleanup jobs run on every instance, which is harmless because they only delete expired data.
+Admin sessions are stored in the metadata database, so a load balancer needs no sticky sessions for the admin UI. Several instances may start at the same time: creating the first admin and applying the seed happen one instance at a time, guarded by a row lock in `cluster_lock`. If one start hangs there, the others wait and log `Waiting for other instances`. When an instance dies, the database releases the lock. A generated admin password is only in the `data/` directory of the instance that created the account, so set `JDBCODATA_ADMIN_PASSWORD` when running several instances. Cleanup jobs run on every instance, which is harmless because they only delete expired data.
 
 To move from H2 to PostgreSQL, recreate datasources and queries in the new instance through a seed file or the REST API. The cache does not need to be migrated.
 

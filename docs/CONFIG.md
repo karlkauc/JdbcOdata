@@ -43,7 +43,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.security.oidc.admin-values` | leer | Claim-Werte für ADMIN, exakter Vergleich |
 | `jdbcodata.security.oidc.viewer-values` | leer | Claim-Werte für VIEWER, exakter Vergleich |
 | `jdbcodata.security.metrics-token` | leer | Token für Prometheus, mindestens 32 Zeichen, gesendet als `Authorization: Bearer …`. Gilt nur für `/actuator/prometheus`. Leer = aus |
-| `server.servlet.session.cookie.same-site` | `lax` | SameSite des Admin-Session-Cookies; `Secure` setzt Tomcat bei HTTPS selbst |
+| `server.servlet.session.cookie.same-site` | `lax` | SameSite des Admin-Session-Cookies (`SESSION`); `Secure` wird bei HTTPS automatisch gesetzt |
 | `logging.file.name` | – | z.B. `logs/jdbcodata.log` für Datei-Logging |
 | `logging.structured.format.console` | – | JSON-Logs auf stdout: `ecs`, `logstash` oder `gelf`; für Dateien `logging.structured.format.file` |
 

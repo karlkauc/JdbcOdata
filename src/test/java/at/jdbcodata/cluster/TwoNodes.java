@@ -1,5 +1,7 @@
 package at.jdbcodata.cluster;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import at.jdbcodata.JdbcOdataApplication;
 import java.io.IOException;
 import java.net.URI;
@@ -10,6 +12,8 @@ import java.nio.file.Files;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -45,6 +49,32 @@ final class TwoNodes {
             return CLIENT.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                     .method(method, HttpRequest.BodyPublishers.noBody()).header("Authorization", "Basic " + basic).build(),
                     HttpResponse.BodyHandlers.ofString());
+        }
+
+        /** Signs in through the login form, like a browser, and returns the session cookie. */
+        String signIn(String user, String password) throws IOException, InterruptedException {
+            HttpResponse<String> form = page("/login", null);
+            Matcher csrf = Pattern.compile("name=\"_csrf\"\\s+value=\"([^\"]+)\"").matcher(form.body());
+            assertThat(csrf.find()).as("CSRF token in the login form").isTrue();
+            String body = "username=" + user + "&password=" + password + "&_csrf=" + csrf.group(1);
+            HttpResponse<String> login = CLIENT.send(browser("/login", sessionCookie(form))
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+            assertThat(login.headers().firstValue("Location")).as("redirect after login").hasValueSatisfying(l -> assertThat(l).endsWith("/admin"));
+            return sessionCookie(login);
+        }
+
+        HttpResponse<String> page(String path, String cookie) throws IOException, InterruptedException {
+            return CLIENT.send(browser(path, cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+        }
+
+        private HttpRequest.Builder browser(String path, String cookie) {
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).header("Accept", "text/html");
+            return cookie == null ? request : request.header("Cookie", cookie);
+        }
+
+        private static String sessionCookie(HttpResponse<String> response) {
+            return response.headers().firstValue("Set-Cookie").orElseThrow().split(";")[0];
         }
 
         @Override

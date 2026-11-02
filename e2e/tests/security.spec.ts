@@ -35,7 +35,7 @@ test("security headers and session cookie", async ({ page, context }) => {
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["strict-transport-security"]).toContain("max-age=");
   await login(page);
-  const session = (await context.cookies()).find((c) => c.name === "JSESSIONID");
+  const session = (await context.cookies()).find((c) => c.name === "SESSION");
   expect(session, "session cookie").toBeDefined();
   expect(session!.secure).toBe(true);
   expect(session!.httpOnly).toBe(true);

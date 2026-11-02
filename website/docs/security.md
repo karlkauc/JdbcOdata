@@ -41,6 +41,7 @@ The model assumes:
 - **Session settings.** Only known keys per database, and values without quotes, semicolons or backslashes. The service builds the statement.
 - **Login throttling.** Failed logins are counted per IP and per user name, and then answered with 429.
 - **Secrets.** Stored database passwords use AES-256-GCM, tied to their record. Admin and service user passwords use bcrypt. Pass-through passwords are never stored.
+- **Admin sessions** are stored in the metadata database (`spring_session`) with their session IDs in plain text, and for OIDC sign-ins with the ID token, but never with passwords. Read access to that table, or a recent backup, allows taking over open sessions. Empty the table after restoring a backup.
 - **Admin UI.** `HttpOnly`, `SameSite=Lax` and `Secure` session cookies, CSRF protection, a Content Security Policy without inline scripts. Sessions end when an account is disabled or
   its password or role changes.
 - **Logs.** Sensitive parameters appear as `***` in the execution log, CSV export and cache overview. CSV cells are protected against formula injection.
