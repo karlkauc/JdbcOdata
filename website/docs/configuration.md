@@ -11,7 +11,7 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `server.address` | all interfaces | Bind address. The `demo` profile sets `127.0.0.1` |
 | `server.ssl.key-store` | none | PKCS12 keystore for built-in TLS, with `key-store-password` and `key-store-type: PKCS12` |
 | `server.forward-headers-strategy` | none | Use `native` behind a reverse proxy. Tomcat then trusts `X-Forwarded-*` only from internal proxy addresses. Other proxy networks: `server.tomcat.remoteip.internal-proxies` |
-| `server.servlet.session.cookie.same-site` | `lax` | SameSite of the admin session cookie. Tomcat sets `Secure` on HTTPS |
+| `server.servlet.session.cookie.same-site` | `lax` | SameSite of the admin session cookie (`SESSION`). `Secure` is set automatically on HTTPS |
 | `management.endpoints.web.exposure.include` | `health,prometheus` | Actuator endpoints. `/actuator/prometheus` needs an admin account or the metrics token |
 | `jdbcodata.security.oidc.local-login` | `true` | `false`: no password logins in UI and API, see [Single sign-on](operations.md#single-sign-on-for-the-admin-ui) |
 | `jdbcodata.security.oidc.username-claim` | `preferred_username` | Claim with the name for UI and audit log |

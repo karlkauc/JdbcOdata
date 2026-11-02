@@ -29,6 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Changed
 
+- Results of asynchronous requests are stored in the metadata database, compressed and encrypted, for one hour. Every instance can
+  answer the status monitor, and a request whose instance stopped is reported with 503 instead of running forever
 - Admin UI sessions are stored in the metadata database. They work on every instance, survive restarts, and disabling
   an account ends its sessions everywhere, not only on the instance that made the change. The session cookie is now
   called `SESSION`, so everybody has to sign in once after the update

@@ -134,6 +134,34 @@ class TwoNodeIT {
         assertThat(response.headers().firstValue("Location")).hasValueSatisfying(l -> assertThat(l).endsWith("/login"));
     }
 
+    @Test
+    void anAsyncResultCanBeFetchedFromTheOtherNode() throws Exception {
+        String name = "Async" + suffix();
+        query(name, datasource(database(5)), false);
+
+        String monitor = first.startAsync("/odata/" + name, USER, PASSWORD);
+
+        HttpResponse<String> result = second.get(monitor, USER, PASSWORD);
+        Instant deadline = Instant.now().plus(Duration.ofSeconds(10));
+        while (result.statusCode() == 202 && Instant.now().isBefore(deadline)) {
+            Thread.sleep(50);
+            result = second.get(monitor, USER, PASSWORD);
+        }
+        assertThat(result.statusCode()).isEqualTo(200);
+        assertThat(result.body()).contains("HTTP/1.1 200").contains("\"V\":5");
+    }
+
+    @Test
+    void anAsyncRequestCanBeCancelledOnTheOtherNode() throws Exception {
+        String name = "Cancel" + suffix();
+        query(name, datasource(database(6)), false);
+        String monitor = first.startAsync("/odata/" + name, USER, PASSWORD);
+
+        assertThat(second.send("DELETE", monitor, USER, PASSWORD).statusCode()).isEqualTo(204);
+
+        assertThat(first.get(monitor, USER, PASSWORD).statusCode()).isEqualTo(404);
+    }
+
     private static AdminUser account(String name, boolean enabled) {
         return first.bean(AdminUserService.class).create(new AdminUserSpec(name, PASSWORD, AdminRole.VIEWER, enabled), false, false);
     }

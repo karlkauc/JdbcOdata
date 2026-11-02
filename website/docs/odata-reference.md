@@ -84,7 +84,7 @@ This needs key columns, and these requests bypass the result cache.
 
 ## Asynchronous requests
 
-`Prefer: respond-async` returns 202 and a status monitor at `/odata/$async/<id>`. Results stay available for one hour. A caller can run up to
+`Prefer: respond-async` returns 202 and a status monitor at `/odata/$async/<id>`. Results stay available for one hour, on every instance. A caller can run up to
 four jobs at the same time.
 
 ## Limits
