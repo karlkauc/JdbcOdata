@@ -95,7 +95,7 @@ class ResponseBudgetIT {
     @Test
     void budgetComesBackAfterBatchAsyncAndErrors() throws Exception {
         assertThat(send("GET", "/odata/Big?$filter=nosuch%20eq%201", null, BASIC_DEMO).statusCode()).isEqualTo(400);
-        assertThat(budget.reservedRows()).isZero();
+        assertBudgetReturned();
 
         HttpResponse<String> async = send("GET", "/odata/Big", null, BASIC_DEMO, "Prefer", "respond-async");
         assertThat(async.statusCode()).isEqualTo(202);
@@ -103,7 +103,7 @@ class ResponseBudgetIT {
         for (int i = 0; i < 100 && send("GET", monitor, null, BASIC_DEMO).statusCode() == 202; i++) {
             Thread.sleep(50);
         }
-        assertThat(budget.reservedRows()).isZero();
+        assertBudgetReturned();
 
         String batch = """
                 --b\r
@@ -119,6 +119,14 @@ class ResponseBudgetIT {
                 .header("Authorization", BASIC_DEMO).header("Content-Type", "multipart/mixed;boundary=b")
                 .POST(HttpRequest.BodyPublishers.ofString(batch)).build(), HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+        assertBudgetReturned();
+    }
+
+    /** The budget comes back right after the last byte went out, so the client can be a moment ahead of it. */
+    private void assertBudgetReturned() throws InterruptedException {
+        for (int i = 0; i < 100 && budget.reservedRows() != 0; i++) {
+            Thread.sleep(20);
+        }
         assertThat(budget.reservedRows()).isZero();
     }
 }
