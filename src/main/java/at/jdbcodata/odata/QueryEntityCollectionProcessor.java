@@ -21,6 +21,7 @@ import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
 import at.jdbcodata.query.QueryRelation;
+import at.jdbcodata.query.ResultCursor;
 import at.jdbcodata.query.ResultTable;
 import at.jdbcodata.query.ResultTooLargeException;
 import at.jdbcodata.query.SqlDialect;
@@ -249,12 +250,62 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
         EdmEntitySet entitySet = rootSet(uriInfo.getUriResourceParts().get(0));
         rowsBuiltWhileWriting = true;
-        Execution root = execute(entitySet.getName(), custom, req.getRawQueryPath());
+        EntityCollectionSerializerOptions options = collectionOptions(req, uriInfo, entitySet);
+        ResponseSpool spool = openSpool();
+        // a page or a count needs the size of the result before the first row is written
+        boolean wholeResult = pageSize(req) == 0 && uriInfo.getSkipTokenOption() == null
+                && (uriInfo.getCountOption() == null || !uriInfo.getCountOption().getValue());
+        Execution root = execute(entitySet.getName(), custom, req.getRawQueryPath(), wholeResult, (exec, cursor) -> {
+            EntityMapper.Rows rows = new EntityMapper.Rows(exec.query(), exec.table());
+            EntityIterator entities;
+            if (cursor != null) {
+                entities = rows(rows, cursor);
+            } else {
+                Window window = window(req, uriInfo, rows.size());
+                applyPreference(response, new Page(List.of(), window.nextLink(), window.appliedMaxPageSize()));
+                entities = rows(rows, window);
+            }
+            write(spool, entitySet, entities, options, responseFormat);
+            return spool.size();
+        });
         executions.put(root.query().name(), root);
-        EntityMapper.Rows rows = new EntityMapper.Rows(root.query(), root.table());
-        Window window = window(req, uriInfo, rows.size());
-        applyPreference(response, new Page(List.of(), window.nextLink(), window.appliedMaxPageSize()));
-        writeSpooled(req, response, entitySet, rows(rows, window), collectionOptions(req, uriInfo, entitySet), responseFormat, root);
+        respond(req, response, spool.etag(), spool::content, responseFormat.toContentTypeString(), root);
+    }
+
+    /** Writes a plain read while its execution runs, so that the log entry covers the rows and the whole response. */
+    @FunctionalInterface
+    private interface PlainWriter {
+        /**
+         * @param cursor the rows when they stay in the database, otherwise {@code null} and they are in the table of {@code exec}
+         * @return size of the response
+         */
+        long write(Execution exec, ResultCursor cursor) throws ODataApplicationException, ODataLibraryException;
+    }
+
+    private static EntityIterator rows(EntityMapper.Rows rows, ResultCursor cursor) {
+        return new EntityIterator() {
+            private Object[] ahead;
+            private long read;
+
+            @Override
+            public boolean hasNext() {
+                if (ahead == null) ahead = cursor.next();
+                return ahead != null;
+            }
+
+            @Override
+            public Entity next() {
+                if (!hasNext()) throw new java.util.NoSuchElementException();
+                Object[] row = ahead;
+                ahead = null;
+                return rows.entity(row, ++read);
+            }
+
+            @Override
+            public java.net.URI getNext() {
+                return null;
+            }
+        };
     }
 
     private static EntityIterator rows(EntityMapper.Rows rows, Window window) {
@@ -286,19 +337,29 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     private void writeSpooled(ODataRequest req, ODataResponse response, EdmEntitySet entitySet, EntityIterator rows,
                               EntityCollectionSerializerOptions options, ContentType responseFormat, Execution root)
             throws ODataApplicationException, ODataLibraryException {
-        ODataSerializer serializer = odata.createSerializer(responseFormat);
-        ResponseSpool spool = support.responseSpools().open();
-        spools.add(spool);
+        ResponseSpool spool = openSpool();
         try {
-            serializer.entityCollectionStreamed(serviceMetadata, entitySet.getEntityType(), rows, options)
-                    .getODataContent().write(spool);
-            spool.close();
+            write(spool, entitySet, rows, options, responseFormat);
         } catch (ResponseSpool.TooLarge e) {
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.PAYLOAD_TOO_LARGE.getStatusCode(), LOCALE, e);
         } catch (TooManyExecutionsException e) {
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);
         }
         respond(req, response, spool.etag(), spool::content, responseFormat.toContentTypeString(), root);
+    }
+
+    private ResponseSpool openSpool() {
+        ResponseSpool spool = support.responseSpools().open();
+        spools.add(spool);
+        return spool;
+    }
+
+    private void write(ResponseSpool spool, EdmEntitySet entitySet, EntityIterator rows, EntityCollectionSerializerOptions options,
+                       ContentType responseFormat) throws ODataLibraryException {
+        odata.createSerializer(responseFormat)
+                .entityCollectionStreamed(serviceMetadata, entitySet.getEntityType(), rows, options)
+                .getODataContent().write(spool);
+        spool.close();
     }
 
     private static EntityIterator rows(EntityCollection collection) {
@@ -1117,19 +1178,22 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 throw new ODataApplicationException("Invalid $skiptoken", HttpStatusCode.BAD_REQUEST.getStatusCode(), LOCALE);
             }
         }
-        int configured = support.properties() == null ? 0 : support.properties().odata().pageSize();
+        int size = pageSize(req);
         Integer preferred = odata.createPreferences(req.getHeaders(HttpHeader.PREFER)).getMaxPageSize();
-        int size = configured;
-        Integer applied = null;
-        if (preferred != null && preferred > 0) {
-            size = configured > 0 ? Math.min(preferred, configured) : preferred;
-            applied = size;
-        }
+        Integer applied = preferred != null && preferred > 0 ? size : null;
         int from = Math.min(offset, total);
         if (size > 0 && total - from > size) {
             return new Window(from, from + size, nextLink(req.getRawRequestUri(), offset + size), applied);
         }
         return new Window(from, total, null, applied);
+    }
+
+    /** Rows per page of this request, 0 without paging. */
+    private int pageSize(ODataRequest req) {
+        int configured = support.properties() == null ? 0 : support.properties().odata().pageSize();
+        Integer preferred = odata.createPreferences(req.getHeaders(HttpHeader.PREFER)).getMaxPageSize();
+        if (preferred == null || preferred <= 0) return configured;
+        return configured > 0 ? Math.min(preferred, configured) : preferred;
     }
 
     /** The request URI with {@code $skiptoken} replaced. */
@@ -2395,6 +2459,26 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      */
     private Execution execute(String queryName, Map<String, String> custom, String optionsForLog, SqlWrapper wrapper,
                               boolean countOnly, boolean withCount) throws ODataApplicationException {
+        try {
+            return execute(queryName, custom, optionsForLog, wrapper, countOnly, withCount, false, null);
+        } catch (ODataLibraryException e) {
+            throw new IllegalStateException(e); // only a writer serializes
+        }
+    }
+
+    /** A plain read that ends with its response written. */
+    private Execution execute(String queryName, Map<String, String> custom, String optionsForLog, boolean wholeResult,
+                              PlainWriter writer) throws ODataApplicationException, ODataLibraryException {
+        return execute(queryName, custom, optionsForLog, null, false, false, wholeResult, writer);
+    }
+
+    /**
+     * @param wholeResult the request delivers all rows in query order; without the result cache they stay in the database
+     * @param writer      writes the response of a plain read, or {@code null}
+     */
+    private Execution execute(String queryName, Map<String, String> custom, String optionsForLog, SqlWrapper wrapper,
+                              boolean countOnly, boolean withCount, boolean wholeResult, PlainWriter writer)
+            throws ODataApplicationException, ODataLibraryException {
         Instant started = Instant.now();
         long t0 = System.nanoTime();
         QueryDefinition query = support.queryService().findEnabledByName(queryName)
@@ -2416,6 +2500,19 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             Map<String, Object> params = ParameterBinder.resolve(query, custom);
             draft.parameters = maskedParameters(query, params);
             boolean refresh = "true".equalsIgnoreCase(custom.get(REFRESH_OPTION));
+
+            if (wholeResult && !query.cacheEnabled()) {
+                try (ResultCursor cursor = support.executor().open(query, ds, identity, params,
+                        support.executor().cursorMaxRows(query, ds), support.executor().effectiveTimeoutSec(query, ds))) {
+                    Execution exec = new Execution(query, new ResultTable(cursor.columns(), List.of(), false),
+                            CacheStatus.DISABLED, null, null);
+                    draft.bytesSent = writer.write(exec, cursor);
+                    draft.rows = Math.toIntExact(cursor.rows());
+                    draft.dbDurationMs = cursor.dbMillis();
+                    draft.status = ExecutionStatus.OK;
+                    return exec;
+                }
+            }
 
             AtomicLong dbNanos = new AtomicLong();
             java.util.function.Supplier<ResultTable> run = () -> {
@@ -2469,6 +2566,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             if (!rowsBuiltWhileWriting || exec.cacheStatus() != CacheStatus.HIT) {
                 reservations.add(support.responseBudget().reserve(exec.table().rows().size()));
             }
+            if (writer != null) draft.bytesSent = writer.write(exec, null);
             draft.status = ExecutionStatus.OK;
             return exec;
         } catch (SchemaSnapshotMissingException e) {
@@ -2495,7 +2593,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (TooManyExecutionsException e) {
             draft.fail(ExecutionStatus.BUSY, e.getMessage());
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);
-        } catch (ResultTooLargeException e) {
+        } catch (ResultTooLargeException | ResponseSpool.TooLarge e) {
             draft.fail(ExecutionStatus.TOO_LARGE, e.getMessage());
             throw new ODataApplicationException(e.getMessage(), 413, LOCALE, e);
         } catch (DatasourceUnavailableException e) {
@@ -2514,7 +2612,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (ODataApplicationException e) {
             if (draft.status == null) draft.fail(ExecutionStatus.ERROR, e.getMessage());
             throw e;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | ODataLibraryException e) {
             draft.fail(ExecutionStatus.ERROR, e.getClass().getSimpleName() + ": " + e.getMessage());
             throw e;
         } finally {
@@ -2533,6 +2631,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         CacheStatus cacheStatus = CacheStatus.DISABLED;
         Long dbDurationMs;
         Integer rows;
+        Long bytesSent;
         ExecutionStatus status;
         String error;
 
@@ -2553,7 +2652,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                     datasource == null ? null : datasource.id(), datasource == null ? null : datasource.name(),
                     request.identity().caller(), identity == null ? null : identity.dbUsername(),
                     identity == null ? null : identity.mode(), ClientKind.detect(request.userAgent()), request.userAgent(),
-                    request.clientIp(), parameters, odataOptions, cacheStatus, dbDurationMs, totalMs, rows, null,
+                    request.clientIp(), parameters, odataOptions, cacheStatus, dbDurationMs, totalMs, rows, bytesSent,
                     status == null ? ExecutionStatus.ERROR : status, error);
         }
     }

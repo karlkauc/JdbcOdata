@@ -27,6 +27,7 @@ public final class DbErrorClassifier {
                 || "57014".equals(sql.getSQLState())      // PostgreSQL query_canceled
                 || sql.getErrorCode() == 1013              // Oracle ORA-01013 user requested cancel
                 || sql.getErrorCode() == 3024              // MySQL max_execution_time
+                || sql.getErrorCode() == 1969              // MariaDB max_statement_time
                 || sql.getErrorCode() == 57014;            // H2 statement timeout
         return new DbExecutionException(describe(sql), timeout, sql);
     }

@@ -39,7 +39,7 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 
 | Key | Default | Meaning |
 |---|---|---|
-| `jdbcodata.odata.max-rows` | `100000` | Hard limit per result. Datasource and query can only lower it. Results are held in memory |
+| `jdbcodata.odata.max-rows` | `100000` | Limit per result held in memory. Datasource and query can only lower it. It does not apply when a client reads a whole entity set without cache, paging or `$count`: those rows stay in the database, and the datasource and query limits and `max-response-mb` apply |
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout if the datasource sets none |
 | `jdbcodata.odata.response-rows-budget` | `0` | Rows held in memory for responses at the same time, including cache hits with `$filter`, `$orderby`, `$top`, `$expand` and similar options. A cache hit of a whole entity set does not count, because its rows are built while writing. `0`: half the heap at 1 KB per row, about 524,000 for 1 GB. Results under 1,000 rows do not count. Lower it for wide tables |
 | `jdbcodata.odata.response-wait-ms` | `30000` | Wait for room in this budget, then `503` with `Retry-After` |

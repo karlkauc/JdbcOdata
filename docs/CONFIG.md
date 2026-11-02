@@ -15,7 +15,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.master-key-previous` | leer | Ältere Keys, kommagetrennt. Sie entschlüsseln nur; beim Start wandern hinterlegte Passwörter auf `jdbcodata.master-key` (`OPERATIONS.md`, „Master-Key wechseln“) |
 | `jdbcodata.meta.url` | H2-Datei in `data/` | JDBC-URL der Metadaten-DB (H2 oder PostgreSQL) |
 | `jdbcodata.meta.username` / `password` | `sa` / leer | Login der Metadaten-DB |
-| `jdbcodata.odata.max-rows` | `100000` | Harte Obergrenze pro Ergebnis (über Datenquelle und Query nur unterschreitbar) |
+| `jdbcodata.odata.max-rows` | `100000` | Obergrenze pro Ergebnis im Speicher (über Datenquelle und Query nur unterschreitbar). Gilt nicht für den Abruf einer ganzen Entity Set ohne Cache, ohne Paging und ohne `$count`: Dort bleiben die Zeilen in der Datenbank, es gelten die Limits von Datenquelle und Query sowie `max-response-mb` |
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout, wenn die Datenquelle keinen setzt |
 | `jdbcodata.odata.response-rows-budget` | `0` | Zeilen, die gleichzeitig für Antworten im Speicher gehalten werden, auch bei Cache-Treffern mit `$filter`, `$orderby`, `$top`, `$expand` und ähnlichen Optionen. Ein Cache-Treffer auf die ganze Entity Set zählt nicht, seine Zeilen entstehen erst beim Schreiben. `0` = halber Heap bei 1 KB pro Zeile (1 GB Heap: rund 524 000). Ergebnisse unter 1000 Zeilen zählen nicht. Für breite Tabellen senken |
 | `jdbcodata.odata.response-wait-ms` | `30000` | Wartezeit auf Platz im Budget, danach `503` mit `Retry-After` |

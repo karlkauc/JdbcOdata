@@ -299,7 +299,7 @@ Jede Ausführung schreibt einen Datensatz nach `execution_log` (asynchron, damit
 | `odata_options` | `$filter`, `$top` usw. als Text |
 | `cache_status` | `HIT` / `MISS` / `BYPASS` / `DISABLED` |
 | `db_duration_ms`, `total_duration_ms` | DB-Zeit und Gesamtzeit |
-| `row_count`, `bytes_sent` | Ergebnisgröße |
+| `row_count`, `bytes_sent` | Ergebnisgröße. `bytes_sent` ist die Größe des Antworttexts einfacher Abrufe, sonst leer |
 | `status` | `OK` / `AUTH_FAILED` / `DB_ERROR` / `TIMEOUT` / `VALIDATION_ERROR` |
 | `error_message` | Gekürzte Fehlermeldung ohne SQL |
 

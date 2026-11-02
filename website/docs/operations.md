@@ -17,7 +17,7 @@
 If you leave the admin password empty, a random one is written to `data/initial-admin-password` (mode 600) and never logged. Delete that file after the
 first login. A configured password shorter than 8 characters stops the start.
 
-The start script sets `-Xms256m -Xmx1g`. Override it with `JAVA_OPTS`. Results are held in memory, so raise the heap together with `max-rows`.
+The start script sets `-Xms256m -Xmx1g`. Override it with `JAVA_OPTS`. Most results are held in memory, so raise the heap together with `max-rows`.
 
 To run it as a service, use `contrib/jdbcodata.service` (systemd) or `contrib/jdbcodata-winsw.xml` (Windows, WinSW). Secrets belong in
 `/etc/jdbcodata/jdbcodata.env` (template `contrib/jdbcodata.env.example`, mode 600). The systemd unit also sets `UMask=0077`, so `data/` stays private.
@@ -135,6 +135,21 @@ Several instances may start at the same time: creating the first admin and apply
 | Memory cache | `jdbcodata.cache.memory-mb` | Per instance | Plan for it per instance, it is part of the heap |
 
 Example: a datasource can take 12 parallel queries and 3 instances are running, so `maxConcurrent: 4` is right. If one instance fails, capacity drops to 8. The limit does not rise by itself.
+
+## Large reads
+
+When a client reads a whole entity set without query options that need all rows as objects, the rows stay in the
+database and go to the client through the temporary file. This applies only if the query's cache is off and neither
+paging (`page-size`, `Prefer: odata.maxpagesize`) nor `$count=true` is used, because both need the size of the result
+before the first row is written. All other reads load the result into memory as before.
+
+- **Limits:** `jdbcodata.odata.max-rows` and the row budget do not apply here. The datasource's `max_rows` (default
+  500,000), the query's limit and `max-response-mb` do. If you need a hard row limit, set it on the datasource or query.
+- **Slot and connection** stay in use until all rows are in the temporary file. Sending to the client does not hold them.
+- **Time limit:** The timeout of the datasource or query covers the whole read, otherwise it covers single calls only.
+  After it the service answers `504`. If PostgreSQL stalls during a fetch, the service drops the connection, and the
+  database may still finish the query.
+- **Oracle:** Long reads need enough undo (`ORA-01555`).
 
 ## Backup and restore
 

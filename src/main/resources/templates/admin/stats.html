@@ -80,7 +80,7 @@
   </form>
   <div class="scroll">
     <table class="list">
-      <thead><tr><th>Time</th><th>Query</th><th>Caller</th><th>DB user</th><th>Mode</th><th>Client</th><th>Cache</th><th>DB ms</th><th>Total ms</th><th>Rows</th><th>Status</th><th>Parameters</th><th>Error</th></tr></thead>
+      <thead><tr><th>Time</th><th>Query</th><th>Caller</th><th>DB user</th><th>Mode</th><th>Client</th><th>Cache</th><th>DB ms</th><th>Total ms</th><th>Rows</th><th>Bytes</th><th>Status</th><th>Parameters</th><th>Error</th></tr></thead>
       <tbody>
       <tr th:each="e : ${executions}">
         <td style="white-space:nowrap" th:text="${#temporals.format(e.startedAt, 'MM-dd HH:mm:ss')}"></td>
@@ -93,11 +93,12 @@
         <td th:text="${e.dbDurationMs}"></td>
         <td th:text="${e.totalDurationMs}"></td>
         <td th:text="${e.rowCount}"></td>
+        <td th:text="${e.bytesSent}"></td>
         <td><span th:class="${e.status == 'OK'} ? 'badge ok' : 'badge err'" th:text="${e.status}"></span></td>
         <td class="mono" th:text="${e.parameters}"></td>
         <td class="muted" th:text="${e.errorMessage}"></td>
       </tr>
-      <tr th:if="${executions.isEmpty()}"><td colspan="13" class="empty">No executions in this period.</td></tr>
+      <tr th:if="${executions.isEmpty()}"><td colspan="14" class="empty">No executions in this period.</td></tr>
       </tbody>
     </table>
   </div>

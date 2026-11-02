@@ -71,7 +71,7 @@ public class StatsService {
     public record Execution(UUID id, Instant startedAt, String queryName, Integer queryVersion, String datasourceName,
                             String caller, String effectiveDbUser, String executionMode, String client, String cacheStatus,
                             Long dbDurationMs, long totalDurationMs, Integer rowCount, String status, String errorMessage,
-                            String parameters, String odataOptions) {
+                            String parameters, String odataOptions, Long bytesSent) {
     }
 
     /** Pseudo status of {@link Filter#status()}: every execution that did not end with OK. */
@@ -214,7 +214,8 @@ public class StatsService {
     public List<Execution> executions(Filter f, int limit, int offset) {
         StringBuilder sql = new StringBuilder("""
                 SELECT id, started_at, query_name, query_version, datasource_name, caller, effective_db_user, execution_mode,
-                       client, cache_status, db_duration_ms, total_duration_ms, row_count, status, error_message, parameters, odata_options
+                       client, cache_status, db_duration_ms, total_duration_ms, row_count, status, error_message, parameters, odata_options,
+                       bytes_sent
                 FROM execution_log WHERE started_at >= ? AND started_at < ?""");
         List<Object> args = new ArrayList<>(List.of(Timestamp.from(f.from()), Timestamp.from(f.to())));
         if (f.queryName() != null && !f.queryName().isBlank()) {
@@ -241,19 +242,20 @@ public class StatsService {
                 (Integer) rs.getObject("query_version"), rs.getString("datasource_name"), rs.getString("caller"),
                 rs.getString("effective_db_user"), rs.getString("execution_mode"), rs.getString("client"), rs.getString("cache_status"),
                 (Long) rs.getObject("db_duration_ms", Long.class), rs.getLong("total_duration_ms"), (Integer) rs.getObject("row_count"),
-                rs.getString("status"), rs.getString("error_message"), rs.getString("parameters"), rs.getString("odata_options")),
+                rs.getString("status"), rs.getString("error_message"), rs.getString("parameters"), rs.getString("odata_options"),
+                (Long) rs.getObject("bytes_sent", Long.class)),
                 args.toArray());
     }
 
     public String toCsv(List<Execution> rows) {
-        StringBuilder sb = new StringBuilder("started_at;query;version;datasource;caller;db_user;mode;client;cache;db_ms;total_ms;rows;status;error;parameters;odata_options\n");
+        StringBuilder sb = new StringBuilder("started_at;query;version;datasource;caller;db_user;mode;client;cache;db_ms;total_ms;rows;status;error;parameters;odata_options;bytes\n");
         for (Execution e : rows) {
             sb.append(csv(e.startedAt())).append(';').append(csv(e.queryName())).append(';').append(csv(e.queryVersion())).append(';')
                     .append(csv(e.datasourceName())).append(';').append(csv(e.caller())).append(';').append(csv(e.effectiveDbUser())).append(';')
                     .append(csv(e.executionMode())).append(';').append(csv(e.client())).append(';').append(csv(e.cacheStatus())).append(';')
                     .append(csv(e.dbDurationMs())).append(';').append(e.totalDurationMs()).append(';').append(csv(e.rowCount())).append(';')
                     .append(csv(e.status())).append(';').append(csv(e.errorMessage())).append(';').append(csv(e.parameters())).append(';')
-                    .append(csv(e.odataOptions())).append('\n');
+                    .append(csv(e.odataOptions())).append(';').append(csv(e.bytesSent())).append('\n');
         }
         return sb.toString();
     }
