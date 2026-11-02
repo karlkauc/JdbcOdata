@@ -112,9 +112,28 @@ cosign verify ghcr.io/karlkauc/jdbcodata:1.1.0 \
 | Configuration | None | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata`, login and `JDBCODATA_MASTER_KEY` (the same on all instances) |
 | Backup | Stop the service, copy `data/*.mv.db` | `pg_dump jdbcodata` |
 
-Admin sessions are stored in the metadata database, so a load balancer needs no sticky sessions for the admin UI. Several instances may start at the same time: creating the first admin and applying the seed happen one instance at a time, guarded by a row lock in `cluster_lock`. If one start hangs there, the others wait and log `Waiting for other instances`. When an instance dies, the database releases the lock. A generated admin password is only in the `data/` directory of the instance that created the account, so set `JDBCODATA_ADMIN_PASSWORD` when running several instances. Cleanup jobs run on every instance, which is harmless because they only delete expired data.
-
 To move from H2 to PostgreSQL, recreate datasources and queries in the new instance through a seed file or the REST API. The cache does not need to be migrated.
+
+## Several instances
+
+Several instances need PostgreSQL as metadata database and the same `JDBCODATA_MASTER_KEY`. Sticky sessions are not required: admin sessions, the cache and asynchronous results are all stored in the metadata database.
+
+Several instances may start at the same time: creating the first admin and applying the seed happen one instance at a time, guarded by a row lock in `cluster_lock`. If one start hangs there, the others wait and log `Waiting for other instances`. When an instance dies, the database releases the lock. A generated admin password is only in the `data/` directory of the instance that created the account, so set `JDBCODATA_ADMIN_PASSWORD` when running several instances. Cleanup jobs run on every instance, which is harmless because they only delete expired data.
+
+**Most limits apply per instance.** Instances do not coordinate them. That is deliberate, because coordinating would add a metadata database access to every request. Convert the values when you scale:
+
+| Limit | Setting | Applies | With N instances |
+|---|---|---|---|
+| Parallel queries | `maxConcurrent` of the datasource | Per instance | The database sees up to N × the value. Divide by N to keep its load the same |
+| Connections | `poolSize` of the datasource | Per instance and database login | Up to N × the value. Check `max_connections` or `processes` of the database |
+| Failed logins | `jdbcodata.security.rate-limit-per-minute` | Per instance | An attacker gets up to N × the value. Divide by N, or set the limit at the load balancer |
+| Rows in responses | `jdbcodata.odata.response-rows-budget` | Per instance | Protects the heap of each instance, no conversion needed |
+| Async workers | Fixed at 4 | Per instance | More instances mean more parallel async requests |
+| Async requests | Fixed at 4 per caller, 200 in total | All instances | No conversion. Simultaneous requests can briefly exceed the 4 |
+| Persistent cache | `jdbcodata.cache.max-size-mb` | All instances | No conversion |
+| Memory cache | `jdbcodata.cache.memory-mb` | Per instance | Plan for it per instance, it is part of the heap |
+
+Example: a datasource can take 12 parallel queries and 3 instances are running, so `maxConcurrent: 4` is right. If one instance fails, capacity drops to 8. The limit does not rise by itself.
 
 ## Backup and restore
 
