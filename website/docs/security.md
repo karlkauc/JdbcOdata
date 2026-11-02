@@ -83,6 +83,19 @@ reporting accounts without a lockout policy.
 Without `JDBCODATA_MASTER_KEY`, `data/master.key` lies next to the H2 metadata database, so a copy of `data/` contains both ciphertext and key. Set the key from a secret store and keep backups
 separate.
 
+### Replacing the master key
+
+The change causes no outage if every instance knows the new key before the first one uses it:
+
+1. Generate a key (`openssl rand -base64 32`) and set it as `JDBCODATA_MASTER_KEY_PREVIOUS` on all instances. The old key stays in `JDBCODATA_MASTER_KEY`. Restart all instances.
+2. Swap them: `JDBCODATA_MASTER_KEY` is now the new key and `JDBCODATA_MASTER_KEY_PREVIOUS` the old one. Restart all instances. The log shows `Re-encrypted N stored password(s)`.
+3. Restart all instances once more. This catches passwords an old instance stored during step 2. Then wait at least one hour, for asynchronous results encrypted with the old key to expire.
+4. Remove `JDBCODATA_MASTER_KEY_PREVIOUS` and restart.
+
+With a single instance, skip step 1. Keep the old key for as long as backups encrypted with it exist.
+
+If the log reports `stored password(s) cannot be read`, the matching key is missing. The service starts anyway and leaves those passwords unchanged: add the key to `JDBCODATA_MASTER_KEY_PREVIOUS`, or enter the passwords again.
+
 ### Cached results are not encrypted
 
 Result cache rows are stored compressed, but **not encrypted**, in the metadata database. Anyone with access to it can read cached data. Leave the cache off for sensitive queries, or protect the

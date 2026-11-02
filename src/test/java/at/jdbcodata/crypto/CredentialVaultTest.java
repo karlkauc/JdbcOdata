@@ -26,7 +26,7 @@ class CredentialVaultTest {
 
     @Test
     void roundTripsAndRejectsOtherKeys() {
-        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2));
+        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2, ""));
         String ct = vault.encrypt("s3cret", "ctx");
         assertThat(ct).startsWith("2:").isNotEqualTo(vault.encrypt("s3cret", "ctx")).doesNotContain("s3cret");
         assertThat(CredentialVault.isLegacy(ct)).isFalse();
@@ -40,7 +40,7 @@ class CredentialVaultTest {
 
     @Test
     void ciphertextIsBoundToItsRecord() {
-        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2));
+        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2, ""));
         String ct = vault.encrypt("s3cret", "stored:user-a:ds-1:alice");
         assertThatThrownBy(() -> vault.decrypt(ct, vault.keyId(), "stored:user-b:ds-1:alice"))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("Decryption failed");
@@ -48,7 +48,7 @@ class CredentialVaultTest {
 
     @Test
     void readsLegacyValuesWithoutRecordBinding() throws Exception {
-        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2));
+        CredentialVault vault = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2, ""));
         byte[] iv = new byte[12];
         javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(new byte[32], "AES"),
@@ -63,39 +63,53 @@ class CredentialVaultTest {
 
     @Test
     void generatesAndReusesKeyFile() throws Exception {
-        MasterKeyProvider first = new MasterKeyProvider(props("", dir), H2);
+        MasterKeyProvider first = new MasterKeyProvider(props("", dir), H2, "");
         assertThat(first.source()).isEqualTo("key file");
         Path file = dir.resolve("master.key");
         assertThat(Files.exists(file)).isTrue();
-        MasterKeyProvider second = new MasterKeyProvider(props("", dir), H2);
+        MasterKeyProvider second = new MasterKeyProvider(props("", dir), H2, "");
         assertThat(second.keyId()).isEqualTo(first.keyId());
-        assertThat(new MasterKeyProvider(props(KEY, dir), H2).source()).isEqualTo("configuration");
+        assertThat(new MasterKeyProvider(props(KEY, dir), H2, "").source()).isEqualTo("configuration");
     }
 
     @Test
     void rejectsInvalidConfiguredKeys() throws Exception {
-        assertThatThrownBy(() -> new MasterKeyProvider(props("not base64!", dir), H2)).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new MasterKeyProvider(props(Base64.getEncoder().encodeToString(new byte[5]), dir), H2))
+        assertThatThrownBy(() -> new MasterKeyProvider(props("not base64!", dir), H2, "")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new MasterKeyProvider(props(Base64.getEncoder().encodeToString(new byte[5]), dir), H2, ""))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("32 bytes");
         Path empty = dir.resolve("empty");
         Files.createDirectories(empty);
         Files.writeString(empty.resolve("master.key"), "");
-        assertThatThrownBy(() -> new MasterKeyProvider(props("", empty), H2)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new MasterKeyProvider(props("", empty), H2, "")).isInstanceOf(IllegalStateException.class);
         assertThat(MasterKeyProvider.computeKeyId(new byte[32])).hasSize(8);
     }
 
     @Test
     void sharedMetadataDbNeedsAConfiguredKey() {
-        assertThatThrownBy(() -> new MasterKeyProvider(props("", dir), POSTGRES))
+        assertThatThrownBy(() -> new MasterKeyProvider(props("", dir), POSTGRES, ""))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("JDBCODATA_MASTER_KEY");
         assertThat(dir.resolve("master.key")).doesNotExist();
-        assertThat(new MasterKeyProvider(props(KEY, dir), POSTGRES).source()).isEqualTo("configuration");
+        assertThat(new MasterKeyProvider(props(KEY, dir), POSTGRES, "").source()).isEqualTo("configuration");
     }
 
     @Test
     void sharedMetadataDbIgnoresAnExistingKeyFile() throws Exception {
         String keyFile = java.nio.file.Files.writeString(dir.resolve("master.key"), KEY).toString();
-        assertThatThrownBy(() -> new MasterKeyProvider(props("", dir), POSTGRES))
+        assertThatThrownBy(() -> new MasterKeyProvider(props("", dir), POSTGRES, ""))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining(keyFile).hasMessageNotContaining(KEY);
+    }
+
+    @Test
+    void olderKeysDecryptButNeverEncrypt() {
+        String oldKey = Base64.getEncoder().encodeToString(new byte[] {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32});
+        CredentialVault before = new CredentialVault(new MasterKeyProvider(props(oldKey, dir), H2, ""));
+        String stored = before.encrypt("s3cret", "ctx");
+
+        CredentialVault after = new CredentialVault(new MasterKeyProvider(props(KEY, dir), H2, oldKey + "," + KEY));
+
+        assertThat(after.keyId()).isNotEqualTo(before.keyId());
+        assertThat(after.decrypt(stored, before.keyId(), "ctx")).isEqualTo("s3cret");
+        assertThatThrownBy(() -> before.decrypt(after.encrypt("x", "ctx"), after.keyId(), "ctx")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new MasterKeyProvider(props(KEY, dir), H2, "not base64!")).isInstanceOf(IllegalStateException.class);
     }
 }

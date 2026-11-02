@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -23,12 +25,15 @@ public class CredentialVault {
     private static final String FORMAT_AAD = "2:";
 
     private final SecretKeySpec key;
+    private final Map<String, SecretKeySpec> keys = new HashMap<>();
     private final String keyId;
     private final SecureRandom random = new SecureRandom();
 
     public CredentialVault(MasterKeyProvider provider) {
         this.key = new SecretKeySpec(provider.key(), "AES");
         this.keyId = provider.keyId();
+        keys.put(keyId, key);
+        provider.previousKeys().forEach((id, bytes) -> keys.put(id, new SecretKeySpec(bytes, "AES")));
     }
 
     public String keyId() {
@@ -58,7 +63,8 @@ public class CredentialVault {
     }
 
     public String decrypt(String encoded, String storedKeyId, String context) {
-        if (!keyId.equals(storedKeyId)) {
+        SecretKeySpec storedKey = keys.get(storedKeyId);
+        if (storedKey == null) {
             throw new IllegalStateException("Credential was encrypted with key " + storedKeyId
                     + " but the configured master key is " + keyId);
         }
@@ -66,7 +72,7 @@ public class CredentialVault {
             boolean legacy = isLegacy(encoded);
             byte[] in = Base64.getDecoder().decode(legacy ? encoded : encoded.substring(FORMAT_AAD.length()));
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(TAG_BITS, in, 0, IV_BYTES));
+            cipher.init(Cipher.DECRYPT_MODE, storedKey, new GCMParameterSpec(TAG_BITS, in, 0, IV_BYTES));
             if (!legacy) cipher.updateAAD(context.getBytes(StandardCharsets.UTF_8));
             byte[] pt = cipher.doFinal(in, IV_BYTES, in.length - IV_BYTES);
             return new String(pt, StandardCharsets.UTF_8);

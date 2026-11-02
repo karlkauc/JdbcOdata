@@ -55,6 +55,7 @@ jdbcodata:
   seed:
     file: ""               # YAML file with datasources and queries, e.g. config/seed.yml
   master-key: ""           # Base64, 32 bytes (AES-256). Empty: a key file is created in <data-dir>/master.key
+  master-key-previous: ""  # older keys, comma-separated: only decrypt, stored passwords move to master-key at startup
   data-dir: ./data
   cache:
     max-size-mb: 1024      # persistent cache, total compressed size

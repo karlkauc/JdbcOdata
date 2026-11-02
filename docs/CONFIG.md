@@ -12,6 +12,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.admin.password` | leer | Passwort des ersten Admin-Kontos; leer = generiert und in `<data-dir>/initial-admin-password` (Rechte 600) abgelegt, nie im Log. Datei nach dem ersten Login löschen |
 | `jdbcodata.master-key` | leer | AES-256-Schlüssel (Base64, 32 Byte) für hinterlegte DB-Passwörter; leer = Key-Datei `data/master.key`, nur mit H2 als Metadaten-DB. Mit PostgreSQL Pflicht, sonst startet der Dienst nicht |
 | `jdbcodata.data-dir` | `./data` | Verzeichnis für Key-Datei und H2-Dateien |
+| `jdbcodata.master-key-previous` | leer | Ältere Keys, kommagetrennt. Sie entschlüsseln nur; beim Start wandern hinterlegte Passwörter auf `jdbcodata.master-key` (`OPERATIONS.md`, „Master-Key wechseln“) |
 | `jdbcodata.meta.url` | H2-Datei in `data/` | JDBC-URL der Metadaten-DB (H2 oder PostgreSQL) |
 | `jdbcodata.meta.username` / `password` | `sa` / leer | Login der Metadaten-DB |
 | `jdbcodata.odata.max-rows` | `100000` | Harte Obergrenze pro Ergebnis (über Datenquelle und Query nur unterschreitbar) |

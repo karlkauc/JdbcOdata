@@ -97,7 +97,15 @@ final class TwoNodes {
         return start(postgres.getJdbcUrl(), postgres, demoDatabase);
     }
 
+    static Node start(PostgreSQLContainer postgres, String demoDatabase, Map<String, Object> overrides) throws IOException {
+        return start(postgres.getJdbcUrl(), postgres, demoDatabase, overrides);
+    }
+
     static Node start(String metadataUrl, PostgreSQLContainer postgres, String demoDatabase) throws IOException {
+        return start(metadataUrl, postgres, demoDatabase, Map.of());
+    }
+
+    private static Node start(String metadataUrl, PostgreSQLContainer postgres, String demoDatabase, Map<String, Object> overrides) throws IOException {
         Map<String, Object> properties = new HashMap<>();
         properties.put("server.port", 0);
         properties.put("spring.profiles.active", "demo");
@@ -113,6 +121,7 @@ final class TwoNodes {
         properties.put("jdbcodata.security.rate-limit-per-minute", 100000);
         properties.put("jdbcodata.security.allow-embedded-h2", true);
         properties.put("jdbcodata.cluster.poll-interval-ms", 200);
+        properties.putAll(overrides);
         // as arguments: default properties would lose against application.yml
         String[] args = properties.entrySet().stream().map(e -> "--" + e.getKey() + "=" + e.getValue()).toArray(String[]::new);
         return new Node(new SpringApplicationBuilder(JdbcOdataApplication.class).run(args));
