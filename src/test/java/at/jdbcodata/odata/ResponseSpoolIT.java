@@ -68,6 +68,8 @@ class ResponseSpoolIT {
 
     @AfterEach
     void nothingStaysBehind() throws Exception {
+        // the client has the response a moment before the server releases it
+        for (int i = 0; i < 100 && spools.diskBytes() > 0; i++) Thread.sleep(50);
         assertThat(spools.diskBytes()).isZero();
         try (Stream<Path> files = Files.list(Path.of(System.getProperty("java.io.tmpdir")))) {
             assertThat(files.filter(f -> f.getFileName().toString().startsWith("jdbcodata-spool-"))).isEmpty();

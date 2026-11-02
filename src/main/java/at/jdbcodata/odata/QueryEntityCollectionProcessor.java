@@ -152,6 +152,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                                      ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
         begin(uriInfo);
         Map<String, String> custom = customOptions(uriInfo);
+        if (isPlainRead(uriInfo, custom, req)) {
+            readPlainCollection(req, response, uriInfo, custom, responseFormat);
+            return;
+        }
         if (uriInfo.getDeltaTokenOption() != null || wantsTrackChanges(req)) {
             // snapshots and comparisons need the current rows, not a cached result (the cache is refreshed)
             custom = new LinkedHashMap<>(custom);
@@ -202,27 +206,91 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         }
         applySelectOptions(collection.getEntities(), custom);
 
+        EntityCollectionSerializerOptions options = collectionOptions(req, uriInfo, entitySet);
+        if (collection.getDeltaLink() != null) {
+            // the streaming serializer does not write delta links
+            SerializerResult result = odata.createSerializer(responseFormat)
+                    .entityCollection(serviceMetadata, entitySet.getEntityType(), collection, options);
+            respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
+            return;
+        }
+        writeSpooled(req, response, entitySet, rows(collection), options, responseFormat, r.root());
+    }
+
+    private EntityCollectionSerializerOptions collectionOptions(ODataRequest req, UriInfo uriInfo, EdmEntitySet entitySet)
+            throws ODataLibraryException {
         String selectList = odata.createUriHelper()
                 .buildContextURLSelectList(entitySet.getEntityType(), contextExpand(uriInfo.getExpandOption()), uriInfo.getSelectOption());
         ContextURL contextUrl = ContextURL.with().serviceRoot(serviceRoot(req)).entitySet(entitySet).selectList(selectList).build();
-        EntityCollectionSerializerOptions options = EntityCollectionSerializerOptions.with()
+        return EntityCollectionSerializerOptions.with()
                 .id(req.getRawBaseUri() + "/" + entitySet.getName())
                 .contextURL(contextUrl)
                 .select(uriInfo.getSelectOption())
                 .expand(serializerExpand(uriInfo.getExpandOption(), entitySet.getEntityType()))
                 .count(uriInfo.getCountOption())
                 .build();
+    }
+
+    /**
+     * A whole entity set without options that need all rows as objects. Excel and Power BI ask for this on every
+     * refresh, also page by page.
+     */
+    private static boolean isPlainRead(UriInfo uriInfo, Map<String, String> custom, ODataRequest req) {
+        List<UriResource> parts = uriInfo.getUriResourceParts();
+        boolean wholeSet = parts.size() == 1 && (parts.get(0) instanceof UriResourceEntitySet es ? es.getKeyPredicates().isEmpty()
+                : parts.get(0) instanceof UriResourceFunction fn && fn.getFunctionImport() != null && fn.getKeyPredicates().isEmpty());
+        return wholeSet && uriInfo.getFilterOption() == null && uriInfo.getSearchOption() == null
+                && uriInfo.getOrderByOption() == null && uriInfo.getSkipOption() == null && uriInfo.getTopOption() == null
+                && uriInfo.getExpandOption() == null && uriInfo.getApplyOption() == null && uriInfo.getDeltaTokenOption() == null
+                && !wantsTrackChanges(req) && !custom.containsKey(EXTENDED_APPLY) && !SelectOptions.present(custom);
+    }
+
+    private void readPlainCollection(ODataRequest req, ODataResponse response, UriInfo uriInfo, Map<String, String> custom,
+                                     ContentType responseFormat) throws ODataApplicationException, ODataLibraryException {
+        EdmEntitySet entitySet = rootSet(uriInfo.getUriResourceParts().get(0));
+        rowsBuiltWhileWriting = true;
+        Execution root = execute(entitySet.getName(), custom, req.getRawQueryPath());
+        executions.put(root.query().name(), root);
+        EntityMapper.Rows rows = new EntityMapper.Rows(root.query(), root.table());
+        Window window = window(req, uriInfo, rows.size());
+        applyPreference(response, new Page(List.of(), window.nextLink(), window.appliedMaxPageSize()));
+        writeSpooled(req, response, entitySet, rows(rows, window), collectionOptions(req, uriInfo, entitySet), responseFormat, root);
+    }
+
+    private static EntityIterator rows(EntityMapper.Rows rows, Window window) {
+        return new EntityIterator() {
+            private int next = window.from();
+
+            @Override
+            public boolean hasNext() {
+                return next < window.to();
+            }
+
+            @Override
+            public Entity next() {
+                return rows.entity(next++);
+            }
+
+            @Override
+            public Integer getCount() {
+                return rows.size();
+            }
+
+            @Override
+            public java.net.URI getNext() {
+                return window.nextLink() == null ? null : java.net.URI.create(window.nextLink());
+            }
+        };
+    }
+
+    private void writeSpooled(ODataRequest req, ODataResponse response, EdmEntitySet entitySet, EntityIterator rows,
+                              EntityCollectionSerializerOptions options, ContentType responseFormat, Execution root)
+            throws ODataApplicationException, ODataLibraryException {
         ODataSerializer serializer = odata.createSerializer(responseFormat);
-        if (collection.getDeltaLink() != null) {
-            // the streaming serializer does not write delta links
-            SerializerResult result = serializer.entityCollection(serviceMetadata, entitySet.getEntityType(), collection, options);
-            respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
-            return;
-        }
         ResponseSpool spool = support.responseSpools().open();
         spools.add(spool);
         try {
-            serializer.entityCollectionStreamed(serviceMetadata, entitySet.getEntityType(), rows(collection), options)
+            serializer.entityCollectionStreamed(serviceMetadata, entitySet.getEntityType(), rows, options)
                     .getODataContent().write(spool);
             spool.close();
         } catch (ResponseSpool.TooLarge e) {
@@ -230,7 +298,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (TooManyExecutionsException e) {
             throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);
         }
-        respond(req, response, spool.etag(), spool::content, responseFormat.toContentTypeString(), r.root());
+        respond(req, response, spool.etag(), spool::content, responseFormat.toContentTypeString(), root);
     }
 
     private static EntityIterator rows(EntityCollection collection) {
@@ -989,6 +1057,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
 
     // --- request state, paging, ETags -------------------------------------------------------------------------
 
+    /** The current read writes its rows one by one instead of building a list of entities. */
+    private boolean rowsBuiltWhileWriting;
+
     /** Parameter aliases of the current request ({@code @name → option}). */
     private final Map<String, AliasQueryOption> aliases = new HashMap<>();
 
@@ -1000,6 +1071,7 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      * use different parameters, so executions and joins must not leak from one part into the next.
      */
     private void begin(UriInfo uriInfo) {
+        rowsBuiltWhileWriting = false;
         executions.clear();
         filterJoins.clear();
         expandedEntities = 0;
@@ -1025,6 +1097,15 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      * cached result, so pages stay consistent while the cache entry lives.
      */
     private Page page(ODataRequest req, UriInfo uriInfo, List<Entity> rows) throws ODataApplicationException {
+        Window window = window(req, uriInfo, rows.size());
+        return new Page(new ArrayList<>(rows.subList(window.from(), window.to())), window.nextLink(), window.appliedMaxPageSize());
+    }
+
+    /** The rows of a result of {@code total} rows that belong to this page. */
+    private record Window(int from, int to, String nextLink, Integer appliedMaxPageSize) {
+    }
+
+    private Window window(ODataRequest req, UriInfo uriInfo, int total) throws ODataApplicationException {
         int offset = 0;
         if (uriInfo.getSkipTokenOption() != null) {
             try {
@@ -1044,13 +1125,11 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             size = configured > 0 ? Math.min(preferred, configured) : preferred;
             applied = size;
         }
-        List<Entity> rest = rows.subList(Math.min(offset, rows.size()), rows.size());
-        String next = null;
-        if (size > 0 && rest.size() > size) {
-            rest = rest.subList(0, size);
-            next = nextLink(req.getRawRequestUri(), offset + size);
+        int from = Math.min(offset, total);
+        if (size > 0 && total - from > size) {
+            return new Window(from, from + size, nextLink(req.getRawRequestUri(), offset + size), applied);
         }
-        return new Page(new ArrayList<>(rest), next, applied);
+        return new Window(from, total, null, applied);
     }
 
     /** The request URI with {@code $skiptoken} replaced. */
@@ -2386,7 +2465,10 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             draft.cacheStatus = exec.cacheStatus();
             draft.dbDurationMs = dbNanos.get() == 0 ? null : dbNanos.get() / 1_000_000;
             draft.rows = exec.table().rows().size();
-            reservations.add(support.responseBudget().reserve(exec.table().rows().size()));
+            // a cached table is on the heap anyway; only a list of entities would need the room
+            if (!rowsBuiltWhileWriting || exec.cacheStatus() != CacheStatus.HIT) {
+                reservations.add(support.responseBudget().reserve(exec.table().rows().size()));
+            }
             draft.status = ExecutionStatus.OK;
             return exec;
         } catch (SchemaSnapshotMissingException e) {

@@ -69,20 +69,33 @@ class ResponseBudgetIT {
         assertThat(snapshot.statusCode()).as(snapshot.body()).isEqualTo(200);
     }
 
+    /** $top needs all rows as entities; a plain read of the same cached result does not. */
     @Test
     void cacheHitWaitsForTheBudgetAndGetsA503WithoutRoom() throws Exception {
-        assertThat(send("GET", "/odata/Big", null, BASIC_DEMO).statusCode()).isEqualTo(200);
-        HttpResponse<String> hit = send("GET", "/odata/Big", null, BASIC_DEMO);
+        String path = "/odata/Big?$top=2000";
+        assertThat(send("GET", path, null, BASIC_DEMO).statusCode()).isEqualTo(200);
+        HttpResponse<String> hit = send("GET", path, null, BASIC_DEMO);
         assertThat(hit.headers().firstValue("X-Cache")).hasValue("HIT");
 
         try (ResponseBudget.Reservation full = budget.reserve(3_000)) {
-            HttpResponse<String> busy = send("GET", "/odata/Big", null, BASIC_DEMO);
+            HttpResponse<String> busy = send("GET", path, null, BASIC_DEMO);
             assertThat(busy.statusCode()).as(busy.body()).isEqualTo(503);
             assertThat(busy.headers().firstValue("Retry-After")).isPresent();
             assertThat(busy.body()).contains("large responses");
         }
-        assertThat(send("GET", "/odata/Big", null, BASIC_DEMO).statusCode()).isEqualTo(200);
+        assertThat(send("GET", path, null, BASIC_DEMO).statusCode()).isEqualTo(200);
         assertThat(budget.reservedRows()).isZero();
+    }
+
+    @Test
+    void plainCacheHitNeedsNoBudget() throws Exception {
+        assertThat(send("GET", "/odata/Big", null, BASIC_DEMO).statusCode()).isEqualTo(200);
+
+        try (ResponseBudget.Reservation full = budget.reserve(3_000)) {
+            HttpResponse<String> hit = send("GET", "/odata/Big", null, BASIC_DEMO);
+            assertThat(hit.statusCode()).as(hit.body()).isEqualTo(200);
+            assertThat(hit.headers().firstValue("X-Cache")).hasValue("HIT");
+        }
     }
 
     @Test
