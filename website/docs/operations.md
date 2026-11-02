@@ -150,6 +150,7 @@ Cache and execution log are expendable.
 |---|---|
 | `GET /actuator/health` | Liveness and readiness, no login |
 | `GET /actuator/prometheus` | Metrics (`jdbcodata_executions_total`, `jdbcodata_execution_duration_seconds`, pools, limiters, JVM, HikariCP of the metadata database). Basic Auth with an admin account, or `jdbcodata.security.metrics-token`, set in Prometheus as `authorization: { credentials: … }` |
+| `jdbcodata_datasources_unreachable` | Above 0: this instance cannot reach datasources and answers their queries with `503` at once, see [Datasource outage](#datasource-outage). `jdbcodata_datasources_unreachable_rejected_total` counts these answers |
 | `jdbcodata_pool_connections_pending` | Staying above 0 means the datasource's `poolSize` is too small. Also available: `jdbcodata_pools`, `jdbcodata_pool_connections_active`, `jdbcodata_executions_running`, `jdbcodata_ratelimit_rejected_total`, `jdbcodata_executionlog_dropped_total`. Cache hits are in the `cache` label of `jdbcodata_executions_total` |
 | Admin UI → Statistics | Executions, error rate, cache hit rate, p50/p95 |
 | Admin UI → Settings | Master key source, pools, dropped log records |
@@ -158,6 +159,14 @@ Logs go to stdout, or to a file with `logging.file.name`. Each request has an ID
 
 Datasources with a technical account are checked every minute (`jdbcodata.health.interval-ms`, `0` turns it off). Others show the result of the last execution that
 reached the database.
+
+### Datasource outage
+
+After five connection failures in a row, the instance stops trying and answers `503` with `Retry-After` at once, instead of letting every request wait 15 seconds. After 30 seconds, a single request tries again. This applies per instance and per datasource, and the datasources page shows the datasource as unreachable.
+
+- **Cache.** Hits keep working. The exception is pass-through: the database has to check the password, so without it the caller gets `503`.
+- **Technical account.** The health check tries even while the breaker is open and closes it on success.
+- **Repair.** Saving the datasource resets the breaker. The connection test in the admin UI always runs.
 
 ## Operating it safely
 

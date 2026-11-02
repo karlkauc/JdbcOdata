@@ -1,6 +1,7 @@
 package at.jdbcodata.health;
 
 import at.jdbcodata.datasource.Datasource;
+import at.jdbcodata.datasource.DatasourceCircuitBreaker;
 import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.datasource.DbErrorClassifier;
 import at.jdbcodata.datasource.IdentityPoolManager;
@@ -59,22 +60,25 @@ public class DatasourceHealthService {
     private final DatasourceService datasources;
     private final FixedCredentialService fixedCredentials;
     private final IdentityPoolManager pools;
+    private final DatasourceCircuitBreaker breaker;
     private final StatsService stats;
     private final boolean enabled;
     private final Map<UUID, Check> checks = new ConcurrentHashMap<>();
 
     public DatasourceHealthService(DatasourceService datasources, FixedCredentialService fixedCredentials,
-                                   IdentityPoolManager pools, StatsService stats,
+                                   IdentityPoolManager pools, DatasourceCircuitBreaker breaker, StatsService stats,
                                    @Value("${jdbcodata.health.interval-ms:60000}") long intervalMs) {
         this.datasources = datasources;
         this.fixedCredentials = fixedCredentials;
         this.pools = pools;
+        this.breaker = breaker;
         this.stats = stats;
         this.enabled = intervalMs > 0;
     }
 
     /** Active check of every enabled datasource that has a technical account. */
-    @Scheduled(initialDelayString = "${jdbcodata.health.initial-delay-ms:15000}", fixedDelayString = "${jdbcodata.health.interval-ms:60000}")
+    @Scheduled(initialDelayString = "${jdbcodata.health.initial-delay-ms:15000}",
+            fixedDelayString = "#{${jdbcodata.health.interval-ms:60000} > 0 ? ${jdbcodata.health.interval-ms:60000} : 3600000}") // 0 is no valid delay
     public void checkAll() {
         if (!enabled) return;
         for (Datasource ds : datasources.findAll()) {
@@ -101,7 +105,7 @@ public class DatasourceHealthService {
         Check result;
         try {
             var login = fixedCredentials.resolveLogin(acc.id());
-            try (Connection c = pools.connect(ds, login.username(), login.password())) {
+            try (Connection c = pools.connectDespiteBreaker(ds, login.username(), login.password())) {
                 boolean valid = c.isValid(10);
                 long ms = (System.nanoTime() - start) / 1_000_000;
                 result = new Check(valid, ms, valid ? null : "Connection not valid", Instant.now(), acc.name());
@@ -134,6 +138,11 @@ public class DatasourceHealthService {
         boolean active = check != null || hasAccount;
         if (!ds.enabled()) {
             return new Health(ds.id(), ds.name(), ds.jdbcUrl(), State.DISABLED, null, "Datasource disabled", null, null, active);
+        }
+        if (breaker.isOpen(ds)) {
+            return new Health(ds.id(), ds.name(), ds.jdbcUrl(), State.DOWN, null,
+                    "Not reachable: requests get 503 without a connection attempt until the next attempt succeeds",
+                    null, "Circuit breaker of this instance", active);
         }
         if (check != null) {
             return new Health(ds.id(), ds.name(), ds.jdbcUrl(), check.ok() ? State.OK : State.DOWN, check.ok() ? check.latencyMs() : null,

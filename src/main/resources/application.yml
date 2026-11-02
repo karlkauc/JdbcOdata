@@ -50,6 +50,9 @@ jdbcodata:
     concurrency-wait-ms: 2000   # wait for a free execution slot of a datasource before answering 503
     response-rows-budget: 0     # rows in responses at the same time, also for cache hits; 0 = half the heap at 1 KB per row
     response-wait-ms: 30000     # wait for room in that budget before answering 503
+    breaker-failures: 5         # connection failures in a row before a datasource gets 503 without trying; 0 = off
+    breaker-window-sec: 120     # these failures must fall within this time; a connect timeout alone takes 15 s
+    breaker-open-sec: 30        # time until one request tries again
     anonymous-user: ""          # service user for requests without Basic credentials (public demo); empty = off
     page-size: 0                # server-driven paging: rows per page before @odata.nextLink; 0 = off
   seed:

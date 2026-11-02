@@ -155,6 +155,7 @@ verzichtbar.
 | `GET /actuator/health` | Liveness/Readiness, ohne Login |
 | `GET /actuator/prometheus` | Micrometer-Metriken (`jdbcodata_executions_total`, `jdbcodata_execution_duration_seconds`, Pools, Limiter, JVM, HikariCP der Metadaten-DB). Basic Auth mit Admin-Konto oder `jdbcodata.security.metrics-token`, in Prometheus als `authorization: { credentials: … }` |
 | `jdbcodata_pool_connections_pending` | Dauerhaft über 0: `poolSize` der Datenquelle ist zu klein. Weitere Werte: `jdbcodata_pools`, `jdbcodata_pool_connections_active`, `jdbcodata_executions_running`, `jdbcodata_ratelimit_rejected_total`, `jdbcodata_executionlog_dropped_total`. Cache-Treffer stehen im Label `cache` von `jdbcodata_executions_total` |
+| `jdbcodata_datasources_unreachable` | Über 0: Diese Instanz erreicht Datenquellen nicht und antwortet für deren Queries sofort mit `503`, siehe „Ausfall einer Datenquelle“. `jdbcodata_datasources_unreachable_rejected_total` zählt diese Antworten |
 | Admin-UI → Statistik | Ausführungen, Fehlerquote, Cache-Trefferquote, p50/p95 |
 | Admin-UI → Einstellungen | Master-Key-Quelle, Pools, verworfene Protokollsätze |
 
@@ -163,6 +164,17 @@ Log-Zeilen und als `X-Request-Id` in der Antwort steht; eine ID vom Proxy wird �
 Zeichen `A-Za-z0-9._-` besteht. Für JSON-Logs (z. B. für Elastic oder Loki) `logging.structured.format.console=ecs`
 setzen, die Request-ID steht dann im Feld `requestId`. Spring Boot bietet außerdem `logstash` und `gelf`. Fehler bei Query-Ausführungen tragen
 eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
+
+### Ausfall einer Datenquelle
+
+Nach fünf Verbindungsfehlern in Folge versucht die Instanz keine Verbindung mehr und antwortet sofort mit `503` und
+`Retry-After`, statt jede Anfrage 15 Sekunden warten zu lassen. Nach 30 Sekunden versucht es eine einzelne Anfrage. Das
+gilt pro Instanz und Datenquelle, auf der Datenquellen-Seite steht sie dann auf „unreachable“.
+
+- **Cache:** Treffer laufen weiter. Ausnahme ist Pass-Through: Dort muss die Datenbank das Passwort prüfen, ohne sie
+  kommt `503`.
+- **Technischer Account:** Der Health-Check versucht es auch bei offenem Breaker und schließt ihn bei Erfolg.
+- **Reparatur:** Speichern der Datenquelle setzt den Breaker zurück. Der Verbindungstest in der Admin-UI läuft immer.
 
 ## Sicherheit im Betrieb
 

@@ -7,6 +7,7 @@ import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.identity.ServiceAuthenticationException;
+import at.jdbcodata.datasource.DatasourceUnavailableException;
 import at.jdbcodata.datasource.DbExecutionException;
 import at.jdbcodata.datasource.ResponseBudget;
 import at.jdbcodata.datasource.TooManyExecutionsException;
@@ -2361,6 +2362,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
         } catch (ResultTooLargeException e) {
             draft.fail(ExecutionStatus.TOO_LARGE, e.getMessage());
             throw new ODataApplicationException(e.getMessage(), 413, LOCALE, e);
+        } catch (DatasourceUnavailableException e) {
+            draft.fail(ExecutionStatus.DB_ERROR, e.getMessage());
+            throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);
         } catch (DbExecutionException e) {
             String ref = UUID.randomUUID().toString().substring(0, 8);
             log.error("Query '{}' as '{}' failed (ref {}): {}", queryName, request.identity().caller(), ref, e.getMessage(), e);
