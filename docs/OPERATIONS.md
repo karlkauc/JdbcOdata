@@ -211,6 +211,24 @@ Liegen mehrere Secrets in einem Verzeichnis, geht es auch ohne einzelne Variable
 `SPRING_CONFIG_IMPORT=optional:configtree:/run/secrets/`. Der Dateiname ist dann der Property-Name, zum Beispiel
 `jdbcodata.master-key`.
 
+## Master-Key wechseln
+
+Der Wechsel läuft ohne Ausfall, wenn alle Instanzen den neuen Key kennen, bevor ihn die erste benutzt:
+
+1. Neuen Key erzeugen (`openssl rand -base64 32`) und auf allen Instanzen als `JDBCODATA_MASTER_KEY_PREVIOUS` setzen.
+   Der alte Key bleibt `JDBCODATA_MASTER_KEY`. Alle Instanzen neu starten.
+2. Tauschen: `JDBCODATA_MASTER_KEY` ist jetzt der neue Key, `JDBCODATA_MASTER_KEY_PREVIOUS` der alte. Alle Instanzen neu
+   starten. Beim Start erscheint `Re-encrypted N stored password(s)`.
+3. Noch einmal alle Instanzen neu starten. Das erfasst Passwörter, die eine alte Instanz während Schritt 2 gespeichert
+   hat. Danach mindestens 1 Stunde warten: So lange gelten noch Async-Ergebnisse, die mit dem alten Key verschlüsselt sind.
+4. `JDBCODATA_MASTER_KEY_PREVIOUS` entfernen und neu starten.
+
+Mit einer einzelnen Instanz entfällt Schritt 1. Die Variable lässt sich auch mit `_FILE` setzen und liegt im Helm-Chart
+einfach mit im Secret. Den alten Key so lange aufbewahren wie Backups, die mit ihm verschlüsselt sind.
+
+Meldet das Log `stored password(s) cannot be read`, fehlt der passende Key. Der Dienst startet trotzdem, die betroffenen
+Passwörter bleiben unverändert: Key in `JDBCODATA_MASTER_KEY_PREVIOUS` nachtragen oder die Passwörter neu eingeben.
+
 ## Single Sign-on für die Admin-UI
 
 Die Admin-UI kann sich per OpenID Connect anmelden, getestet mit Keycloak. Feeds nutzen weiter Basic Auth. Der

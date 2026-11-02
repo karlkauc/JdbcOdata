@@ -11,6 +11,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +24,8 @@ import org.springframework.stereotype.Component;
  * {@code <data-dir>/master.key} that is generated on first start. The key is never stored in the metadata DB.
  * The key file is for the embedded metadata DB only: on a shared one every instance would generate a key of its own
  * and could not read the passwords stored by the others, so the service refuses to start.
+ * {@code jdbcodata.master-key-previous} lists older keys (comma-separated). They only decrypt: this is how a key is
+ * replaced without losing what was encrypted with it, see the operations guide.
  */
 @Component
 public class MasterKeyProvider {
@@ -32,8 +36,10 @@ public class MasterKeyProvider {
     private final byte[] key;
     private final String keyId;
     private final String source;
+    private final Map<String, byte[]> previous = new LinkedHashMap<>();
 
-    public MasterKeyProvider(JdbcOdataProperties props, @Value("${spring.datasource.url:}") String metadataUrl) {
+    public MasterKeyProvider(JdbcOdataProperties props, @Value("${spring.datasource.url:}") String metadataUrl,
+                             @Value("${jdbcodata.master-key-previous:}") String previousKeys) {
         byte[] configured = decode(props.masterKey());
         if (configured != null) {
             key = configured;
@@ -49,11 +55,21 @@ public class MasterKeyProvider {
             source = "key file";
         }
         keyId = computeKeyId(key);
-        log.info("Credential master key loaded from {} (key id {})", source, keyId);
+        for (String encoded : previousKeys.split(",")) {
+            byte[] old = decode(encoded);
+            if (old != null) previous.put(computeKeyId(old), old);
+        }
+        previous.remove(keyId);
+        log.info("Credential master key loaded from {} (key id {}, older keys {})", source, keyId, previous.keySet());
     }
 
     byte[] key() {
         return key.clone();
+    }
+
+    /** Older keys that can still decrypt, by key ID. */
+    Map<String, byte[]> previousKeys() {
+        return Map.copyOf(previous);
     }
 
     /** Short identifier stored next to each ciphertext so keys can be rotated later. */
