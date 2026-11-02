@@ -102,6 +102,12 @@ Prüfen stehen auf der Website unter *Operations → Verifying a release*.
 | Konfiguration | nichts | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` + Login |
 | Backup | Service stoppen, `data/*.mv.db` kopieren | `pg_dump jdbcodata` |
 
+Mehrere Instanzen dürfen gleichzeitig starten: Admin-Anlage und Seed laufen nacheinander, gesichert über eine
+Zeilensperre in `cluster_lock`. Hängt ein Start dabei, warten die anderen mit der Meldung `Waiting for other instances`;
+stirbt die Instanz, gibt die Datenbank die Sperre frei. Das generierte Admin-Passwort liegt nur in `data/` der Instanz,
+die das Konto angelegt hat, deshalb für mehrere Instanzen `JDBCODATA_ADMIN_PASSWORD` setzen. Aufräumjobs laufen auf
+jeder Instanz; das ist unkritisch, weil sie nur abgelaufene Daten löschen.
+
 Wechsel H2 → PostgreSQL: Datenquellen und Queries per Seed-Datei oder REST-API (`GET /api/v1/queries`)
 exportieren und in die neue Instanz einspielen. Der Cache muss nicht übernommen werden.
 

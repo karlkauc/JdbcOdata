@@ -54,10 +54,14 @@ final class TwoNodes {
     }
 
     static Node start(PostgreSQLContainer postgres, String demoDatabase) throws IOException {
+        return start(postgres.getJdbcUrl(), postgres, demoDatabase);
+    }
+
+    static Node start(String metadataUrl, PostgreSQLContainer postgres, String demoDatabase) throws IOException {
         Map<String, Object> properties = new HashMap<>();
         properties.put("server.port", 0);
         properties.put("spring.profiles.active", "demo");
-        properties.put("spring.datasource.url", postgres.getJdbcUrl());
+        properties.put("spring.datasource.url", metadataUrl);
         properties.put("spring.datasource.username", postgres.getUsername());
         properties.put("spring.datasource.password", postgres.getPassword());
         properties.put("jdbcodata.data-dir", Files.createTempDirectory("jdbcodata-node").toString());
