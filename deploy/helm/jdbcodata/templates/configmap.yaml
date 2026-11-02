@@ -1,0 +1,17 @@
+{{- if or .Values.config .Values.seed }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jdbcodata.fullname" . }}
+  labels:
+    {{- include "jdbcodata.labels" . | nindent 4 }}
+data:
+  {{- with .Values.config }}
+  application.yml: |
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.seed }}
+  seed.yml: |
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

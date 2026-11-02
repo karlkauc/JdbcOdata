@@ -7,6 +7,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Added
 
+- Helm chart in `deploy/helm/jdbcodata` with probes, resource limits, PodDisruptionBudget, Secret references, optional
+  ServiceMonitor, alert rules and Grafana dashboard
 - Optional usage statistics for public instances, off unless `jdbcodata.usage.db-url` is set. Self-hosted
   installations record and send nothing
 - Connections per login are configurable for each datasource (`poolSize`, 1 to 100, default 2 as before). All

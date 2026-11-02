@@ -1,0 +1,85 @@
+# Several replicas need nothing else: sessions, cache and asynchronous results are in the metadata database.
+# Limits such as maxConcurrent apply per replica, see "Several instances" in the operations guide.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/karlkauc/jdbcodata
+  tag: ""                  # default: appVersion of the chart
+  digest: ""               # sha256:… takes precedence over the tag
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# Required. A Secret you create yourself, so that no password ends up in a values file:
+#   JDBCODATA_MASTER_KEY        openssl rand -base64 32, must stay the same across all replicas and upgrades
+#   JDBCODATA_ADMIN_PASSWORD    first admin account
+#   JDBCODATA_META_PASSWORD     login of the metadata database
+#   JDBCODATA_SECURITY_METRICS_TOKEN   only with metrics.serviceMonitor.enabled, at least 32 characters
+existingSecret: ""
+
+# PostgreSQL. The embedded H2 is not possible here: every replica would have a database of its own.
+metadata:
+  url: ""                  # jdbc:postgresql://host:5432/jdbcodata
+  username: jdbcodata
+
+admin:
+  user: admin
+
+# Content of /app/config/application.yml, for everything not covered above, e.g. jdbcodata.odata.max-rows
+config: {}
+# Content of /app/config/seed.yml; used when set. Passwords in it should come from placeholders, see the admin guide.
+seed: {}
+
+# More environment variables, e.g. secretKeyRef for OIDC client secrets
+extraEnv: []
+
+# For JDBC drivers that are not part of the image, e.g. Oracle: copy them to /app/lib with an init container.
+extraInitContainers: []
+extraVolumes: []
+extraVolumeMounts: []
+
+# Sets -XX:MaxRAMPercentage. Result sets are held in memory, so raise memory together with jdbcodata.odata.max-rows.
+heapPercent: 75
+resources:
+  requests:
+    cpu: 250m
+    memory: 1Gi
+  limits:
+    memory: 2Gi
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: odata.example.org
+  tlsSecret: ""            # empty: no tls section, for TLS ending in front of the ingress
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Spreads replicas across nodes, as far as possible. Without it, the loss of one node can take down all of them.
+topologySpread:
+  enabled: true
+
+metrics:
+  serviceMonitor:          # needs the Prometheus Operator
+    enabled: false
+    interval: 30s
+    labels: {}
+  prometheusRule:          # needs the Prometheus Operator
+    enabled: false
+    labels: {}
+  dashboard:               # ConfigMap for the Grafana sidecar
+    enabled: false
+    labels:
+      grafana_dashboard: "1"
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

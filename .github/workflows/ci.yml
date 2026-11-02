@@ -23,6 +23,23 @@ jobs:
           cache: maven
       - run: ./mvnw -B verify
 
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the chart and the alert rules
+        run: |
+          helm="docker run --rm -v $PWD/deploy/helm/jdbcodata:/chart:ro alpine/helm:3.17.3"
+          good="--set existingSecret=s --set metadata.url=jdbc:postgresql://db/x"
+          $helm lint /chart $good
+          $helm template t /chart $good --set ingress.enabled=true --set ingress.tlsSecret=tls \
+            --set metrics.serviceMonitor.enabled=true --set metrics.prometheusRule.enabled=true \
+            --set metrics.dashboard.enabled=true --set config.a=b --set seed.c=d > /dev/null
+          ! $helm template t /chart --set metadata.url=jdbc:postgresql://db/x
+          ! $helm template t /chart --set existingSecret=s --set metadata.url=jdbc:h2:file:./data
+          docker run --rm -v $PWD/deploy/helm/jdbcodata/dashboards:/d:ro --entrypoint promtool \
+            prom/prometheus:v3.2.1 check rules /d/alerts.yaml
+
   docker:
     runs-on: ubuntu-latest
     steps:

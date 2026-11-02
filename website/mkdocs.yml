@@ -67,6 +67,7 @@ nav:
       - OData feature reference: odata-reference.md
   - Run it:
       - Operations: operations.md
+      - Kubernetes: kubernetes.md
       - Configuration reference: configuration.md
       - Database drivers: drivers.md
       - Security: security.md
