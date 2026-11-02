@@ -19,6 +19,8 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout, wenn die Datenquelle keinen setzt |
 | `jdbcodata.odata.response-rows-budget` | `0` | Zeilen, die gleichzeitig zu Antworten verarbeitet werden, auch bei Cache-Treffern, weil jede Antwort vollständig im Speicher entsteht. `0` = halber Heap bei 1 KB pro Zeile (1 GB Heap: rund 524 000). Ergebnisse unter 1000 Zeilen zählen nicht. Für breite Tabellen senken |
 | `jdbcodata.odata.response-wait-ms` | `30000` | Wartezeit auf Platz im Budget, danach `503` mit `Retry-After` |
+| `jdbcodata.odata.max-response-mb` | `256` | Größte Antwort in MB, darüber `413` (NFR-13). `0` = keine Grenze |
+| `jdbcodata.odata.spool-max-mb` | `2048` | Platz für Temp-Dateien aller Antworten zusammen, darüber `503` mit `Retry-After`. Antworten über 1 MB liegen bis zum Versand verschlüsselt im Temp-Verzeichnis der JVM, damit sie nicht im Heap bleiben |
 | `jdbcodata.odata.breaker-failures` | `5` | Verbindungsfehler in Folge, nach denen eine Datenquelle ohne Verbindungsversuch mit `503` antwortet, pro Instanz. `0` = aus. Falsche Passwörter, SQL-Fehler und ein voller Pool zählen nicht |
 | `jdbcodata.odata.breaker-window-sec` | `120` | Zeitraum für diese Fehler. Ein einzelner Verbindungs-Timeout dauert 15 Sekunden, kürzer als 75 Sekunden löst ein einzelner Client also nie aus |
 | `jdbcodata.odata.breaker-open-sec` | `30` | Wartezeit, bis eine einzelne Anfrage es wieder versucht |

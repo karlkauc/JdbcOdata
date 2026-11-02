@@ -26,5 +26,6 @@ public record ProcessorSupport(
         DeltaTracker deltaTracker,
         AsyncRequests asyncRequests,
         LoginAudit loginAudit,
-        ResponseBudget responseBudget) {
+        ResponseBudget responseBudget,
+        ResponseSpools responseSpools) {
 }

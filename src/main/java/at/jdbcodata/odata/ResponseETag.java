@@ -18,10 +18,18 @@ final class ResponseETag {
         return "W/\"" + hash(body) + "\"";
     }
 
+    /** The tag of a body fed to {@link #digest()} piece by piece. */
+    static String of(MessageDigest digest) {
+        return "W/\"" + HexFormat.of().formatHex(digest.digest(), 0, 16) + "\"";
+    }
+
     static String hash(byte[] data) {
+        return HexFormat.of().formatHex(digest().digest(data), 0, 16);
+    }
+
+    static MessageDigest digest() {
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(data);
-            return HexFormat.of().formatHex(digest, 0, 16);
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }

@@ -19,7 +19,7 @@ class ODataServletTest {
     private static ProcessorSupport support() {
         return new ProcessorSupport(null, null, null, null, null, null, new LoginRateLimiter(TestData.props(10, 10, "")),
                 TestData.props(10, 10, ""), new DeltaTracker(null), new AsyncRequests(mock(AsyncResultStore.class)), mock(LoginAudit.class),
-                new at.jdbcodata.datasource.ResponseBudget(1000, 0));
+                new at.jdbcodata.datasource.ResponseBudget(1000, 0), new ResponseSpools(256, 2048));
     }
 
     private static at.jdbcodata.config.JdbcOdataProperties props() {

@@ -4,6 +4,7 @@ import at.jdbcodata.datasource.ConcurrencyLimiter;
 import at.jdbcodata.datasource.DatasourceCircuitBreaker;
 import at.jdbcodata.datasource.IdentityPoolManager;
 import at.jdbcodata.datasource.ResponseBudget;
+import at.jdbcodata.odata.ResponseSpools;
 import at.jdbcodata.security.LoginRateLimiter;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Gauge;
@@ -24,16 +25,18 @@ public class RuntimeMetrics implements MeterBinder {
     private final ExecutionLogService executionLog;
     private final ResponseBudget responseBudget;
     private final DatasourceCircuitBreaker breaker;
+    private final ResponseSpools responseSpools;
 
     public RuntimeMetrics(IdentityPoolManager pools, ConcurrencyLimiter limiter, LoginRateLimiter rateLimiter,
                           ExecutionLogService executionLog, ResponseBudget responseBudget,
-                          DatasourceCircuitBreaker breaker) {
+                          DatasourceCircuitBreaker breaker, ResponseSpools responseSpools) {
         this.pools = pools;
         this.limiter = limiter;
         this.rateLimiter = rateLimiter;
         this.executionLog = executionLog;
         this.responseBudget = responseBudget;
         this.breaker = breaker;
+        this.responseSpools = responseSpools;
     }
 
     @Override
@@ -51,6 +54,8 @@ public class RuntimeMetrics implements MeterBinder {
                 .description("Rows of responses being built or written").register(registry);
         Gauge.builder("jdbcodata.response.rows.budget", responseBudget, ResponseBudget::rows)
                 .description("Rows allowed in responses at the same time").register(registry);
+        Gauge.builder("jdbcodata.response.spool.bytes", responseSpools, ResponseSpools::diskBytes)
+                .baseUnit("bytes").description("Response bodies in temporary files").register(registry);
         Gauge.builder("jdbcodata.datasources.unreachable", breaker, DatasourceCircuitBreaker::openCount)
                 .description("Datasources this instance does not try to reach at the moment").register(registry);
         FunctionCounter.builder("jdbcodata.datasources.unreachable.rejected", breaker, DatasourceCircuitBreaker::rejected)

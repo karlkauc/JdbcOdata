@@ -136,7 +136,7 @@ public class ODataServlet extends HttpServlet {
                 handler.register(new JsonErrorProcessor());
                 handler.process(olingoRequest(req, metadata.getEdm()), resp);
             } finally {
-                processor.releaseResponseBudget();
+                processor.releaseResponse();
             }
         } catch (RuntimeException e) {
             log.error("OData request {} failed outside Olingo", req.getRequestURI(), e);
@@ -256,7 +256,7 @@ public class ODataServlet extends HttpServlet {
                 byte[] body = response.getContent() == null ? new byte[0] : response.getContent().readAllBytes();
                 return new AsyncRequests.Result(response.getStatusCode(), response.getAllHeaders(), body);
             } finally {
-                processor.releaseResponseBudget();
+                processor.releaseResponse();
             }
         };
         String id = support.asyncRequests().submit(requestContext.identity().caller(), work);

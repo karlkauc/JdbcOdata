@@ -188,7 +188,7 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 | NFR-10 | Performance | Cache-Hit: Time-to-first-byte < 200 ms bei 100 000 Zeilen auf Referenz-Hardware (4 vCPU, 4 GB RAM). | SHOULD |
 | NFR-11 | Performance | Ergebnisse werden gestreamt; Speicherbedarf pro Request ist unabhängig von der Zeilenzahl bis zum Cache-Limit. | MUST |
 | NFR-12 | Performance | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503` mit `Retry-After`. | MUST |
-| NFR-13 | Performance | Ergebnisgrenze Default 100 000 Zeilen / 256 MB pro Abruf, konfigurierbar; die Byte-Grenze fehlt noch (O-15). | MUST |
+| NFR-13 | Performance | Ergebnisgrenze Default 100 000 Zeilen / 256 MB pro Abruf, konfigurierbar. | MUST |
 | NFR-20 | Kompatibilität | Excel 365 (Windows) „Aus OData-Feed“; PowerBI Desktop und PowerBI Service über On-Premises Data Gateway mit Basic Auth (im Gateway nur Service-User, siehe FR-32a). | MUST |
 | NFR-21 | Kompatibilität | Oracle 19c+, PostgreSQL 13+, MySQL 8+ / MariaDB 10.6+. | MUST |
 | NFR-30 | Portabilität | Läuft auf Linux (x86_64, glibc) und Windows 10/11 bzw. Server 2019+ mit Java 21; ein identisches JAR. | MUST |

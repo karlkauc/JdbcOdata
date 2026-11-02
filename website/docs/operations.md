@@ -128,6 +128,7 @@ Several instances may start at the same time: creating the first admin and apply
 | Connections | `poolSize` of the datasource | Per instance and database login | Up to N × the value. Check `max_connections` or `processes` of the database |
 | Failed logins | `jdbcodata.security.rate-limit-per-minute` | Per instance | An attacker gets up to N × the value. Divide by N, or set the limit at the load balancer |
 | Rows in responses | `jdbcodata.odata.response-rows-budget` | Per instance | Protects the heap of each instance, no conversion needed |
+| Temporary files for responses | `jdbcodata.odata.spool-max-mb` | Per instance | Protects the disk of each instance, no conversion needed |
 | Async workers | Fixed at 4 | Per instance | More instances mean more parallel async requests |
 | Async requests | Fixed at 4 per caller, 200 in total | All instances | No conversion. Simultaneous requests can briefly exceed the 4 |
 | Persistent cache | `jdbcodata.cache.max-size-mb` | All instances | No conversion |
