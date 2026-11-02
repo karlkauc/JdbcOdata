@@ -102,15 +102,36 @@ Prüfen stehen auf der Website unter *Operations → Verifying a release*.
 | Konfiguration | nichts | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` + Login + `JDBCODATA_MASTER_KEY` (auf allen Instanzen derselbe) |
 | Backup | Service stoppen, `data/*.mv.db` kopieren | `pg_dump jdbcodata` |
 
-Admin-Sitzungen liegen in der Metadaten-DB. Ein Load Balancer braucht deshalb keine Sticky Sessions für die Admin-UI.
+Wechsel H2 → PostgreSQL: Datenquellen und Queries per Seed-Datei oder REST-API (`GET /api/v1/queries`)
+exportieren und in die neue Instanz einspielen. Der Cache muss nicht übernommen werden.
+
+## Mehrere Instanzen
+
+Voraussetzung ist PostgreSQL als Metadaten-DB und derselbe `JDBCODATA_MASTER_KEY` auf allen Instanzen. Sticky Sessions
+sind nicht nötig: Admin-Sitzungen, Cache und Async-Ergebnisse liegen in der Metadaten-DB.
+
 Mehrere Instanzen dürfen gleichzeitig starten: Admin-Anlage und Seed laufen nacheinander, gesichert über eine
 Zeilensperre in `cluster_lock`. Hängt ein Start dabei, warten die anderen mit der Meldung `Waiting for other instances`;
 stirbt die Instanz, gibt die Datenbank die Sperre frei. Das generierte Admin-Passwort liegt nur in `data/` der Instanz,
 die das Konto angelegt hat, deshalb für mehrere Instanzen `JDBCODATA_ADMIN_PASSWORD` setzen. Aufräumjobs laufen auf
 jeder Instanz; das ist unkritisch, weil sie nur abgelaufene Daten löschen.
 
-Wechsel H2 → PostgreSQL: Datenquellen und Queries per Seed-Datei oder REST-API (`GET /api/v1/queries`)
-exportieren und in die neue Instanz einspielen. Der Cache muss nicht übernommen werden.
+**Limits gelten überwiegend pro Instanz.** Sie werden nicht zwischen den Instanzen abgestimmt, das ist Absicht: Eine
+Abstimmung bräuchte bei jeder Anfrage einen Zugriff auf die Metadaten-DB. Beim Skalieren deshalb umrechnen:
+
+| Limit | Einstellung | Gilt | Mit N Instanzen |
+|---|---|---|---|
+| Parallele Abfragen | `maxConcurrent` der Datenquelle | pro Instanz | Die Datenbank sieht bis zu N × den Wert. Wert durch N teilen, wenn sie gleich belastet bleiben soll |
+| Verbindungen | `poolSize` der Datenquelle | pro Instanz und DB-Login | Bis zu N × den Wert. `max_connections` bzw. `processes` der Datenbank prüfen |
+| Fehlversuche beim Login | `jdbcodata.security.rate-limit-per-minute` | pro Instanz | Ein Angreifer hat bis zu N × den Wert. Wert durch N teilen oder das Limit am Load Balancer setzen |
+| Zeilen in Antworten | `jdbcodata.odata.response-rows-budget` | pro Instanz | Schützt den Heap der einzelnen Instanz, keine Umrechnung nötig |
+| Async-Worker | fest 4 | pro Instanz | Mehr Instanzen bedeuten mehr parallele Async-Aufträge |
+| Async-Aufträge | fest 4 pro Aufrufer, 200 gesamt | alle Instanzen | Keine Umrechnung. Gleichzeitige Anfragen können die 4 kurz überschreiten |
+| Persistenter Cache | `jdbcodata.cache.max-size-mb` | alle Instanzen | Keine Umrechnung |
+| Speicher-Cache | `jdbcodata.cache.memory-mb` | pro Instanz | Pro Instanz einplanen, im Heap enthalten |
+
+Beispiel: Eine Datenquelle verträgt 12 parallele Abfragen, es laufen 3 Instanzen. Dann ist `maxConcurrent: 4` richtig.
+Fällt eine Instanz aus, sinkt die Kapazität auf 8. Das Limit steigt dabei nicht von selbst.
 
 ## Backup und Wiederherstellung
 
