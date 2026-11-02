@@ -60,14 +60,20 @@ public class IdentityPoolManager {
 
     private final Map<PoolKey, Pool> pools = new ConcurrentHashMap<>();
     private final JdbcUrlPolicy urlPolicy;
+    private final DatasourceCircuitBreaker breaker;
 
     public IdentityPoolManager() {
         this(new JdbcUrlPolicy(List.of(), true));
     }
 
-    @Autowired
     public IdentityPoolManager(JdbcUrlPolicy urlPolicy) {
+        this(urlPolicy, new DatasourceCircuitBreaker(0, 0, 0));
+    }
+
+    @Autowired
+    public IdentityPoolManager(JdbcUrlPolicy urlPolicy, DatasourceCircuitBreaker breaker) {
         this.urlPolicy = urlPolicy;
+        this.breaker = breaker;
     }
 
     /**
@@ -83,8 +89,38 @@ public class IdentityPoolManager {
         return connect(ds, ds.sessionSettings(), username, password);
     }
 
-    /** A connection with the given (effective) session settings, see {@link SessionSettings#effective}. */
+    /**
+     * A connection with the given (effective) session settings, see {@link SessionSettings#effective}.
+     *
+     * @throws DatasourceUnavailableException the datasource cannot be reached at the moment, nothing was tried
+     */
     public Connection connect(Datasource ds, Map<String, String> sessionSettings, String username, String password)
+            throws SQLException {
+        breaker.check(ds);
+        return connectAndRecord(ds, sessionSettings, username, password);
+    }
+
+    /** For the health check: tries even while the breaker is open, and a success closes it. */
+    public Connection connectDespiteBreaker(Datasource ds, String username, String password) throws SQLException {
+        return connectAndRecord(ds, ds.sessionSettings(), username, password);
+    }
+
+    private Connection connectAndRecord(Datasource ds, Map<String, String> sessionSettings, String username, String password)
+            throws SQLException {
+        Throwable failure = new IllegalStateException("Connection attempt did not finish");
+        try {
+            Connection connection = open(ds, sessionSettings, username, password);
+            failure = null;
+            return connection;
+        } catch (SQLException | RuntimeException e) {
+            failure = e;
+            throw e;
+        } finally {
+            breaker.record(ds, failure);
+        }
+    }
+
+    private Connection open(Datasource ds, Map<String, String> sessionSettings, String username, String password)
             throws SQLException {
         Map<String, String> settings = new TreeMap<>(sessionSettings == null ? Map.of() : sessionSettings);
         PoolKey key = new PoolKey(ds.id(), ds.updatedAt(), username, sha256(password), Map.copyOf(settings));

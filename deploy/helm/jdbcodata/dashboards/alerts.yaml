@@ -23,6 +23,13 @@ groups:
           severity: warning
         annotations:
           summary: Requests on {{ $labels.instance }} wait for connections for 10 minutes; poolSize is too small
+      - alert: JdbcOdataDatasourceUnreachable
+        expr: jdbcodata_datasources_unreachable > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.instance }} cannot reach {{ $value }} datasource(s); their queries get 503"
       - alert: JdbcOdataResponseBudgetExhausted
         expr: jdbcodata_response_rows_reserved / jdbcodata_response_rows_budget > 0.9
         for: 5m

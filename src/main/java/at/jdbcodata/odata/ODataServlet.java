@@ -107,6 +107,7 @@ public class ODataServlet extends HttpServlet {
                 return;
             } catch (DbExecutionException e) {
                 log.warn("Login of '{}' could not be verified: {}", context.caller(), e.getMessage());
+                resp.setHeader("Retry-After", "5");
                 writeJsonError(resp, 503, "Database temporarily unavailable");
                 return;
             }

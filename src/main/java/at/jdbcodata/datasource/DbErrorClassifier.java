@@ -1,6 +1,8 @@
 package at.jdbcodata.datasource;
 
+import java.io.IOException;
 import java.sql.SQLException;
+import java.sql.SQLTransientConnectionException;
 import java.sql.SQLTimeoutException;
 
 /** Translates JDBC exceptions of the supported vendors into the two application exceptions. */
@@ -36,6 +38,28 @@ public final class DbErrorClassifier {
             if (s.getErrorCode() == 1017) return true;                  // Oracle ORA-01017
             if (s.getErrorCode() == 1045) return true;                  // MySQL/MariaDB access denied
             if (s.getErrorCode() == 28000) return true;                 // H2 wrong user or password
+        }
+        return false;
+    }
+
+    /** The database answered and refused the login. */
+    public static boolean isRejectedLogin(Throwable t) {
+        if (t instanceof DbAuthenticationException) return true;
+        SQLException sql = findSqlException(t);
+        return sql != null && isAuthFailure(sql);
+    }
+
+    /**
+     * The database could not be reached. Hikari reports a timeout with the last connection failure as cause; without
+     * a cause all connections of the pool were busy.
+     */
+    public static boolean isConnectionFailure(Throwable t) {
+        SQLException sql = findSqlException(t);
+        if (sql == null || isAuthFailure(sql)) return false;
+        if (sql instanceof SQLTransientConnectionException && sql.getCause() == null) return false;
+        for (Throwable c = sql; c != null; c = c.getCause() == c ? null : c.getCause()) {
+            if (c instanceof IOException) return true;
+            if (c instanceof SQLException s && s.getSQLState() != null && s.getSQLState().startsWith("08")) return true;
         }
         return false;
     }
