@@ -79,6 +79,7 @@ Off by default. See [Usage statistics](security.md#usage-statistics).
 | `jdbcodata.security.allow-plain-http` | `false` | Allow starting without TLS. Only behind a TLS proxy or locally |
 | `jdbcodata.security.rate-limit-per-minute` | `20` | Failed logins per client IP before 429. Per user name, five times that. A counter expires one minute after the last failure. `0` turns it off |
 | `jdbcodata.security.allowed-jdbc-urls` | empty | Further JDBC URL prefixes, for example `jdbc:sqlserver:`. Always allowed: `jdbc:postgresql:`, `jdbc:mariadb:`, `jdbc:oracle:thin:` |
+| `jdbcodata.security.require-datasource-tls` | `false` | Datasources must verify the server certificate, see [Security](security.md#datasources-over-tls). Others are refused on save, in the connection test and when a pool opens |
 | `jdbcodata.security.allow-embedded-h2` | `false` | Allow embedded H2 (`jdbc:h2:mem:`, `jdbc:h2:file:`) as a datasource. It runs inside the service and could read its files, so use it for the demo and tests only |
 
 ## Profiles

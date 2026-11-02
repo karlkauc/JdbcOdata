@@ -229,6 +229,30 @@ einfach mit im Secret. Den alten Key so lange aufbewahren wie Backups, die mit i
 Meldet das Log `stored password(s) cannot be read`, fehlt der passende Key. Der Dienst startet trotzdem, die betroffenen
 Passwörter bleiben unverändert: Key in `JDBCODATA_MASTER_KEY_PREVIOUS` nachtragen oder die Passwörter neu eingeben.
 
+## Datenquellen nur über TLS
+
+Mit `jdbcodata.security.require-datasource-tls: true` nimmt der Service nur Verbindungen an, die das Serverzertifikat
+prüfen. Verschlüsselung allein reicht nicht: Ohne Prüfung kann sich ein Angreifer im Netz als Datenbank ausgeben und
+die Passwörter der Aufrufer mitlesen.
+
+| Datenbank | Verlangt | Abgelehnt |
+|---|---|---|
+| PostgreSQL | `sslmode=verify-full` oder `verify-ca`, in der URL oder den Treiber-Properties | `ssl=true`, `sslmode=require`, jede andere Schreibweise der Option |
+| MariaDB/MySQL | `sslMode=verify-full` oder `verify-ca` | `useSsl`, `trustServerCertificate`, `disableSslHostnameVerification` |
+| Oracle | `tcps://` oder `(PROTOCOL=TCPS)` bei allen Adressen | TNS-Aliase, Native Network Encryption, `oracle.net.ssl_server_dn_match=false` |
+| Andere Treiber, H2 über TCP/SSL | nicht prüfbar, deshalb immer abgelehnt | |
+
+`verify-full` prüft auch den Hostnamen und ist `verify-ca` vorzuziehen. Eingebettetes H2 ist ausgenommen, es hat keine
+Netzverbindung. Geprüft wird beim Speichern, beim Verbindungstest und beim Öffnen eines Pools:
+
+- Bestehende Datenquellen ohne TLS schlagen erst bei der nächsten Abfrage fehl. Nach dem Einschalten deshalb den
+  Verbindungstest aller Datenquellen ausführen.
+- Ein Seed mit einer solchen Datenquelle verhindert den Start.
+
+Die CA des Datenbankservers kommt je nach Treiber als Datei (`sslrootcert=/certs/ca.crt`, `serverSslCert=/certs/ca.crt`)
+oder über den Truststore der JVM (Oracle). Die Option gilt nur für Datenquellen, die Metadaten-DB sichert man selbst in
+`spring.datasource.url` ab.
+
 ## Single Sign-on für die Admin-UI
 
 Die Admin-UI kann sich per OpenID Connect anmelden, getestet mit Keycloak. Feeds nutzen weiter Basic Auth. Der

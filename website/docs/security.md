@@ -37,7 +37,7 @@ The model assumes:
 
 - **SQL injection.** OData options are never concatenated into SQL. Values are bound and identifiers come only from the schema snapshot. Query parameters are always bound.
 - **Read-only.** Connections are read-only and SQL is restricted to `SELECT`: no writing CTEs, no `SELECT INTO`, no `FOR UPDATE`, no executable MySQL or MariaDB comments.
-- **JDBC URLs.** Only known network drivers are allowed, and options that load code, run SQL or weaken read-only mode are rejected.
+- **JDBC URLs.** Only known network drivers are allowed, and options that load code, run SQL or weaken read-only mode are rejected. TLS to datasources can be enforced, see below.
 - **Session settings.** Only known keys per database, and values without quotes, semicolons or backslashes. The service builds the statement.
 - **Login throttling.** Failed logins are counted per IP and per user name, and then answered with 429.
 - **Secrets.** Stored database passwords use AES-256-GCM, tied to their record. Admin and service user passwords use bcrypt. Pass-through passwords are never stored.
@@ -47,6 +47,24 @@ The model assumes:
 - **Logs.** Sensitive parameters appear as `***` in the execution log, CSV export and cache overview. CSV cells are protected against formula injection.
 - **Resources.** Row limits, timeouts, parallel execution limits per datasource, a 10 MB request body limit and a `$batch` limit.
 - **Base images.** Pinned by digest.
+
+## Datasources over TLS
+
+With `jdbcodata.security.require-datasource-tls: true` the service only accepts connections that verify the server certificate. Encryption alone is not enough: without verification, an attacker on the network can pose as the database and read the callers' passwords.
+
+| Database | Required | Refused |
+|---|---|---|
+| PostgreSQL | `sslmode=verify-full` or `verify-ca`, in the URL or the driver properties | `ssl=true`, `sslmode=require`, any other spelling of the option |
+| MariaDB, MySQL | `sslMode=verify-full` or `verify-ca` | `useSsl`, `trustServerCertificate`, `disableSslHostnameVerification` |
+| Oracle | `tcps://` or `(PROTOCOL=TCPS)` on every address | TNS aliases, Native Network Encryption, `oracle.net.ssl_server_dn_match=false` |
+| Other drivers, H2 over TCP or SSL | Cannot be checked, so always refused | |
+
+`verify-full` also checks the host name and is the better choice. Embedded H2 is exempt because it has no network connection. The check runs on save, in the connection test and when a pool opens:
+
+- Existing datasources without TLS fail at their next query, so run the connection test for all of them after switching the option on.
+- A seed file with such a datasource stops the start.
+
+The CA of the database server comes as a file (`sslrootcert=/certs/ca.crt`, `serverSslCert=/certs/ca.crt`) or, for Oracle, from the JVM truststore. On Kubernetes, see [Database CA certificates](kubernetes.md#database-ca-certificates). The option covers datasources only; secure the metadata database in `spring.datasource.url`.
 
 ## Usage statistics
 

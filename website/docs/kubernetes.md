@@ -73,6 +73,21 @@ extraInitContainers:
         mountPath: /lib-target
 ```
 
+## Database CA certificates
+
+With `jdbcodata.security.require-datasource-tls`, mount the CA of the database server from a secret and name the file in the datasource, for example `sslrootcert=/certs/ca.crt`:
+
+```yaml
+extraVolumes:
+  - name: db-ca
+    secret:
+      secretName: db-ca
+extraVolumeMounts:
+  - name: db-ca
+    mountPath: /certs
+    readOnly: true
+```
+
 ## Monitoring
 
 The ServiceMonitor needs `JDBCODATA_SECURITY_METRICS_TOKEN` in the Secret (at least 32 characters). ServiceMonitor and alert rules need the Prometheus Operator.
