@@ -25,15 +25,34 @@ final class EntityMapper {
 
     /** All rows as entities, in result order. Query options are applied afterwards by {@link QueryOptionsEvaluator}. */
     static List<Entity> toEntities(QueryDefinition q, ResultTable table) {
-        List<Slot> slots = new ArrayList<>();
-        for (QueryColumn c : q.columns()) {
-            if (!c.visible()) continue;
-            slots.add(new Slot(c, table.indexOf(c.name()), EdmPrimitiveTypeKind.valueOfFQN(c.edmType())));
-        }
-        boolean rowIdKey = q.keyMode() != KeyMode.COLUMNS || q.columns().stream().noneMatch(QueryColumn::key);
+        Rows rows = new Rows(q, table);
+        List<Entity> entities = new ArrayList<>(rows.size());
+        for (int r = 0; r < rows.size(); r++) entities.add(rows.entity(r));
+        return entities;
+    }
 
-        List<Entity> entities = new ArrayList<>(table.rows().size());
-        for (int r = 0; r < table.rows().size(); r++) {
+    /** Turns single rows into entities, so that a response need not hold all of them at once. */
+    static final class Rows {
+        private final QueryDefinition q;
+        private final ResultTable table;
+        private final List<Slot> slots = new ArrayList<>();
+        private final boolean rowIdKey;
+
+        Rows(QueryDefinition q, ResultTable table) {
+            this.q = q;
+            this.table = table;
+            for (QueryColumn c : q.columns()) {
+                if (!c.visible()) continue;
+                slots.add(new Slot(c, table.indexOf(c.name()), EdmPrimitiveTypeKind.valueOfFQN(c.edmType())));
+            }
+            rowIdKey = q.keyMode() != KeyMode.COLUMNS || q.columns().stream().noneMatch(QueryColumn::key);
+        }
+
+        int size() {
+            return table.rows().size();
+        }
+
+        Entity entity(int r) {
             Object[] row = table.rows().get(r);
             Entity e = new Entity();
             e.setType(DynamicEdmProvider.typeName(q.name()).getFullQualifiedNameAsString());
@@ -58,9 +77,8 @@ final class EntityMapper {
                 }
             }
             e.setId(entityId(q.name() + "(" + (rowIdKey ? String.valueOf(rowId) : key) + ")"));
-            entities.add(e);
+            return e;
         }
-        return entities;
     }
 
     /** Relative entity id; characters such as spaces in string keys ({@code Customers(name='Beta AG')}) are encoded. */

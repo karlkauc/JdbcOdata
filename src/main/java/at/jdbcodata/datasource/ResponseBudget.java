@@ -7,7 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Limits the rows being turned into responses at the same time, because a response is built completely in memory.
+ * Limits the rows held for responses at the same time, because rows and entities of a response stay in memory. A cache
+ * hit of a whole entity set needs no room: its entities are built one by one while the body is written.
  * {@link ConcurrencyLimiter} does not cover this: it guards the database, and a cache hit never gets there, so any
  * number of clients could expand the same cached result at once. Counts rows, not requests, so that small feeds keep
  * running next to large ones. Held until the response is written, because the finished body stays on the heap.

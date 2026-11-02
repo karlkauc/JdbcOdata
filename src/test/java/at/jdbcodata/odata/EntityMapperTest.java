@@ -36,6 +36,18 @@ class EntityMapperTest {
             column(3, "hidden", "Edm.String", null, null, false, false)), KeyMode.ROWID);
 
     @Test
+    void singleRowsMatchTheFullList() {
+        var all = EntityMapper.toEntities(rowIdQuery, TABLE);
+        EntityMapper.Rows rows = new EntityMapper.Rows(rowIdQuery, TABLE);
+
+        assertThat(rows.size()).isEqualTo(all.size());
+        for (int r = 0; r < rows.size(); r++) {
+            assertThat(rows.entity(r).getId()).isEqualTo(all.get(r).getId());
+            assertThat(rows.entity(r).getProperties()).isEqualTo(all.get(r).getProperties());
+        }
+    }
+
+    @Test
     void mapsRowsWithRowIdAndRoundsDecimals() {
         List<Entity> all = EntityMapper.toEntities(rowIdQuery, TABLE);
         assertThat(all).hasSize(3);

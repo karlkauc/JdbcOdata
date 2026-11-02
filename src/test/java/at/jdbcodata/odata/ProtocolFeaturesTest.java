@@ -31,6 +31,23 @@ class ProtocolFeaturesTest extends DemoProfileTest {
     // --- paging -------------------------------------------------------------------------------------------------
 
     @Test
+    void plainReadIsPagedWithoutBuildingAllEntities() throws Exception {
+        List<Long> ids = new ArrayList<>();
+        String url = "/odata/Sales?$count=true";
+        while (url != null) {
+            HttpResponse<String> r = getWith(url, "Prefer", "odata.maxpagesize=10");
+            assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+            assertThat(r.headers().firstValue("Preference-Applied")).hasValue("odata.maxpagesize=10");
+            JsonNode body = json.readTree(r.body());
+            assertThat(body.get("@odata.count").asInt()).isEqualTo(24);
+            assertThat(body.get("value").size()).isLessThanOrEqualTo(10);
+            body.get("value").forEach(row -> ids.add(row.get("RowId").asLong()));
+            url = body.has("@odata.nextLink") ? body.get("@odata.nextLink").asString() : null;
+        }
+        assertThat(ids).hasSize(24).doesNotHaveDuplicates().isSorted();
+    }
+
+    @Test
     void preferMaxPageSizeYieldsNextLinksThatCoverTheWholeResult() throws Exception {
         List<Long> ids = new ArrayList<>();
         String url = "/odata/Sales?$count=true&$orderby=RowId";

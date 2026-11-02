@@ -17,7 +17,7 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `jdbcodata.meta.username` / `password` | `sa` / leer | Login der Metadaten-DB |
 | `jdbcodata.odata.max-rows` | `100000` | Harte Obergrenze pro Ergebnis (über Datenquelle und Query nur unterschreitbar) |
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout, wenn die Datenquelle keinen setzt |
-| `jdbcodata.odata.response-rows-budget` | `0` | Zeilen, die gleichzeitig zu Antworten verarbeitet werden, auch bei Cache-Treffern, weil jede Antwort vollständig im Speicher entsteht. `0` = halber Heap bei 1 KB pro Zeile (1 GB Heap: rund 524 000). Ergebnisse unter 1000 Zeilen zählen nicht. Für breite Tabellen senken |
+| `jdbcodata.odata.response-rows-budget` | `0` | Zeilen, die gleichzeitig für Antworten im Speicher gehalten werden, auch bei Cache-Treffern mit `$filter`, `$orderby`, `$top`, `$expand` und ähnlichen Optionen. Ein Cache-Treffer auf die ganze Entity Set zählt nicht, seine Zeilen entstehen erst beim Schreiben. `0` = halber Heap bei 1 KB pro Zeile (1 GB Heap: rund 524 000). Ergebnisse unter 1000 Zeilen zählen nicht. Für breite Tabellen senken |
 | `jdbcodata.odata.response-wait-ms` | `30000` | Wartezeit auf Platz im Budget, danach `503` mit `Retry-After` |
 | `jdbcodata.odata.max-response-mb` | `256` | Größte Antwort in MB, darüber `413` (NFR-13). `0` = keine Grenze |
 | `jdbcodata.odata.spool-max-mb` | `2048` | Platz für Temp-Dateien aller Antworten zusammen, darüber `503` mit `Retry-After`. Antworten über 1 MB liegen bis zum Versand verschlüsselt im Temp-Verzeichnis der JVM, damit sie nicht im Heap bleiben |
