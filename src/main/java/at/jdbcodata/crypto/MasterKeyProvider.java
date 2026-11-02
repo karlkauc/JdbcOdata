@@ -13,12 +13,15 @@ import java.util.Base64;
 import java.util.HexFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
  * Provides the AES-256 master key used by {@link CredentialVault}. Sources in order: property
  * {@code jdbcodata.master-key} / env {@code JDBCODATA_MASTER_KEY} (Base64, 32 bytes), otherwise a key file
  * {@code <data-dir>/master.key} that is generated on first start. The key is never stored in the metadata DB.
+ * The key file is for the embedded metadata DB only: on a shared one every instance would generate a key of its own
+ * and could not read the passwords stored by the others, so the service refuses to start.
  */
 @Component
 public class MasterKeyProvider {
@@ -30,13 +33,19 @@ public class MasterKeyProvider {
     private final String keyId;
     private final String source;
 
-    public MasterKeyProvider(JdbcOdataProperties props) {
+    public MasterKeyProvider(JdbcOdataProperties props, @Value("${spring.datasource.url:}") String metadataUrl) {
         byte[] configured = decode(props.masterKey());
         if (configured != null) {
             key = configured;
             source = "configuration";
         } else {
-            key = loadOrCreateKeyFile(Path.of(props.dataDir(), "master.key"));
+            Path file = Path.of(props.dataDir(), "master.key");
+            if (!metadataUrl.startsWith("jdbc:h2:")) {
+                throw new IllegalStateException("Set jdbcodata.master-key (JDBCODATA_MASTER_KEY) when the metadata DB is "
+                        + "shared: a key file would differ per instance. Use the content of " + file.toAbsolutePath()
+                        + " if it exists, otherwise generate a key with: openssl rand -base64 32");
+            }
+            key = loadOrCreateKeyFile(file);
             source = "key file";
         }
         keyId = computeKeyId(key);

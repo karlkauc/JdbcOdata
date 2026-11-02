@@ -27,6 +27,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - API keys for machine clients: stored as a hash, with an expiry, and revocable at once. A key reads feeds as a service
   user or calls the REST API with a role. Excel uses it as password of the user `apikey`
 
+### Changed
+
+- With PostgreSQL as metadata database the service refuses to start without `JDBCODATA_MASTER_KEY`: a key file would
+  differ per instance, and passwords stored by one could not be read by another. **When upgrading** an installation that
+  uses `data/master.key`, set `JDBCODATA_MASTER_KEY` to the content of that file. The Docker Compose setup already does
+
 ### Fixed
 
 - Instances starting at the same time on an empty metadata database could fail on unique constraints while creating the

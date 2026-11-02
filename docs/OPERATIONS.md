@@ -99,7 +99,7 @@ Prüfen stehen auf der Website unter *Operations → Verifying a release*.
 | | H2 (Default) | PostgreSQL |
 |---|---|---|
 | Einsatz | Einzelinstanz, lokal | Produktion, mehrere Instanzen |
-| Konfiguration | nichts | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` + Login |
+| Konfiguration | nichts | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` + Login + `JDBCODATA_MASTER_KEY` (auf allen Instanzen derselbe) |
 | Backup | Service stoppen, `data/*.mv.db` kopieren | `pg_dump jdbcodata` |
 
 Mehrere Instanzen dürfen gleichzeitig starten: Admin-Anlage und Seed laufen nacheinander, gesichert über eine

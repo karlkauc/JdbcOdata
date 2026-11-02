@@ -255,7 +255,7 @@ flowchart TD
 
 **Sichtbarkeit.** Das Service-Dokument und `$metadata` zeigen nur Queries, die der Aufrufer sehen darf. Bei `CALLER`-Queries ist das jede Query der Datenquelle, gegen die sich der Aufrufer authentifizieren kann (die DB entscheidet beim Ausführen); Pass-Through-Aufrufer müssen dafür schon vor `$metadata` einen gültigen DB-Login vorweisen (`ExecutionIdentityResolver.visibleQueries`, über den Pool, danach billig). Bei `FIXED`-Queries pflegt der Admin eine Freigabeliste (Service-User oder Gruppen; „alle Authentifizierten“ schließt den anonymen Zugang aus). Nicht freigegebene Queries antworten mit `404`, nicht `403`, um keine Existenz zu verraten.
 
-**Credentials at rest.** Hinterlegte DB-Passwörter und `FIXED`-Accounts werden mit AES-256-GCM verschlüsselt (`CredentialVault`: Zufalls-IV pro Eintrag, Key-ID im Datensatz für Rotation). Der Master-Key kommt aus `JDBCODATA_MASTER_KEY` (Base64, 32 Byte); ist nichts konfiguriert, erzeugt `MasterKeyProvider` beim ersten Start eine Key-Datei `data/master.key` (von Anfang an mit Rechten 600 angelegt) und warnt im Log. Der Key liegt nie in der Metadaten-DB. Pass-Through-Passwörter werden nie persistiert und nie geloggt; im Prozess leben sie nur im Request-Scope und im Pool-Schlüssel als Hash.
+**Credentials at rest.** Hinterlegte DB-Passwörter und `FIXED`-Accounts werden mit AES-256-GCM verschlüsselt (`CredentialVault`: Zufalls-IV pro Eintrag, Key-ID im Datensatz für Rotation). Der Master-Key kommt aus `JDBCODATA_MASTER_KEY` (Base64, 32 Byte); ist nichts konfiguriert, erzeugt `MasterKeyProvider` beim ersten Start eine Key-Datei `data/master.key` (von Anfang an mit Rechten 600 angelegt) und warnt im Log. Das gilt nur für H2: Mit PostgreSQL als Metadaten-DB verweigert der Dienst ohne konfigurierten Key den Start, weil jede Instanz sonst einen eigenen Key hätte. Der Key liegt nie in der Metadaten-DB. Pass-Through-Passwörter werden nie persistiert und nie geloggt; im Prozess leben sie nur im Request-Scope und im Pool-Schlüssel als Hash.
 
 **Connections.**
 
@@ -410,7 +410,7 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 | `server.port` | 8080 | HTTP-Port |
 | `server.ssl.*` | aus | Eingebautes TLS |
 | `jdbcodata.meta.url` | H2-Datei | Metadaten-DB |
-| `jdbcodata.master-key` | – | Pflicht, Base64, 32 Byte |
+| `jdbcodata.master-key` | – | Base64, 32 Byte; Pflicht mit PostgreSQL als Metadaten-DB |
 | `jdbcodata.admin.user/password` | – | Initial-Admin |
 | `jdbcodata.cache.max-size-mb` | 1024 | Persistenter Cache gesamt |
 | `jdbcodata.cache.memory-mb` | 256 | Caffeine-Layer |

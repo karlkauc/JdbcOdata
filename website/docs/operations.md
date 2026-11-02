@@ -109,7 +109,7 @@ cosign verify ghcr.io/karlkauc/jdbcodata:1.1.0 \
 | | H2 (default) | PostgreSQL |
 |---|---|---|
 | Use | Single instance | Production, several instances |
-| Configuration | None | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata` and login |
+| Configuration | None | `jdbcodata.meta.url=jdbc:postgresql://host:5432/jdbcodata`, login and `JDBCODATA_MASTER_KEY` (the same on all instances) |
 | Backup | Stop the service, copy `data/*.mv.db` | `pg_dump jdbcodata` |
 
 Several instances may start at the same time: creating the first admin and applying the seed happen one instance at a time, guarded by a row lock in `cluster_lock`. If one start hangs there, the others wait and log `Waiting for other instances`. When an instance dies, the database releases the lock. A generated admin password is only in the `data/` directory of the instance that created the account, so set `JDBCODATA_ADMIN_PASSWORD` when running several instances. Cleanup jobs run on every instance, which is harmless because they only delete expired data.

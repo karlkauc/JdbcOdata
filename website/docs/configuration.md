@@ -28,7 +28,7 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 |---|---|---|
 | `jdbcodata.admin.user` | `admin` | Name of the first admin account, used only at the first start |
 | `jdbcodata.admin.password` | empty | Password of the first admin account. Empty: generated into `<data-dir>/initial-admin-password` (mode 600), never logged. Outside the `demo` profile, under 8 characters or a `change-me…` placeholder stops the start |
-| `jdbcodata.master-key` | empty | AES-256 key (Base64, 32 bytes) for stored database passwords. Empty: key file `<data-dir>/master.key` |
+| `jdbcodata.master-key` | empty | AES-256 key (Base64, 32 bytes) for stored database passwords. Empty: key file `<data-dir>/master.key`, with H2 as metadata database only. Required with PostgreSQL, otherwise the service refuses to start |
 | `jdbcodata.data-dir` | `./data` | Directory for key file and generated password. The default H2 metadata and demo database paths are set separately and also use `./data` |
 | `jdbcodata.meta.url` | H2 file in `./data` | JDBC URL of the metadata database (H2 or PostgreSQL) |
 | `jdbcodata.meta.username`, `jdbcodata.meta.password` | `sa`, empty | Login of the metadata database |
