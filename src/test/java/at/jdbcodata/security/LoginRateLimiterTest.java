@@ -12,7 +12,7 @@ class LoginRateLimiterTest {
     private static JdbcOdataProperties props(boolean plain, int limit) {
         JdbcOdataProperties p = TestData.props(10, 10, "");
         return new JdbcOdataProperties(p.admin(), p.odata(), p.seed(), p.cache(), p.stats(),
-                new JdbcOdataProperties.Security(plain, limit, java.util.List.of(), true), "", "./data");
+                new JdbcOdataProperties.Security(plain, limit, java.util.List.of(), true, false), "", "./data");
     }
 
     @Test

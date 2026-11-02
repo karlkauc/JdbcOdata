@@ -1,5 +1,6 @@
 package at.jdbcodata.datasource;
 
+import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.query.SqlDialect;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -15,12 +16,14 @@ import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -56,6 +59,16 @@ public class IdentityPoolManager {
     }
 
     private final Map<PoolKey, Pool> pools = new ConcurrentHashMap<>();
+    private final JdbcUrlPolicy urlPolicy;
+
+    public IdentityPoolManager() {
+        this(new JdbcUrlPolicy(List.of(), true));
+    }
+
+    @Autowired
+    public IdentityPoolManager(JdbcUrlPolicy urlPolicy) {
+        this.urlPolicy = urlPolicy;
+    }
 
     /**
      * Logins a database just rejected. Each request checks the caller against every datasource, so without this a
@@ -99,6 +112,11 @@ public class IdentityPoolManager {
     }
 
     private HikariDataSource createPool(Datasource ds, Map<String, String> settings, String username, String password) {
+        try {
+            urlPolicy.checkTls(ds.jdbcUrl(), ds.driverProperties()); // also covers datasources stored before the option was set
+        } catch (InvalidRequestException e) {
+            throw new DbExecutionException(e.getMessage(), false, e);
+        }
         HikariConfig cfg = new HikariConfig();
         cfg.setJdbcUrl(ds.jdbcUrl());
         cfg.setUsername(username);

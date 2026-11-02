@@ -51,10 +51,12 @@ public record JdbcOdataProperties(
      * {@code allowedJdbcUrls}: further JDBC URL prefixes for drivers in {@code lib/} (see {@code JdbcUrlPolicy}).
      * {@code allowEmbeddedH2}: allow in-process H2 databases as datasources. They run inside this JVM and can read
      * its files (e.g. the master key), so only for the local demo and tests.
+     * {@code requireDatasourceTls}: datasources must verify the server certificate (see {@code JdbcUrlPolicy}).
      */
     public record Security(@DefaultValue("false") boolean allowPlainHttp,
                            @DefaultValue("20") int rateLimitPerMinute,
                            @DefaultValue List<String> allowedJdbcUrls,
-                           @DefaultValue("false") boolean allowEmbeddedH2) {
+                           @DefaultValue("false") boolean allowEmbeddedH2,
+                           @DefaultValue("false") boolean requireDatasourceTls) {
     }
 }

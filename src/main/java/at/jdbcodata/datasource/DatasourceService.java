@@ -130,6 +130,7 @@ public class DatasourceService {
             // also covers datasources stored before the policy existed
             urlPolicy.check(ds.jdbcUrl(), ds.driverClass());
             urlPolicy.checkDriverProperties(ds.driverProperties());
+            urlPolicy.checkTls(ds.jdbcUrl(), ds.driverProperties());
         } catch (InvalidRequestException e) {
             return ConnectionTestResult.failure(e.getMessage(), elapsedMs(start));
         }
@@ -169,6 +170,7 @@ public class DatasourceService {
 
     private void apply(DatasourceEntity e, DatasourceSpec s) {
         urlPolicy.check(s.jdbcUrl(), s.driverClass());
+        urlPolicy.checkTls(s.jdbcUrl(), s.driverProperties() != null ? s.driverProperties() : e.getDriverProperties());
         e.setName(s.name());
         e.setDescription(s.description());
         e.setJdbcUrl(s.jdbcUrl());

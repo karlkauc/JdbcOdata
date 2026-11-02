@@ -38,6 +38,12 @@ public class JdbcUrlPolicy {
             "connectexecutor", "connectexecutorarg", "classloaderstrategy", "xmlfactoryfactory", "gsslib", "jaaslogin",
             "options", "service", "sessionvariables", "credentialtype", "tlssockettype", "localsocket", "pipe");
 
+    private static final Set<String> VERIFYING_MODES = Set.of("verify-full", "verify-ca");
+
+    /** Lower-case MariaDB options that replace or relax {@code sslMode}. */
+    private static final Set<String> WEAKENING_MARIADB_OPTIONS = Set.of("usessl", "trustservercertificate",
+            "disablesslhostnameverification");
+
     /** {@code password=}/{@code pwd=} options, {@code //user:pass@host} and Oracle's {@code thin:user/pass@host}. */
     private static final Pattern CREDENTIALS_IN_URL = Pattern.compile(
             "[;?&:]\\s*(password|pwd|sslpassword|keystorepassword|truststorepassword)\\s*=|//[^/@?;]*:[^/@?;]*@|^jdbc:oracle:thin:[^@/]+/[^@]+@");
@@ -49,13 +55,18 @@ public class JdbcUrlPolicy {
 
     private final List<String> prefixes;
     private final boolean allowEmbeddedH2;
+    private final boolean requireTls;
 
     @Autowired
     public JdbcUrlPolicy(JdbcOdataProperties props) {
-        this(props.security().allowedJdbcUrls(), props.security().allowEmbeddedH2());
+        this(props.security().allowedJdbcUrls(), props.security().allowEmbeddedH2(), props.security().requireDatasourceTls());
     }
 
     JdbcUrlPolicy(List<String> extraPrefixes, boolean allowEmbeddedH2) {
+        this(extraPrefixes, allowEmbeddedH2, false);
+    }
+
+    JdbcUrlPolicy(List<String> extraPrefixes, boolean allowEmbeddedH2, boolean requireTls) {
         List<String> all = new ArrayList<>(DEFAULT_PREFIXES);
         if (extraPrefixes != null) {
             extraPrefixes.stream().filter(p -> p != null && !p.isBlank()).map(p -> p.trim().toLowerCase(Locale.ROOT))
@@ -63,6 +74,7 @@ public class JdbcUrlPolicy {
         }
         this.prefixes = List.copyOf(all);
         this.allowEmbeddedH2 = allowEmbeddedH2;
+        this.requireTls = requireTls;
     }
 
     public void check(String jdbcUrl, String driverClass) {
@@ -124,6 +136,69 @@ public class JdbcUrlPolicy {
                 throw new InvalidRequestException("Driver property '" + key + "' must not contain SQL");
             }
         });
+    }
+
+    /**
+     * With {@code jdbcodata.security.require-datasource-tls}: refuses a connection that is not encrypted against a
+     * verified server certificate. Embedded H2 has no network connection. Only what a driver is known to honour counts,
+     * so URLs of other drivers and Oracle TNS aliases are refused.
+     */
+    public void checkTls(String jdbcUrl, Map<String, String> properties) {
+        if (!requireTls) return;
+        String raw = jdbcUrl.strip();
+        String url = decode(raw).toLowerCase(Locale.ROOT);
+        Map<String, String> props = properties == null ? Map.of() : properties;
+        if (isEmbeddedH2(raw, url)) return;
+        boolean secure;
+        if (url.startsWith("jdbc:postgresql:")) {
+            secure = verifiesCertificate("sslmode", raw, props);
+        } else if (url.startsWith("jdbc:mariadb:")) {
+            secure = verifiesCertificate("sslMode", raw, props) && options(raw, props).stream().noneMatch(
+                    o -> WEAKENING_MARIADB_OPTIONS.contains(o.name().toLowerCase(Locale.ROOT)));
+        } else if (url.startsWith("jdbc:oracle:thin:")) {
+            secure = isOracleTcps(url) && !url.concat(props.toString().toLowerCase(Locale.ROOT)).replaceAll("\\s", "")
+                    .contains("ssl_server_dn_match=false");
+        } else {
+            throw new InvalidRequestException("TLS is required, but can only be checked for PostgreSQL, MariaDB and Oracle");
+        }
+        if (!secure) {
+            throw new InvalidRequestException("TLS is required: use sslmode=verify-full or verify-ca (PostgreSQL), "
+                    + "sslMode=verify-full or verify-ca (MariaDB) or tcps:// (Oracle)");
+        }
+    }
+
+    /**
+     * Exact name, because PostgreSQL silently ignores {@code sslMode}; every spelling must be strong, because a repeated
+     * option replaces the earlier one and the URL wins over the properties.
+     */
+    private static boolean verifiesCertificate(String name, String rawUrl, Map<String, String> properties) {
+        List<Option> found = options(rawUrl, properties).stream().filter(o -> o.name().equalsIgnoreCase(name)).toList();
+        return found.stream().anyMatch(o -> o.name().equals(name))
+                && found.stream().allMatch(o -> VERIFYING_MODES.contains(o.value()));
+    }
+
+    private record Option(String name, String value) {
+    }
+
+    /** URL options as the drivers split them, undecoded: {@code a=b%26sslmode=verify-full} is the value of {@code a}. */
+    private static List<Option> options(String rawUrl, Map<String, String> properties) {
+        List<Option> options = new ArrayList<>();
+        int query = rawUrl.indexOf('?');
+        if (query >= 0) {
+            for (String part : rawUrl.substring(query + 1).split("&")) {
+                int eq = part.indexOf('=');
+                options.add(eq < 0 ? new Option(part, "") : new Option(part.substring(0, eq), part.substring(eq + 1)));
+            }
+        }
+        properties.forEach((name, value) -> options.add(new Option(name.strip(), value == null ? "" : value.strip())));
+        return options;
+    }
+
+    /** All addresses must use TCPS, also in an address list; a TNS alias does not show its protocol. */
+    private static boolean isOracleTcps(String url) {
+        String target = url.substring(url.indexOf('@') + 1).replaceAll("\\s", "");
+        return (target.startsWith("tcps://") || target.contains("(protocol=tcps)"))
+                && !target.contains("tcp://") && !target.contains("(protocol=tcp)");
     }
 
     /** Loads the class without initialising it, so no static initialiser of an arbitrary class runs. */
