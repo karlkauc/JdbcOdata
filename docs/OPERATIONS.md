@@ -125,6 +125,7 @@ Abstimmung bräuchte bei jeder Anfrage einen Zugriff auf die Metadaten-DB. Beim 
 | Verbindungen | `poolSize` der Datenquelle | pro Instanz und DB-Login | Bis zu N × den Wert. `max_connections` bzw. `processes` der Datenbank prüfen |
 | Fehlversuche beim Login | `jdbcodata.security.rate-limit-per-minute` | pro Instanz | Ein Angreifer hat bis zu N × den Wert. Wert durch N teilen oder das Limit am Load Balancer setzen |
 | Zeilen in Antworten | `jdbcodata.odata.response-rows-budget` | pro Instanz | Schützt den Heap der einzelnen Instanz, keine Umrechnung nötig |
+| Temp-Dateien für Antworten | `jdbcodata.odata.spool-max-mb` | pro Instanz | Schützt die Platte der einzelnen Instanz, keine Umrechnung nötig |
 | Async-Worker | fest 4 | pro Instanz | Mehr Instanzen bedeuten mehr parallele Async-Aufträge |
 | Async-Aufträge | fest 4 pro Aufrufer, 200 gesamt | alle Instanzen | Keine Umrechnung. Gleichzeitige Anfragen können die 4 kurz überschreiten |
 | Persistenter Cache | `jdbcodata.cache.max-size-mb` | alle Instanzen | Keine Umrechnung |

@@ -43,6 +43,8 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `jdbcodata.odata.default-timeout-sec` | `60` | Timeout if the datasource sets none |
 | `jdbcodata.odata.response-rows-budget` | `0` | Rows turned into responses at the same time, including cache hits, because each response is built completely in memory. `0`: half the heap at 1 KB per row, about 524,000 for 1 GB. Results under 1,000 rows do not count. Lower it for wide tables |
 | `jdbcodata.odata.response-wait-ms` | `30000` | Wait for room in this budget, then `503` with `Retry-After` |
+| `jdbcodata.odata.max-response-mb` | `256` | Largest response in MB, above it `413`. `0` means no limit |
+| `jdbcodata.odata.spool-max-mb` | `2048` | Space for temporary files of all responses together, above it `503` with `Retry-After`. Responses over 1 MB stay encrypted in the JVM's temporary directory until they are sent, so they do not stay on the heap |
 | `jdbcodata.odata.breaker-failures` | `5` | Connection failures in a row after which a datasource answers `503` without trying to connect, per instance. `0` turns it off. Wrong passwords, SQL errors and a full pool do not count |
 | `jdbcodata.odata.breaker-window-sec` | `120` | Time for these failures. One connect timeout takes 15 seconds, so below 75 seconds a single client never trips it |
 | `jdbcodata.odata.breaker-open-sec` | `30` | Time until a single request tries again |

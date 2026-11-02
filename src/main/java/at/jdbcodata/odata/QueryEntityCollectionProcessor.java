@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 import org.apache.olingo.commons.api.Constants;
 import org.apache.olingo.commons.api.data.ContextURL;
 import org.apache.olingo.commons.api.data.Entity;
+import org.apache.olingo.commons.api.data.EntityIterator;
 import org.apache.olingo.commons.api.data.EntityCollection;
 import org.apache.olingo.commons.api.data.Link;
 import org.apache.olingo.commons.api.data.Property;
@@ -122,14 +123,17 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
     private final ProcessorSupport support;
     private final ODataServlet.RequestContext request;
     private final List<ResponseBudget.Reservation> reservations = new ArrayList<>();
+    private final List<ResponseSpool> spools = new ArrayList<>();
 
     private OData odata;
     private ServiceMetadata serviceMetadata;
 
-    /** Once the response is written: until then its rows and body are on the heap. */
-    void releaseResponseBudget() {
+    /** Once the response is written: until then its rows are on the heap and its body in a spool. */
+    void releaseResponse() {
         reservations.forEach(ResponseBudget.Reservation::close);
         reservations.clear();
+        spools.forEach(ResponseSpool::release);
+        spools.clear();
     }
 
     public QueryEntityCollectionProcessor(ProcessorSupport support, ODataServlet.RequestContext request) {
@@ -209,8 +213,49 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
                 .count(uriInfo.getCountOption())
                 .build();
         ODataSerializer serializer = odata.createSerializer(responseFormat);
-        SerializerResult result = serializer.entityCollection(serviceMetadata, entitySet.getEntityType(), collection, options);
-        respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
+        if (collection.getDeltaLink() != null) {
+            // the streaming serializer does not write delta links
+            SerializerResult result = serializer.entityCollection(serviceMetadata, entitySet.getEntityType(), collection, options);
+            respond(req, response, result.getContent(), responseFormat.toContentTypeString(), r.root());
+            return;
+        }
+        ResponseSpool spool = support.responseSpools().open();
+        spools.add(spool);
+        try {
+            serializer.entityCollectionStreamed(serviceMetadata, entitySet.getEntityType(), rows(collection), options)
+                    .getODataContent().write(spool);
+            spool.close();
+        } catch (ResponseSpool.TooLarge e) {
+            throw new ODataApplicationException(e.getMessage(), HttpStatusCode.PAYLOAD_TOO_LARGE.getStatusCode(), LOCALE, e);
+        } catch (TooManyExecutionsException e) {
+            throw new ODataApplicationException(e.getMessage(), HttpStatusCode.SERVICE_UNAVAILABLE.getStatusCode(), LOCALE, e);
+        }
+        respond(req, response, spool.etag(), spool::content, responseFormat.toContentTypeString(), r.root());
+    }
+
+    private static EntityIterator rows(EntityCollection collection) {
+        java.util.Iterator<Entity> rows = collection.getEntities().iterator();
+        return new EntityIterator() {
+            @Override
+            public boolean hasNext() {
+                return rows.hasNext();
+            }
+
+            @Override
+            public Entity next() {
+                return rows.next();
+            }
+
+            @Override
+            public Integer getCount() {
+                return collection.getCount();
+            }
+
+            @Override
+            public java.net.URI getNext() {
+                return collection.getNext();
+            }
+        };
     }
 
     @Override
@@ -1160,8 +1205,8 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
      * Writes a read response with a weak ETag of the body; answers 304 without body when {@code If-None-Match}
      * matches. The execution headers (X-Cache, X-Query-Version) are kept on both.
      */
-    private static void respond(ODataRequest req, ODataResponse response, java.io.InputStream content, String contentType,
-                                Execution root) throws ODataApplicationException {
+    private void respond(ODataRequest req, ODataResponse response, java.io.InputStream content, String contentType,
+                         Execution root) throws ODataApplicationException {
         byte[] body;
         try (java.io.InputStream in = content) {
             body = in.readAllBytes();
@@ -1169,14 +1214,23 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             throw new ODataApplicationException("Cannot write the response", HttpStatusCode.INTERNAL_SERVER_ERROR.getStatusCode(),
                     LOCALE, e);
         }
-        String etag = ResponseETag.of(body);
+        try {
+            support.responseSpools().checkSize(body.length);
+        } catch (ResponseSpool.TooLarge e) {
+            throw new ODataApplicationException(e.getMessage(), HttpStatusCode.PAYLOAD_TOO_LARGE.getStatusCode(), LOCALE, e);
+        }
+        respond(req, response, ResponseETag.of(body), () -> new ByteArrayInputStream(body), contentType, root);
+    }
+
+    private static void respond(ODataRequest req, ODataResponse response, String etag,
+                                java.util.function.Supplier<java.io.InputStream> body, String contentType, Execution root) {
         response.setHeader(HttpHeader.ETAG, etag);
         if (root != null) setCacheHeaders(response, root);
         if (ResponseETag.matches(req.getHeader(HttpHeader.IF_NONE_MATCH), etag)) {
             response.setStatusCode(HttpStatusCode.NOT_MODIFIED.getStatusCode());
             return;
         }
-        response.setContent(new ByteArrayInputStream(body));
+        response.setContent(body.get());
         response.setStatusCode(HttpStatusCode.OK.getStatusCode());
         response.setHeader(HttpHeader.CONTENT_TYPE, contentType);
     }

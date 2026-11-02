@@ -37,7 +37,7 @@ extraInitContainers: []
 extraVolumes: []
 extraVolumeMounts: []
 
-# Sets -XX:MaxRAMPercentage. Result sets are held in memory, so raise memory together with jdbcodata.odata.max-rows.
+# Sets -XX:MaxRAMPercentage. Result rows are held in memory, so raise memory together with jdbcodata.odata.max-rows.
 heapPercent: 75
 resources:
   requests:
