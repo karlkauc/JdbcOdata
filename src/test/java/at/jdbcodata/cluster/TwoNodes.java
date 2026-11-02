@@ -51,6 +51,16 @@ final class TwoNodes {
                     HttpResponse.BodyHandlers.ofString());
         }
 
+        /** Starts an asynchronous request and returns the path of its status monitor. */
+        String startAsync(String path, String user, String password) throws IOException, InterruptedException {
+            String basic = Base64.getEncoder().encodeToString((user + ":" + password).getBytes());
+            HttpResponse<String> accepted = CLIENT.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                    .header("Authorization", "Basic " + basic).header("Prefer", "respond-async").build(),
+                    HttpResponse.BodyHandlers.ofString());
+            assertThat(accepted.statusCode()).isEqualTo(202);
+            return URI.create(accepted.headers().firstValue("Location").orElseThrow()).getPath();
+        }
+
         /** Signs in through the login form, like a browser, and returns the session cookie. */
         String signIn(String user, String password) throws IOException, InterruptedException {
             HttpResponse<String> form = page("/login", null);

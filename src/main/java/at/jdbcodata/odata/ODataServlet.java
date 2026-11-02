@@ -242,9 +242,9 @@ public class ODataServlet extends HttpServlet {
                         processor.init(odata, metadata);
                         processor.readSpecial(request, response, uriInfo);
                     } catch (UriParserException | UriValidationException e) {
-                        return jsonError(400, e.getMessage());
+                        return AsyncRequests.Result.error(400, e.getMessage());
                     } catch (ODataApplicationException e) {
-                        return jsonError(e.getStatusCode(), e.getMessage());
+                        return AsyncRequests.Result.error(e.getStatusCode(), e.getMessage());
                     }
                 } else {
                     ODataHttpHandler handler = odata.createHandler(metadata);
@@ -288,31 +288,18 @@ public class ODataServlet extends HttpServlet {
             writeJsonError(resp, 405, "Only GET and DELETE on a status monitor");
             return;
         }
-        AsyncRequests.Job job = support.asyncRequests().find(id, caller);
-        if (job == null) {
+        AsyncRequests.Status status = support.asyncRequests().find(id, caller);
+        if (status == null) {
             writeJsonError(resp, 404, "Unknown or expired asynchronous request");
             return;
         }
-        if (!job.future().isDone()) {
+        if (status.result() == null) {
             resp.setStatus(202);
             resp.setHeader("Location", req.getRequestURL().toString());
             resp.setHeader("Retry-After", "1");
             return;
         }
-        AsyncRequests.Result result;
-        try {
-            result = job.future().get();
-        } catch (java.util.concurrent.CancellationException e) {
-            writeJsonError(resp, 404, "The asynchronous request was cancelled");
-            return;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            writeJsonError(resp, 500, "Internal server error");
-            return;
-        } catch (java.util.concurrent.ExecutionException e) {
-            log.error("Asynchronous OData request {} failed", id, e.getCause());
-            result = jsonError(500, "Internal server error");
-        }
+        AsyncRequests.Result result = status.result();
         StringBuilder head = new StringBuilder("HTTP/1.1 ").append(result.status()).append(' ')
                 .append(reason(result.status())).append("\r\n");
         result.headers().forEach((name, values) -> values.forEach(v -> head.append(name).append(": ").append(v).append("\r\n")));
@@ -327,12 +314,6 @@ public class ODataServlet extends HttpServlet {
     private static String reason(int status) {
         org.apache.olingo.commons.api.http.HttpStatusCode code = org.apache.olingo.commons.api.http.HttpStatusCode.fromStatusCode(status);
         return code == null ? "" : code.getInfo();
-    }
-
-    private static AsyncRequests.Result jsonError(int status, String message) {
-        String body = "{\"error\":{\"code\":\"" + status + "\",\"message\":\"" + String.valueOf(message).replace("\"", "'") + "\"}}";
-        return new AsyncRequests.Result(status, java.util.Map.of("Content-Type", List.of("application/json")),
-                body.getBytes(StandardCharsets.UTF_8));
     }
 
     private static void write(HttpServletResponse resp, AsyncRequests.Result result) throws IOException {

@@ -86,7 +86,7 @@ separate.
 ### Cached results are not encrypted
 
 Result cache rows are stored compressed, but **not encrypted**, in the metadata database. Anyone with access to it can read cached data. Leave the cache off for sensitive queries, or protect the
-metadata database accordingly.
+metadata database accordingly. Results of asynchronous requests are different: any client can ask for them, so they are encrypted with the master key and deleted after one hour.
 
 ### Further points
 
