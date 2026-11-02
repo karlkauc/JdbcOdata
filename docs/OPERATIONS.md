@@ -133,6 +133,15 @@ Abstimmung bräuchte bei jeder Anfrage einen Zugriff auf die Metadaten-DB. Beim 
 Beispiel: Eine Datenquelle verträgt 12 parallele Abfragen, es laufen 3 Instanzen. Dann ist `maxConcurrent: 4` richtig.
 Fällt eine Instanz aus, sinkt die Kapazität auf 8. Das Limit steigt dabei nicht von selbst.
 
+## Kubernetes
+
+Das Helm-Chart liegt in `deploy/helm/jdbcodata`, alle Einstellungen stehen in `values.yaml`. Es verlangt ein selbst
+angelegtes Secret (`existingSecret`) mit `JDBCODATA_MASTER_KEY`, `JDBCODATA_ADMIN_PASSWORD` und
+`JDBCODATA_META_PASSWORD` sowie eine PostgreSQL-URL (`metadata.url`). PostgreSQL gehört nicht zum Chart, weil dessen
+Backup und Failover die Verfügbarkeit bestimmen. Standard sind 2 Replikas mit PodDisruptionBudget, ohne Root, mit
+schreibgeschütztem Dateisystem. Optional: Ingress, ServiceMonitor, Alert-Regeln und Grafana-Dashboard. Anleitung und
+Oracle-Treiber per Init-Container: Website, *Operations → Kubernetes*.
+
 ## Backup und Wiederherstellung
 
 Sichern: Metadaten-DB, `config/`, `certs/` und `data/master.key` (ohne den Master-Key sind hinterlegte

@@ -1,0 +1,154 @@
+{{- $secret := required "existingSecret is required: a Secret with JDBCODATA_MASTER_KEY, JDBCODATA_ADMIN_PASSWORD and JDBCODATA_META_PASSWORD" .Values.existingSecret -}}
+{{- $url := required "metadata.url is required: jdbc:postgresql://host:5432/jdbcodata" .Values.metadata.url -}}
+{{- if not (hasPrefix "jdbc:postgresql:" $url) -}}
+{{- fail "metadata.url must be PostgreSQL: with H2 every replica would have a database of its own" -}}
+{{- end -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jdbcodata.fullname" . }}
+  labels:
+    {{- include "jdbcodata.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "jdbcodata.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jdbcodata.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 90
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100           # user app of the image
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.extraInitContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: jdbcodata
+          image: {{ include "jdbcodata.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          envFrom:
+            - secretRef:
+                name: {{ $secret }}
+          env:
+            - name: JDBCODATA_META_URL
+              value: {{ $url | quote }}
+            - name: JDBCODATA_META_USERNAME
+              value: {{ .Values.metadata.username | quote }}
+            - name: JDBCODATA_ADMIN_USER
+              value: {{ .Values.admin.user | quote }}
+            - name: JDBCODATA_SECURITY_ALLOW_PLAIN_HTTP
+              value: "true"      # TLS ends at the ingress
+            - name: SERVER_FORWARD_HEADERS_STRATEGY
+              value: native      # honours X-Forwarded-* from internal addresses only
+            - name: SERVER_SHUTDOWN
+              value: graceful
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage={{ .Values.heapPercent }}
+            {{- if .Values.seed }}
+            - name: JDBCODATA_SEED_FILE
+              value: /app/config/seed.yml
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          startupProbe:          # migrations and waiting for the startup work of other replicas
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          lifecycle:
+            preStop:             # the endpoint has to disappear from the service before the server stops accepting
+              exec:
+                command: ["sleep", "10"]
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: tmp
+              mountPath: /tmp
+            {{- if or .Values.config .Values.seed }}
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if or .Values.config .Values.seed }}
+        - name: config
+          configMap:
+            name: {{ include "jdbcodata.fullname" . }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if .Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "jdbcodata.selectorLabels" . | nindent 14 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,23 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "jdbcodata.fullname" . }}
+  labels:
+    {{- include "jdbcodata.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "jdbcodata.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      authorization:
+        credentials:
+          name: {{ .Values.existingSecret }}
+          key: JDBCODATA_SECURITY_METRICS_TOKEN
+{{- end }}

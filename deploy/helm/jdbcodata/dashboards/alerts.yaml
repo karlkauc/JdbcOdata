@@ -1,0 +1,54 @@
+groups:
+  - name: jdbcodata
+    rules:
+      - alert: JdbcOdataReplicaDown
+        expr: up{job=~".*jdbcodata.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Replica {{ $labels.instance }} does not answer
+      - alert: JdbcOdataHighErrorRate
+        expr: |
+          sum(rate(jdbcodata_executions_total{status=~"ERROR|DB_ERROR|TIMEOUT"}[5m]))
+            / sum(rate(jdbcodata_executions_total[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 5 % of the query executions fail
+      - alert: JdbcOdataConnectionsWaiting
+        expr: min_over_time(jdbcodata_pool_connections_pending[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Requests on {{ $labels.instance }} wait for connections for 10 minutes; poolSize is too small
+      - alert: JdbcOdataResponseBudgetExhausted
+        expr: jdbcodata_response_rows_reserved / jdbcodata_response_rows_budget > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: The response budget of {{ $labels.instance }} is nearly used up; clients will get 503
+      - alert: JdbcOdataHeapNearlyFull
+        expr: |
+          sum by (instance) (jvm_memory_used_bytes{area="heap"})
+            / sum by (instance) (jvm_memory_max_bytes{area="heap"}) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: The heap of {{ $labels.instance }} is more than 90 % full
+      - alert: JdbcOdataLoginAttack
+        expr: sum(rate(jdbcodata_ratelimit_rejected_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Many logins are rejected after too many failures
+      - alert: JdbcOdataExecutionLogDropped
+        expr: increase(jdbcodata_executionlog_dropped_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: Execution log records are being lost
