@@ -20,6 +20,7 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -201,7 +202,14 @@ public class ResultCache {
      */
     @Scheduled(fixedDelayString = "${jdbcodata.cluster.poll-interval-ms:5000}")
     public void followOtherInstances() {
-        long current = generation.current();
+        long current;
+        try {
+            current = generation.current();
+        } catch (DataAccessException e) {
+            // the next run compares with the last value it saw, so nothing that happens meanwhile is missed
+            log.warn("Cannot read the cache generation from the metadata DB: {}", e.getMessage());
+            return;
+        }
         if (seenGeneration != null && seenGeneration != current) {
             memory.invalidateAll();
         }
