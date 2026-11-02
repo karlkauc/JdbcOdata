@@ -29,6 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ### Fixed
 
+- Instances starting at the same time on an empty metadata database could fail on unique constraints while creating the
+  first admin or applying the seed. Startup work now runs on one instance at a time
 - With several instances, cache invalidations and datasource changes did not reach the other instances: they kept
   answering from memory until the entry expired, and kept using connection pools for the old database. Invalidations now
   arrive within `jdbcodata.cluster.poll-interval-ms`, datasource changes at once
