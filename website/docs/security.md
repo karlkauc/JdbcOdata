@@ -83,6 +83,12 @@ reporting accounts without a lockout policy.
 Without `JDBCODATA_MASTER_KEY`, `data/master.key` lies next to the H2 metadata database, so a copy of `data/` contains both ciphertext and key. Set the key from a secret store and keep backups
 separate.
 
+### Secrets from files
+
+Any `JDBCODATA_*` or `SPRING_*` variable can be read from a file by adding `_FILE`, for example `JDBCODATA_MASTER_KEY_FILE=/run/secrets/master_key`. This suits Docker secrets, Kubernetes and Vault Agent, and keeps the secret out of the process environment. Trailing line breaks are ignored. The service refuses to start when the variable and its `_FILE` form are both set, or when the file is missing. `JDBCODATA_SEED_FILE` is a setting of its own and stays a path.
+
+For a directory with several secrets, use `SPRING_CONFIG_IMPORT=optional:configtree:/run/secrets/`. The file name is then the property name, for example `jdbcodata.master-key`.
+
 ### Cached results are not encrypted
 
 Result cache rows are stored compressed, but **not encrypted**, in the metadata database. Anyone with access to it can read cached data. Leave the cache off for sensitive queries, or protect the
