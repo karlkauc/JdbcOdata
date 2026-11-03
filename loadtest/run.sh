@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Starts PostgreSQL with 100,000 rows and the built JAR, then lets k6 run 50 parallel refreshes with and without the
-# result cache while the heap is sampled. Usage: ./mvnw -q package -DskipTests && loadtest/run.sh [heap] [clients]
+# Starts PostgreSQL with 1,000,000 rows and the built JAR, then lets k6 run parallel refreshes with and without the
+# result cache and a few large exports while heap and temporary files are sampled.
+# Usage: ./mvnw -q package -DskipTests && loadtest/run.sh [heap] [clients]
 set -euo pipefail
 
 HEAP=${1:-1g}
@@ -12,6 +13,11 @@ WORK=$(mktemp -d)
 BASE=http://localhost:$PORT
 ADMIN=admin:loadtest-admin-pw
 DB=jdbcodata-loadtest-db
+ROWS=${LOADTEST_ROWS:-1000000}
+# one per line: feed, result cache, rows, clients, refreshes per client
+SCENARIOS=${LOADTEST_SCENARIOS:-"Uncached false 100000 $CLIENTS 3
+Cached true 100000 $CLIENTS 3
+Export false $ROWS 5 1"}
 APP_PID=
 SAMPLER_PID=
 
@@ -33,7 +39,7 @@ until docker exec "$DB" psql -q -U load -d load -c 'select 1' >/dev/null 2>&1; d
 docker exec "$DB" psql -q -U load -d load -c "CREATE TABLE sales AS
   SELECT g AS id, 'Customer ' || (g % 500) AS customer, 'Region ' || (g % 7) AS region,
          (g % 9000) + 0.25 AS amount, TIMESTAMP '2025-01-01' + g * INTERVAL '1 minute' AS sold_at
-  FROM generate_series(1, 100000) g"
+  FROM generate_series(1, $ROWS) g"
 
 start_app() {
   rm -rf "$WORK/data"
@@ -52,19 +58,20 @@ stop_app() {
   APP_PID= SAMPLER_PID=
 }
 
-create() { # name cacheEnabled
+create() { # name cacheEnabled rows
   local ds id
-  ds=$(api "$BASE/api/v1/datasources" -d "{\"name\":\"load\",\"jdbcUrl\":\"jdbc:postgresql://localhost:$DB_PORT/load\",\"maxRows\":100000}" \
+  ds=$(api "$BASE/api/v1/datasources" -d "{\"name\":\"load\",\"jdbcUrl\":\"jdbc:postgresql://localhost:$DB_PORT/load\",\"maxRows\":$ROWS}" \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-  id=$(api "$BASE/api/v1/queries" -d "{\"name\":\"$1\",\"datasourceId\":\"$ds\",\"cacheEnabled\":$2,\"cacheTtlSec\":3600,\"sql\":\"SELECT id, customer, region, amount, sold_at FROM sales\"}" \
+  id=$(api "$BASE/api/v1/queries" -d "{\"name\":\"$1\",\"datasourceId\":\"$ds\",\"cacheEnabled\":$2,\"cacheTtlSec\":3600,\"sql\":\"SELECT id, customer, region, amount, sold_at FROM sales WHERE id <= $3\"}" \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
   api "$BASE/api/v1/queries/$id/snapshot" -d '{"username":"load","password":"load"}' >/dev/null
 }
 
-sample() {
+sample() { # heap and temporary response files in MB, once a second
   while kill -0 "$APP_PID" 2>/dev/null; do
-    curl -s -m 5 -u "$ADMIN" "$BASE/actuator/prometheus" \
-      | awk '/^jvm_memory_used_bytes.*area="heap"/ {s+=$NF} END {if (s) printf "%.0f\n", s/1048576}' >>"$WORK/heap-mb.txt"
+    curl -s -m 5 -u "$ADMIN" "$BASE/actuator/prometheus" >"$WORK/metrics.txt" || true
+    awk '/^jvm_memory_used_bytes.*area="heap"/ {s+=$NF} END {if (s) printf "%.0f\n", s/1048576}' "$WORK/metrics.txt" >>"$WORK/heap-mb.txt"
+    awk '/^jdbcodata_response_spool_bytes/ {printf "%.0f\n", $NF/1048576}' "$WORK/metrics.txt" >>"$WORK/spool-mb.txt"
     sleep 1
   done
 }
@@ -72,19 +79,20 @@ sample() {
 RESULTS=$ROOT/loadtest/results
 mkdir -p "$RESULTS"
 # one fresh service per scenario: an OutOfMemoryError in the first must not decide the second
-for scenario in "Uncached false" "Cached true"; do
-  read -r feed cache <<<"$scenario"
-  echo "Running $feed ..."
+while read -r feed cache rows clients iterations; do
+  [ -n "$feed" ] || continue
+  echo "Running $feed ($rows rows, $clients clients) ..."
   start_app
-  create "$feed" "$cache"
+  create "$feed" "$cache" "$rows"
   : >"$WORK/heap-mb.txt"
+  : >"$WORK/spool-mb.txt"
   sample &
   SAMPLER_PID=$!
   docker run --rm --network host -u "$(id -u)" -v "$ROOT/loadtest:/scripts:ro" -v "$RESULTS:/results" \
-    -e BASE="$BASE" -e FEED="$feed" -e LOGIN=load:load -e CLIENTS="$CLIENTS" grafana/k6:0.57.0 \
+    -e BASE="$BASE" -e FEED="$feed" -e LOGIN=load:load -e CLIENTS="$clients" -e ITERATIONS="$iterations" grafana/k6:0.57.0 \
     run --quiet /scripts/refresh.js >"$WORK/k6-$feed.log" 2>&1 || true
   [ -f "$RESULTS/$feed.json" ] || tail -5 "$WORK/k6-$feed.log"
-  python3 "$ROOT/loadtest/report.py" "$RESULTS/$feed.json" "$WORK/heap-mb.txt" "$feed" "$HEAP" "$CLIENTS"
+  python3 "$ROOT/loadtest/report.py" "$RESULTS/$feed.json" "$WORK/heap-mb.txt" "$WORK/spool-mb.txt" "$feed" "$HEAP" "$clients"
   echo "  OutOfMemoryError in the log: $(grep -c OutOfMemoryError "$WORK/app.log" || true)"
   stop_app
-done
+done <<<"$SCENARIOS"

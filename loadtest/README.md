@@ -1,8 +1,10 @@
 # Lasttest
 
-50 Clients rufen je dreimal denselben Feed mit 100 000 Zeilen ab (Teststrategie in `docs/PRD.md`). Jedes Szenario läuft
-in einem frischen Prozess, damit ein Speicherfehler im ersten das zweite nicht beeinflusst. Gebraucht werden Docker,
-Python 3, curl und ein gebautes JAR.
+50 Clients rufen je dreimal denselben Feed mit 100 000 Zeilen ab, einmal ohne und einmal mit Cache (Teststrategie in
+`docs/PRD.md`). Dazu exportieren 5 Clients gleichzeitig 1 000 000 Zeilen ohne Cache. Jedes Szenario läuft in einem
+frischen Prozess, damit ein Speicherfehler im ersten das nächste nicht beeinflusst. Gebraucht werden Docker, Python 3,
+curl und ein gebautes JAR. `LOADTEST_ROWS` ändert die Größe des Exports, `LOADTEST_SCENARIOS` die Szenarien (siehe
+`run.sh`).
 
 ```bash
 ./mvnw -q package -DskipTests
@@ -11,6 +13,34 @@ loadtest/run.sh 1g 50     # Heap-Limit, Clients
 
 Während der Messung sollte nichts anderes auf dem Rechner laufen. Ein `503` ist eine korrekte Antwort des Limits; als
 Fehler zählen nur andere Status. Rohdaten landen in `loadtest/results/`.
+
+## Ergebnis vom 2026-11-03: Streaming
+
+Gleicher Rechner und gleiche Einstellungen wie am 2026-11-01, Stand `74ba280` mit Spool-Datei (#49), Entities erst beim
+Schreiben (#50) und DB-Cursor (#51). Die Heap-Spitze ist der belegte Heap einschließlich Garbage, einmal pro Sekunde
+abgefragt; sie zeigt den Trend, nicht den Mindestbedarf. Temp-Dateien sind die Spool-Dateien aller Antworten zusammen.
+
+| Szenario | Heap | 200 | 503 | Fehler | Sekunden p95 | Heap-Spitze | 2026-11-01 mit Budget | Temp-Dateien |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| ohne Cache, 100 000 Zeilen, 50 Clients | 1 GB | 60 | 90 | 0 | 13,4 | 209 MB | 941 MB | 23 MB |
+| ohne Cache, 100 000 Zeilen, 50 Clients | 2 GB | 55 | 95 | 0 | 9,9 | 310 MB | 1866 MB | 23 MB |
+| mit Cache, 100 000 Zeilen, 50 Clients | 1 GB | 150 | 0 | 0 | 10,4 | 647 MB | 866 MB | 412 MB |
+| mit Cache, 100 000 Zeilen, 50 Clients | 2 GB | 150 | 0 | 0 | 10,9 | 740 MB | 2012 MB | 460 MB |
+| Export ohne Cache, 1 000 000 Zeilen, 5 Clients | 1 GB | 5 | 0 | 0 | 20,0 | 207 MB | nicht möglich | 248 MB |
+| Export ohne Cache, 1 000 000 Zeilen, 5 Clients | 2 GB | 5 | 0 | 0 | 19,3 | 222 MB | nicht möglich | 237 MB |
+
+Eine Antwort mit 100 000 Zeilen hat 11,7 MB, eine mit 1 000 000 Zeilen 119 MB. Kein `OutOfMemoryError`.
+
+- **Ohne Cache** sinkt die Heap-Spitze bei 1 GB von 941 auf 209 MB. Die Zeilen liegen nicht mehr im Heap. Der Anteil
+  der 503 bleibt, denn ihn bestimmt weiter `maxConcurrent` 10 mit zwei Wartesekunden.
+- **Mit Cache** liegt die Tabelle selbst im Heap. Die Spitze sinkt weniger deutlich, von 866 auf 647 MB, dafür
+  kommen 412 MB Temp-Dateien hinzu. Der Heap hängt hier vor allem an der Größe des Caches.
+- **Der Export** mit 1 Mio. Zeilen war vorher nicht möglich: `max-rows` begrenzte auf 100 000 Zeilen, und bei rund
+  1 KB pro Zeile im Heap hätte ein einzelner Export den Heap von 1 GB gesprengt. Jetzt laufen fünf gleichzeitig mit
+  rund 210 MB Heap-Spitze.
+- Die Antwortzeiten bleiben gleich, Streaming macht die Abrufe nicht schneller.
+- **Für die Dimensionierung:** Den Plattenplatz für `/tmp` setzt `spool-max-mb`, im Helm-Chart `tmpSizeLimit`. Bei 50
+  parallelen Cache-Treffern mit je 12 MB waren 460 MB belegt.
 
 ## Ergebnis vom 2026-11-01
 
