@@ -134,6 +134,23 @@ Abstimmung bräuchte bei jeder Anfrage einen Zugriff auf die Metadaten-DB. Beim 
 Beispiel: Eine Datenquelle verträgt 12 parallele Abfragen, es laufen 3 Instanzen. Dann ist `maxConcurrent: 4` richtig.
 Fällt eine Instanz aus, sinkt die Kapazität auf 8. Das Limit steigt dabei nicht von selbst.
 
+## Große Abrufe
+
+Ruft ein Client eine ganze Entity Set ohne Query-Optionen ab, die alle Zeilen als Objekte brauchen, bleiben die Zeilen
+in der Datenbank und laufen über die Temp-Datei zum Client. Das gilt nur, wenn zusätzlich der Cache der Query aus ist
+und weder Paging (`page-size`, `Prefer: odata.maxpagesize`) noch `$count=true` im Spiel sind: Beide brauchen die
+Ergebnisgröße, bevor die erste Zeile geschrieben wird. Alle anderen Abrufe laden das Ergebnis wie bisher in den Speicher.
+
+- **Limits:** `jdbcodata.odata.max-rows` und das Zeilenbudget gelten hier nicht. Es gelten `max_rows` der Datenquelle
+  (Default 500 000), das Limit der Query und `max-response-mb`. Wer eine harte Zeilengrenze braucht, setzt sie an der
+  Datenquelle oder Query.
+- **Slot und Verbindung** bleiben belegt, bis alle Zeilen in der Temp-Datei liegen. Der Versand zum Client belegt sie
+  nicht mehr.
+- **Zeitlimit:** Das Timeout von Datenquelle oder Query gilt für den ganzen Lesevorgang, sonst nur für einzelne
+  Aufrufe. Danach antwortet der Dienst mit `504`. Hängt PostgreSQL bei einem Fetch, trennt der Dienst die Verbindung;
+  die Datenbank kann die Abfrage dann noch zu Ende rechnen.
+- **Oracle:** Lange Lesevorgänge brauchen genug Undo (`ORA-01555`).
+
 ## Kubernetes
 
 Das Helm-Chart liegt in `deploy/helm/jdbcodata`, alle Einstellungen stehen in `values.yaml`. Es verlangt ein selbst

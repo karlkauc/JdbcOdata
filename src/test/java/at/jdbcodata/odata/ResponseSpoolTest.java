@@ -29,6 +29,27 @@ class ResponseSpoolTest {
     }
 
     @Test
+    void diskSpaceIsFreedOnlyWhenTheFileIsGone() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean fileLeft = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicReference<ResponseSpool> current = new java.util.concurrent.atomic.AtomicReference<>();
+        ResponseSpools watched = new ResponseSpools(4, 6) {
+            @Override
+            void releaseDisk(long bytes) {
+                fileLeft.set(Files.exists(current.get().file()));
+                super.releaseDisk(bytes);
+            }
+        };
+        ResponseSpool spool = watched.open();
+        current.set(spool);
+        spool.write(body(2 * MB));
+        spool.close();
+
+        spool.release();
+
+        assertThat(fileLeft).isFalse();
+    }
+
+    @Test
     void largeBodyGoesToAnEncryptedFileAndComesBackUnchanged() throws Exception {
         byte[] body = body(3 * MB);
         ResponseSpool spool = spools.open();

@@ -132,15 +132,16 @@ final class ResponseSpool extends OutputStream {
 
     /** Frees file and disk budget; a second call does nothing. */
     void release() {
-        limits.releaseDisk(reserved);
-        reserved = 0;
         memory.reset();
-        if (file == null) return;
         try {
             if (disk != null) disk.close();
-            Files.deleteIfExists(file);
+            if (file != null) Files.deleteIfExists(file);
         } catch (IOException e) {
             throw new UncheckedIOException("Cannot delete " + file, e);
+        } finally {
+            // the space counts as free only once the file is gone
+            limits.releaseDisk(reserved);
+            reserved = 0;
         }
     }
 }

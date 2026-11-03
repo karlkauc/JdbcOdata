@@ -45,6 +45,13 @@ public class QueryExecutor {
         return Math.max(limit, 1);
     }
 
+    /** The limit of a read through a {@link ResultCursor}: {@code odata.max-rows} protects the heap, which holds no rows here. */
+    public int cursorMaxRows(QueryDefinition q, Datasource ds) {
+        int limit = ds.maxRows();
+        if (q.maxRows() != null && q.maxRows() > 0) limit = Math.min(limit, q.maxRows());
+        return Math.max(limit, 1);
+    }
+
     public int effectiveTimeoutSec(QueryDefinition q, Datasource ds) {
         int timeout = ds.defaultTimeoutSec() > 0 ? ds.defaultTimeoutSec() : props.odata().defaultTimeoutSec();
         if (q.timeoutSec() != null && q.timeoutSec() > 0) timeout = Math.min(timeout, q.timeoutSec());
@@ -65,6 +72,43 @@ public class QueryExecutor {
     public ResultTable execute(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
                                Map<String, Object> params, int maxRows, int timeoutSec, SqlWrapper wrapper) {
         return run(query, ds, identity, params, maxRows, timeoutSec, true, wrapper, false);
+    }
+
+    /**
+     * Starts the query and leaves its rows in the database until they are read.
+     *
+     * @throws at.jdbcodata.datasource.DbAuthenticationException wrong credentials
+     * @throws at.jdbcodata.datasource.DbExecutionException      any other database error
+     */
+    public ResultCursor open(QueryDefinition query, Datasource ds, ExecutionIdentity identity, Map<String, Object> params,
+                             int maxRows, int timeoutSec) {
+        NamedParameterSql parsed = NamedParameterSql.parse(query.sqlText());
+        List<ParameterBinder.BoundValue> bound = ParameterBinder.order(parsed, query, params);
+        ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
+        ResultCursor cursor = new ResultCursor(query, ds, permit, maxRows, timeoutSec);
+        try {
+            Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(), identity.dbPassword());
+            cursor.connection = c;
+            try {
+                c.setReadOnly(true);
+            } catch (SQLException ignored) {
+                // some drivers do not support read-only connections; the SQL is a SELECT anyway
+            }
+            PreparedStatement ps = c.prepareStatement(parsed.jdbcSql());
+            cursor.watch(ps);
+            if (timeoutSec > 0) ps.setQueryTimeout(timeoutSec);
+            ps.setMaxRows(maxRows + 1);
+            ps.setFetchSize(Math.min(1000, maxRows + 1));
+            ParameterBinder.bind(ps, bound);
+            cursor.start(ps.executeQuery());
+            return cursor;
+        } catch (SQLException e) {
+            cursor.close();
+            throw DbErrorClassifier.translate(e, ds.name());
+        } catch (RuntimeException e) {
+            cursor.close();
+            throw e;
+        }
     }
 
     /** {@code SELECT COUNT(*)} of the wrapped query (push-down of $count). */
@@ -159,6 +203,20 @@ public class QueryExecutor {
     }
 
     static ResultTable read(ResultSet rs, int maxRows) throws SQLException {
+        List<ResultColumn> columns = columns(rs);
+        List<Object[]> rows = new ArrayList<>();
+        boolean truncated = false;
+        while (rs.next()) {
+            if (rows.size() >= maxRows) {
+                truncated = true;
+                break;
+            }
+            rows.add(row(rs, columns));
+        }
+        return new ResultTable(List.copyOf(columns), rows, truncated);
+    }
+
+    static List<ResultColumn> columns(ResultSet rs) throws SQLException {
         ResultSetMetaData md = rs.getMetaData();
         int n = md.getColumnCount();
         List<ResultColumn> columns = new ArrayList<>(n);
@@ -169,20 +227,15 @@ public class QueryExecutor {
                     precision, scale, md.isNullable(i) != ResultSetMetaData.columnNoNulls,
                     TypeMapper.map(md.getColumnType(i), md.getColumnTypeName(i), precision, scale)));
         }
-        List<Object[]> rows = new ArrayList<>();
-        boolean truncated = false;
-        while (rs.next()) {
-            if (rows.size() >= maxRows) {
-                truncated = true;
-                break;
-            }
-            Object[] row = new Object[n];
-            for (int i = 1; i <= n; i++) {
-                row[i - 1] = readValue(rs, i, columns.get(i - 1));
-            }
-            rows.add(row);
+        return columns;
+    }
+
+    static Object[] row(ResultSet rs, List<ResultColumn> columns) throws SQLException {
+        Object[] row = new Object[columns.size()];
+        for (int i = 1; i <= row.length; i++) {
+            row[i - 1] = readValue(rs, i, columns.get(i - 1));
         }
-        return new ResultTable(List.copyOf(columns), rows, truncated);
+        return row;
     }
 
     private static Object readValue(ResultSet rs, int i, ResultColumn column) throws SQLException {

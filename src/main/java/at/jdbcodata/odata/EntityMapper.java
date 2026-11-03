@@ -53,10 +53,13 @@ final class EntityMapper {
         }
 
         Entity entity(int r) {
-            Object[] row = table.rows().get(r);
+            return entity(table.rows().get(r), r + 1L);
+        }
+
+        /** A row that is not in the table, as read from a cursor; {@code rowId} counts from 1. */
+        Entity entity(Object[] row, long rowId) {
             Entity e = new Entity();
             e.setType(DynamicEdmProvider.typeName(q.name()).getFullQualifiedNameAsString());
-            long rowId = r + 1L;
             if (rowIdKey) {
                 e.addProperty(new Property("Edm.Int64", DynamicEdmProvider.ROW_ID, ValueType.PRIMITIVE, rowId));
             }
