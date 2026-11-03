@@ -4,6 +4,7 @@ import at.jdbcodata.datasource.ConcurrencyLimiter;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbErrorClassifier;
 import at.jdbcodata.datasource.DbExecutionException;
+import at.jdbcodata.stats.Tracing;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -27,6 +28,7 @@ public final class ResultCursor implements AutoCloseable {
     private final ConcurrencyLimiter.Permit permit;
     private final int maxRows;
     private final int timeoutSec;
+    private final Tracing.DbSpan span;
     Connection connection;
     private PreparedStatement statement;
     private ResultSet results;
@@ -37,13 +39,16 @@ public final class ResultCursor implements AutoCloseable {
     private volatile boolean closed;
     private long rows;
     private long dbNanos;
+    private RuntimeException failure;
 
-    ResultCursor(QueryDefinition query, Datasource ds, ConcurrencyLimiter.Permit permit, int maxRows, int timeoutSec) {
+    ResultCursor(QueryDefinition query, Datasource ds, ConcurrencyLimiter.Permit permit, int maxRows, int timeoutSec,
+                 Tracing.DbSpan span) {
         this.query = query;
         this.ds = ds;
         this.permit = permit;
         this.maxRows = maxRows;
         this.timeoutSec = timeoutSec;
+        this.span = span;
     }
 
     private static ScheduledThreadPoolExecutor deadlines() {
@@ -89,6 +94,7 @@ public final class ResultCursor implements AutoCloseable {
 
     void start(ResultSet rs) throws SQLException {
         results = rs;
+        span.event("executed");
         columns = List.copyOf(QueryExecutor.columns(rs));
         dbNanos = 0;
     }
@@ -104,6 +110,15 @@ public final class ResultCursor implements AutoCloseable {
      * @throws DbExecutionException    any database error, also the time limit
      */
     public Object[] next() {
+        try {
+            return read();
+        } catch (RuntimeException e) {
+            failure = e;
+            throw e;
+        }
+    }
+
+    private Object[] read() {
         long start = System.nanoTime();
         try {
             if (timedOut) throw timeout(null);
@@ -134,6 +149,13 @@ public final class ResultCursor implements AutoCloseable {
         return dbNanos / 1_000_000;
     }
 
+    /** Closes after a failed start and returns {@code e} for throwing. */
+    RuntimeException closeOnError(RuntimeException e) {
+        failure = e;
+        close();
+        return e;
+    }
+
     @Override
     public void close() {
         if (closed) return;
@@ -154,6 +176,8 @@ public final class ResultCursor implements AutoCloseable {
             }
         } finally {
             permit.close();
+            if (failure == null) span.end(rows);
+            else span.fail(failure);
         }
     }
 

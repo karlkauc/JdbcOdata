@@ -82,6 +82,12 @@ metrics:
     labels:
       grafana_dashboard: "1"
 
+# OpenTelemetry traces over OTLP/HTTP. Spans hold no SQL, parameter values or user names.
+tracing:
+  enabled: false
+  endpoint: ""             # e.g. http://otel-collector.observability:4318/v1/traces
+  sampling: 0.1            # share of requests that start a trace; a sampled traceparent from the caller is always kept
+
 podAnnotations: {}
 podLabels: {}
 nodeSelector: {}

@@ -176,6 +176,37 @@ Logs go to stdout, or to a file with `logging.file.name`. Each request has an ID
 Datasources with a technical account are checked every minute (`jdbcodata.health.interval-ms`, `0` turns it off). Others show the result of the last execution that
 reached the database.
 
+### Tracing (OpenTelemetry)
+
+Tracing is off until you set `management.tracing.export.enabled=true` and an OTLP endpoint. Spans go over OTLP/HTTP to
+a collector, Jaeger or Tempo:
+
+```bash
+MANAGEMENT_TRACING_EXPORT_ENABLED=true
+MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+MANAGEMENT_TRACING_SAMPLING_PROBABILITY=0.1   # share of requests that arrive without a trace of the caller
+```
+
+The standard variables `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_SERVICE_NAME` work too. In the Helm chart, the values
+are `tracing.enabled`, `tracing.endpoint` and `tracing.sampling`.
+
+- **One trace per request.** An OData read is named `http get /odata/<feed>`. Below it is one span per database
+  access (`cursor`, `query` or `count` with the query name). Its events `connected` and `executed` show whether the
+  time went into waiting for a slot and a connection, into the database, or into writing the response. Asynchronous
+  reads stay in the trace of the request that started them.
+- **Attributes.** The request span has `jdbcodata.query`, `jdbcodata.datasource`, `jdbcodata.status`,
+  `jdbcodata.cache`, `jdbcodata.rows` and `jdbcodata.bytes`. The database span has `db.system.name` and
+  `db.response.returned_rows`.
+- **No data.** Spans contain no SQL, no parameter or filter values, no keys from the path (`/odata/Customers('Miller')`
+  becomes `/odata/Customers`), no user names and no error texts of the database. On an error, only its kind is in
+  `error.type`, for example `timeout`.
+- **Left out.** Health checks, Prometheus scrapes and background jobs create no traces. With tracing on, the HTTP
+  metrics of `/actuator` are therefore missing too.
+- **Logs.** Log lines of a traced request carry the trace ID after the request ID (`trace=…`). Logs are not sent over
+  OTLP, because they contain user names and database errors.
+- **Sampling.** A `traceparent` from the caller with the sampled flag set is always followed. Excel and Power BI send
+  none, so `sampling` decides for them.
+
 ### Datasource outage
 
 After five connection failures in a row, the instance stops trying and answers `503` with `Retry-After` at once, instead of letting every request wait 15 seconds. After 30 seconds, a single request tries again. This applies per instance and per datasource, and the datasources page shows the datasource as unreachable.

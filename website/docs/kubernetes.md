@@ -101,3 +101,5 @@ The ServiceMonitor needs `JDBCODATA_SECURITY_METRICS_TOKEN` in the Secret (at le
 | `metrics.dashboard.enabled` | ConfigMap with a Grafana dashboard for the Grafana sidecar |
 
 Without the operator, use `deploy/helm/jdbcodata/dashboards/alerts.yaml` and `jdbcodata.json` directly.
+
+For traces, set `tracing.enabled=true` and `tracing.endpoint` to the OTLP/HTTP endpoint of your collector, for example `http://otel-collector.observability:4318/v1/traces`. `tracing.sampling` (default `0.1`) is the share of requests that start a trace. The service name is the release name. What the spans contain is in [Tracing](operations.md#tracing-opentelemetry).

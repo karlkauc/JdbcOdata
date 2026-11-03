@@ -7,6 +7,7 @@ import at.jdbcodata.datasource.DbErrorClassifier;
 import at.jdbcodata.datasource.IdentityPoolManager;
 import at.jdbcodata.datasource.SessionSettings;
 import at.jdbcodata.identity.ExecutionIdentity;
+import at.jdbcodata.stats.Tracing;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.sql.Connection;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /** Runs a query under a given database identity and materialises the result. */
@@ -32,11 +34,18 @@ public class QueryExecutor {
     private final IdentityPoolManager pools;
     private final ConcurrencyLimiter limiter;
     private final JdbcOdataProperties props;
+    private final Tracing tracing;
 
     public QueryExecutor(IdentityPoolManager pools, ConcurrencyLimiter limiter, JdbcOdataProperties props) {
+        this(pools, limiter, props, Tracing.OFF);
+    }
+
+    @Autowired
+    public QueryExecutor(IdentityPoolManager pools, ConcurrencyLimiter limiter, JdbcOdataProperties props, Tracing tracing) {
         this.pools = pools;
         this.limiter = limiter;
         this.props = props;
+        this.tracing = tracing;
     }
 
     public int effectiveMaxRows(QueryDefinition q, Datasource ds) {
@@ -84,10 +93,18 @@ public class QueryExecutor {
                              int maxRows, int timeoutSec) {
         NamedParameterSql parsed = NamedParameterSql.parse(query.sqlText());
         List<ParameterBinder.BoundValue> bound = ParameterBinder.order(parsed, query, params);
-        ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
-        ResultCursor cursor = new ResultCursor(query, ds, permit, maxRows, timeoutSec);
+        Tracing.DbSpan span = tracing.db("cursor", query, ds);
+        ConcurrencyLimiter.Permit permit;
+        try {
+            permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
+        } catch (RuntimeException e) {
+            span.fail(e);
+            throw e;
+        }
+        ResultCursor cursor = new ResultCursor(query, ds, permit, maxRows, timeoutSec, span);
         try {
             Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(), identity.dbPassword());
+            span.event("connected");
             cursor.connection = c;
             try {
                 c.setReadOnly(true);
@@ -103,11 +120,9 @@ public class QueryExecutor {
             cursor.start(ps.executeQuery());
             return cursor;
         } catch (SQLException e) {
-            cursor.close();
-            throw DbErrorClassifier.translate(e, ds.name());
+            throw cursor.closeOnError(DbErrorClassifier.translate(e, ds.name()));
         } catch (RuntimeException e) {
-            cursor.close();
-            throw e;
+            throw cursor.closeOnError(e);
         }
     }
 
@@ -137,6 +152,20 @@ public class QueryExecutor {
     private ResultTable run(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
                             Map<String, Object> params, int maxRows, int timeoutSec, boolean failOnTruncation,
                             SqlWrapper wrapper, boolean countOnly) {
+        Tracing.DbSpan span = tracing.db(countOnly ? "count" : "query", query, ds);
+        try {
+            ResultTable table = run(query, ds, identity, params, maxRows, timeoutSec, failOnTruncation, wrapper, countOnly, span);
+            span.end(table.rows().size());
+            return table;
+        } catch (RuntimeException e) {
+            span.fail(e);
+            throw e;
+        }
+    }
+
+    private ResultTable run(QueryDefinition query, Datasource ds, ExecutionIdentity identity,
+                            Map<String, Object> params, int maxRows, int timeoutSec, boolean failOnTruncation,
+                            SqlWrapper wrapper, boolean countOnly, Tracing.DbSpan span) {
         NamedParameterSql parsed = NamedParameterSql.parse(query.sqlText());
         List<ParameterBinder.BoundValue> bound = ParameterBinder.order(parsed, query, params);
         String sql = wrapper == null ? parsed.jdbcSql() : countOnly ? wrapper.count(parsed.jdbcSql()) : wrapper.rows(parsed.jdbcSql());
@@ -145,6 +174,7 @@ public class QueryExecutor {
         try (ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
              Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(),
                      identity.dbPassword())) {
+            span.event("connected");
             try {
                 c.setReadOnly(true);
             } catch (SQLException ignored) {
@@ -157,6 +187,7 @@ public class QueryExecutor {
                 ParameterBinder.bind(ps, bound);
                 bindExtra(ps, bound.size(), extra);
                 try (ResultSet rs = ps.executeQuery()) {
+                    span.event("executed");
                     ResultTable table = read(rs, maxRows);
                     if (failOnTruncation && table.truncated()) {
                         throw new ResultTooLargeException(query.name(), maxRows);

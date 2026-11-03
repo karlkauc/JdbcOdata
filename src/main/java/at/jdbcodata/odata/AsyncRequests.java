@@ -1,6 +1,7 @@
 package at.jdbcodata.odata;
 
 import at.jdbcodata.common.RequestIdFilter;
+import io.opentelemetry.context.Context;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -110,13 +111,14 @@ public class AsyncRequests {
         }
     }
 
-    /** Log lines of the job keep the ID of the request that started it. */
+    /** Log lines and spans of the job keep the ID and the trace of the request that started it. */
     private static Callable<Result> withRequestId(Callable<Result> work) {
+        Callable<Result> traced = Context.current().wrap(work);
         String requestId = MDC.get(RequestIdFilter.MDC_KEY);
-        if (requestId == null) return work;
+        if (requestId == null) return traced;
         return () -> {
             try (MDC.MDCCloseable ignored = MDC.putCloseable(RequestIdFilter.MDC_KEY, requestId)) {
-                return work.call();
+                return traced.call();
             }
         };
     }
