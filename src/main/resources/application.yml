@@ -39,6 +39,16 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  tracing:                 # OpenTelemetry, see OPERATIONS.md; spans hold no SQL, parameter values or user names
+    export:
+      enabled: false       # true together with management.opentelemetry.tracing.export.otlp.endpoint,
+                           # e.g. http://otel-collector:4318/v1/traces, or OTEL_EXPORTER_OTLP_ENDPOINT
+    sampling:
+      probability: 0.1     # share of requests without a sampled traceparent that are traced
+  logging:
+    export:
+      otlp:
+        enabled: false     # log lines quote user names and database errors, they stay in the log
 
 jdbcodata:
   admin:
@@ -98,7 +108,7 @@ jdbcodata:
 
 logging:
   pattern:
-    correlation: "[%X{requestId:-}] "   # request ID in text logs; logging.structured.format.console=ecs adds it to JSON
+    correlation: "[%X{requestId:-}] %replace(%X{traceId:-}){'^(.+)$', 'trace=$1 '}"   # request ID and, with tracing, trace ID; structured logs (ecs) carry both
   level:
     at.jdbcodata: INFO
     com.zaxxer.hikari: WARN

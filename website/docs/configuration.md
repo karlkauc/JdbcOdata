@@ -21,6 +21,9 @@ Settings live in `config/application.yml` next to the JAR, or in environment var
 | `jdbcodata.security.metrics-token` | empty | Token for Prometheus, at least 32 characters, sent as `Authorization: Bearer …`. It opens `/actuator/prometheus` only. Empty: off |
 | `logging.file.name` | none | For example `logs/jdbcodata.log` |
 | `logging.structured.format.console` | none | JSON logs on stdout: `ecs`, `logstash` or `gelf`. For files use `logging.structured.format.file` |
+| `management.tracing.export.enabled` | `false` | OpenTelemetry traces, see [Tracing](operations.md#tracing-opentelemetry) |
+| `management.opentelemetry.tracing.export.otlp.endpoint` | none | OTLP/HTTP endpoint, for example `http://otel-collector:4318/v1/traces`. `OTEL_EXPORTER_OTLP_ENDPOINT` works too |
+| `management.tracing.sampling.probability` | `0.1` | Share of requests without a `traceparent` from the caller that get a trace |
 
 ## Admin and storage
 

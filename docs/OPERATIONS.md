@@ -183,6 +183,37 @@ Zeichen `A-Za-z0-9._-` besteht. Für JSON-Logs (z. B. für Elastic oder Loki) `l
 setzen, die Request-ID steht dann im Feld `requestId`. Spring Boot bietet außerdem `logstash` und `gelf`. Fehler bei Query-Ausführungen tragen
 eine Referenz (`ref 1a2b3c4d`), die auch der Client erhält.
 
+### Tracing (OpenTelemetry)
+
+Aus, bis `management.tracing.export.enabled=true` und ein OTLP-Endpunkt gesetzt sind. Die Spans gehen über OTLP/HTTP an
+einen Collector, an Jaeger oder an Tempo:
+
+```bash
+MANAGEMENT_TRACING_EXPORT_ENABLED=true
+MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+MANAGEMENT_TRACING_SAMPLING_PROBABILITY=0.1   # Anteil der Anfragen ohne Trace des Aufrufers
+```
+
+Die Standardvariablen `OTEL_EXPORTER_OTLP_ENDPOINT` und `OTEL_SERVICE_NAME` gelten ebenfalls. Im Helm-Chart heißen die
+Werte `tracing.enabled`, `tracing.endpoint` und `tracing.sampling`.
+
+- **Ein Trace pro Anfrage:** Ein OData-Abruf heißt `http get /odata/<Feed>`, darunter liegt ein Span pro
+  Datenbankzugriff (`cursor`, `query` oder `count` mit Query-Name). Die Ereignisse `connected` und `executed` zeigen,
+  ob die Zeit beim Warten auf Slot und Verbindung, in der Datenbank oder beim Schreiben verging. Asynchrone Abrufe
+  bleiben im Trace der Anfrage, die sie gestartet hat.
+- **Attribute:** Am Anfrage-Span stehen `jdbcodata.query`, `jdbcodata.datasource`, `jdbcodata.status`,
+  `jdbcodata.cache`, `jdbcodata.rows` und `jdbcodata.bytes`, am Datenbank-Span `db.system.name` und
+  `db.response.returned_rows`.
+- **Keine Daten:** Spans enthalten kein SQL, keine Parameter- oder Filterwerte, keine Schlüssel aus dem Pfad
+  (`/odata/Kunden('Müller')` wird zu `/odata/Kunden`), keine Nutzernamen und keine Fehlertexte der Datenbank. Bei einem
+  Fehler steht nur die Art in `error.type`, z. B. `timeout`.
+- **Weggelassen:** Health-Checks, Prometheus-Abrufe und Hintergrundjobs erzeugen keine Traces. Mit Tracing fehlen
+  deshalb auch die HTTP-Metriken von `/actuator`.
+- **Logs:** Log-Zeilen einer Anfrage mit Trace tragen nach der Request-ID die Trace-ID (`trace=…`). Logs selbst gehen nicht
+  über OTLP hinaus, weil sie Nutzernamen und Datenbankfehler enthalten.
+- **Sampling:** Ein `traceparent` des Aufrufers mit gesetztem Sampling-Flag wird immer übernommen. Excel und Power BI
+  senden keinen, dort entscheidet `sampling`.
+
 ### Ausfall einer Datenquelle
 
 Nach fünf Verbindungsfehlern in Folge versucht die Instanz keine Verbindung mehr und antwortet sofort mit `503` und

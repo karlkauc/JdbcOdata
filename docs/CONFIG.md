@@ -53,6 +53,9 @@ bildet `jdbcodata.cache.max-size-mb` auf `JDBCODATA_CACHE_MAX_SIZE_MB` ab, `serv
 | `server.servlet.session.cookie.same-site` | `lax` | SameSite des Admin-Session-Cookies (`SESSION`); `Secure` wird bei HTTPS automatisch gesetzt |
 | `logging.file.name` | – | z.B. `logs/jdbcodata.log` für Datei-Logging |
 | `logging.structured.format.console` | – | JSON-Logs auf stdout: `ecs`, `logstash` oder `gelf`; für Dateien `logging.structured.format.file` |
+| `management.tracing.export.enabled` | `false` | OpenTelemetry-Traces, siehe [Tracing](OPERATIONS.md#tracing-opentelemetry) |
+| `management.opentelemetry.tracing.export.otlp.endpoint` | – | OTLP/HTTP-Endpunkt, z. B. `http://otel-collector:4318/v1/traces`; alternativ `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| `management.tracing.sampling.probability` | `0.1` | Anteil der Anfragen ohne `traceparent` des Aufrufers, die einen Trace bekommen |
 
 Profile: `demo` legt eine lokale H2-Beispieldatenbank an, lädt `seed-demo.yml` und erlaubt Klartext-HTTP.
 

@@ -78,6 +78,16 @@ spec:
             - name: JDBCODATA_SEED_FILE
               value: /app/config/seed.yml
             {{- end }}
+            {{- if .Values.tracing.enabled }}
+            - name: MANAGEMENT_TRACING_EXPORT_ENABLED
+              value: "true"
+            - name: MANAGEMENT_TRACING_SAMPLING_PROBABILITY
+              value: {{ .Values.tracing.sampling | quote }}
+            - name: MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT
+              value: {{ required "tracing.endpoint is required with tracing.enabled" .Values.tracing.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ include "jdbcodata.fullname" . | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
