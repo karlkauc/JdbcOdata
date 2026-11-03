@@ -427,8 +427,8 @@ Alle Secrets (Master-Key, Admin-Passwort, Metadaten-DB-Passwort) über Env-Vars 
 | Thema | Ziel |
 |---|---|
 | Latenz Cache-Hit | < 200 ms bis zum ersten Byte bei 100 000 Zeilen |
-| Ergebnisgröße | bis 100 000 Zeilen (Standard, konfigurierbar), darüber Fehler mit Hinweis. Eine Grenze in Byte gibt es noch nicht (NFR-13, O-15) |
-| Speicher | Ergebnisse werden im Service vollständig im Speicher gehalten. `ResponseBudget` begrenzt die gleichzeitig entstehenden Antworten in Zeilen, auch bei Cache-Treffern, die `ConcurrencyLimiter` nicht erreicht; Heap, `max-rows` und Budget gemeinsam dimensionieren |
+| Ergebnisgröße | bis 100 000 Zeilen im Speicher (Standard, konfigurierbar) und 256 MB pro Antwort, darüber `413` mit Hinweis. Ganze Abrufe ohne Cache begrenzt das Limit der Datenquelle (NFR-13) |
+| Speicher | Ganze Abrufe ohne Cache, Paging und `$count` lesen über einen DB-Cursor in eine Spool-Datei und brauchen kaum Heap. Alle anderen Ergebnisse liegen im Service vollständig im Speicher, Antworttexte über 1 MB in der Spool-Datei. `ResponseBudget` begrenzt die gleichzeitig entstehenden Antworten in Zeilen, auch bei Cache-Treffern, die `ConcurrencyLimiter` nicht erreicht; Heap, `max-rows` und Budget gemeinsam dimensionieren |
 | Parallelität | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503 Retry-After` |
 | Verfügbarkeit | Stateless bis auf Metadaten-DB; mehrere Instanzen hinter Proxy mit PostgreSQL |
 | Logging | Strukturiert (JSON optional), nie Passwörter oder SQL mit Parameterwerten |

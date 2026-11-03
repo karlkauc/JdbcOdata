@@ -122,7 +122,8 @@ spec:
         - name: data
           emptyDir: {}
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: {{ .Values.tmpSizeLimit }}
         {{- if or .Values.config .Values.seed }}
         - name: config
           configMap:

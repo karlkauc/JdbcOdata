@@ -48,7 +48,9 @@ config:
       max-rows: 50000
 ```
 
-Result sets are held in memory, so raise `resources.limits.memory` together with `max-rows`. The heap is `heapPercent` of the memory limit.
+Most result sets are held in memory, so raise `resources.limits.memory` together with `max-rows`. The heap is `heapPercent` of the memory limit.
+
+Response bodies over 1 MB wait in `/tmp` until they are sent, up to `spool-max-mb` (2048 MB) for all responses together. `/tmp` is an `emptyDir` limited by `tmpSizeLimit` (default `3Gi`). Keep it above `spool-max-mb`, because Kubernetes evicts the pod when `/tmp` grows beyond the limit.
 
 For single sign-on, set the OIDC settings under `config` and pass the client secret through `extraEnv` with a `secretKeyRef`.
 

@@ -188,7 +188,7 @@ Priorität: **MUST** (Phase 1 zwingend), **SHOULD** (Phase 1 angestrebt), **COUL
 | NFR-10 | Performance | Cache-Hit: Time-to-first-byte < 200 ms bei 100 000 Zeilen auf Referenz-Hardware (4 vCPU, 4 GB RAM). | SHOULD |
 | NFR-11 | Performance | Ergebnisse werden gestreamt; Speicherbedarf pro Request ist unabhängig von der Zeilenzahl bis zum Cache-Limit. | MUST |
 | NFR-12 | Performance | Pro Datenquelle konfigurierbares Limit gleichzeitiger DB-Ausführungen; darüber `503` mit `Retry-After`. | MUST |
-| NFR-13 | Performance | Ergebnisgrenze Default 100 000 Zeilen / 256 MB pro Abruf, konfigurierbar. | MUST |
+| NFR-13 | Performance | Ergebnisgrenze Default 100 000 Zeilen / 256 MB pro Abruf, konfigurierbar. Ganze Abrufe ohne Cache, die in der Datenbank bleiben, begrenzt statt der 100 000 Zeilen das Limit der Datenquelle. | MUST |
 | NFR-20 | Kompatibilität | Excel 365 (Windows) „Aus OData-Feed“; PowerBI Desktop und PowerBI Service über On-Premises Data Gateway mit Basic Auth (im Gateway nur Service-User, siehe FR-32a). | MUST |
 | NFR-21 | Kompatibilität | Oracle 19c+, PostgreSQL 13+, MySQL 8+ / MariaDB 10.6+. | MUST |
 | NFR-30 | Portabilität | Läuft auf Linux (x86_64, glibc) und Windows 10/11 bzw. Server 2019+ mit Java 21; ein identisches JAR. | MUST |
@@ -212,7 +212,7 @@ Alle Tabellen in der Metadaten-DB; IDs sind UUIDs; Zeitstempel in UTC.
 `id, name (unique), description, jdbc_url, driver_class, jdbc_properties (json), timezone, default_timeout_sec, max_rows, max_concurrent, pool_size, enabled, created_at, updated_at`
 
 **query_definition**
-`id, name (unique), description, datasource_id (FK), sql_text, execution_mode (CALLER|FIXED), fixed_credential_id (FK, nullable), cache_enabled, cache_ttl_sec, cache_max_rows, timeout_sec, max_rows, key_mode (ROWID|COLUMNS), version, enabled, created_by, created_at, updated_by, updated_at`
+`id, name (unique), description, datasource_id (FK), sql_text, execution_mode (CALLER|FIXED), fixed_credential_id (FK, nullable), cache_enabled, cache_ttl_sec, timeout_sec, max_rows, key_mode (ROWID|COLUMNS), version, enabled, created_by, created_at, updated_by, updated_at`
 
 **query_version**
 `id, query_id (FK), version, sql_text, parameters (json), columns (json), changed_by, changed_at, comment`
@@ -396,7 +396,7 @@ Payload-Skizze Query (POST/PUT):
 | O-12 | Ohne konfigurierten Master-Key wird beim ersten Start eine Key-Datei unter `data/master.key` erzeugt | Verlust der Datei macht hinterlegte Credentials unlesbar | Für Produktion `JDBCODATA_MASTER_KEY` setzen oder die Datei sichern; Hinweis in Einstellungen und Log |
 | O-13 | Tagesaggregate (`execution_daily`, FR-55) sind noch nicht umgesetzt; Statistiken rechnen direkt auf `execution_log` | Bei sehr vielen Datensätzen langsamere Statistik-Seite | Mit Retention von 90 Tagen unkritisch; Aggregate in Phase 2 |
 | O-14 | Lasttest mit 50 parallelen Excel-Refreshes (Teststrategie §10) | Fand einen Speicherfehler bei Cache-Treffern | **Erledigt:** Skripte und Messwerte in `loadtest/`, Fehler mit `ResponseBudget` behoben |
-| O-15 | NFR-11 (Streaming) und die Byte-Grenze aus NFR-13 sind nicht umgesetzt: Ergebnisse liegen vollständig im Speicher | Heap begrenzt große und parallele Abrufe | Stufe 2 der Enterprise-Roadmap |
+| O-15 | NFR-11 (Streaming) und die Byte-Grenze aus NFR-13 waren nicht umgesetzt: Ergebnisse lagen vollständig im Speicher | Heap begrenzt große und parallele Abrufe | **Weitgehend erledigt:** Byte-Grenze und Spool-Datei; ganze Abrufe ohne Cache lesen über einen DB-Cursor, mit Cache entstehen Entities erst beim Schreiben. Messwerte vom 2026-11-03 in `loadtest/`. Offen: Abrufe mit `$filter`, `$orderby`, `$expand`, `$apply` oder Paging ohne Cache laden das Ergebnis weiter in den Speicher, ebenso Antworten von Async und `$batch` |
 
 ## 13. Glossar
 

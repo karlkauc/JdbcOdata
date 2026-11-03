@@ -37,6 +37,10 @@ extraInitContainers: []
 extraVolumes: []
 extraVolumeMounts: []
 
+# Size of /tmp. Response bodies over 1 MB wait there until they are sent, up to jdbcodata.odata.spool-max-mb (2048 MB)
+# for all responses together. Keep it above that value; Kubernetes evicts the pod when /tmp grows beyond the limit.
+tmpSizeLimit: 3Gi
+
 # Sets -XX:MaxRAMPercentage. Most result rows are held in memory, so raise memory together with jdbcodata.odata.max-rows.
 heapPercent: 75
 resources:
