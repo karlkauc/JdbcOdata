@@ -49,6 +49,10 @@ management:
     export:
       otlp:
         enabled: false     # log lines quote user names and database errors, they stay in the log
+  otlp:
+    metrics:
+      export:
+        enabled: false     # metrics are scraped from /actuator/prometheus; on, it pushes to localhost:4318 every minute
 
 jdbcodata:
   admin:

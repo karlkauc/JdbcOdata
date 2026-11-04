@@ -62,6 +62,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   the heap. **On this path `jdbcodata.odata.max-rows` no longer applies**; the limits are `max_rows` of the datasource
   (default 500,000), the limit of the query and `max-response-mb`. The query timeout now covers the whole read, not
   only its start, so a read that took longer than the timeout (default 60 s) now ends with 504
+- The Docker image applies current Alpine package updates when it is built, so a fix does not wait for a new
+  Temurin base image
 
 ### Fixed
 
