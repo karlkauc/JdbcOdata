@@ -2,6 +2,7 @@ package at.jdbcodata.stats;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.registry.otlp.OtlpMeterRegistry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.StatusCode;
@@ -25,6 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -63,6 +65,8 @@ class TracingIT {
     private int port;
     @Autowired
     InMemorySpanExporter exporter;
+    @Autowired
+    ApplicationContext context;
 
     private final HttpClient client = HttpClient.newHttpClient();
     private final JsonMapper json = JsonMapper.builder().build();
@@ -113,8 +117,16 @@ class TracingIT {
         await(s -> s.getName().equals("http get /odata/Traced"));
         Thread.sleep(200);
 
-        assertThat(exporter.getFinishedSpanItems()).as("only the read").extracting(SpanData::getTraceId).containsOnly(
-                exporter.getFinishedSpanItems().stream().filter(s -> s.getName().equals("http get /odata/Traced")).findFirst().orElseThrow().getTraceId());
+        // every trace belongs to a read; spans of the previous test may still arrive after the reset
+        List<SpanData> spans = exporter.getFinishedSpanItems();
+        List<String> reads = spans.stream().filter(s -> s.getName().startsWith("http get /odata/")).map(SpanData::getTraceId).toList();
+        assertThat(spans).as("only reads").extracting(SpanData::getTraceId).allMatch(reads::contains);
+    }
+
+    /** Tracing on does not push metrics: without a receiver that is a stack trace in the log every minute. */
+    @Test
+    void metricsAreNotPushedOverOtlp() {
+        assertThat(context.getBeanNamesForType(OtlpMeterRegistry.class)).isEmpty();
     }
 
     @Test

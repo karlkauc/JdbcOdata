@@ -41,7 +41,7 @@ java -jar target/jdbcodata.jar --spring.profiles.active=demo
 cat data/initial-admin-password    # beim ersten Start erzeugtes Admin-Passwort
 ```
 
-`./mvnw package` erzeugt zusätzlich `target/jdbcodata-1.0.0-dist.zip` mit Start-Skripten (`bin/jdbcodata.sh`,
+`./mvnw package` erzeugt zusätzlich `target/jdbcodata-<version>-dist.zip` mit Start-Skripten (`bin/jdbcodata.sh`,
 `bin\jdbcodata.cmd`), Beispielkonfiguration und Doku. Ohne das Demo-Profil verlangt der Service TLS
 (`server.ssl.*`) oder die Flag `jdbcodata.security.allow-plain-http=true`, siehe docs/OPERATIONS.md.
 
