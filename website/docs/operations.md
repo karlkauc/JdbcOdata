@@ -91,6 +91,8 @@ A complete example with Docker, Let's Encrypt and a sample PostgreSQL is in `dep
 
 Releases from 1.1.0 on are signed without a long-lived key: [cosign](https://docs.sigstore.dev/) records that the release workflow of this repository built them. Each release also carries an SBOM in CycloneDX format (`jdbcodata-sbom.json`).
 
+The image signature needs **cosign 3 or newer**: it is stored in the newer bundle format, and cosign 2 reports `no signatures found`. The file signature also verifies with cosign 2.
+
 ```bash
 # files: download SHA256SUMS and SHA256SUMS.sigstore.json from the release, next to the JAR and ZIP
 cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
