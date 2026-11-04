@@ -365,7 +365,7 @@ Payload-Skizze Query (POST/PUT):
 | OData-Konformität | Service-Dokument, `$metadata`, Query-Optionen, Fehlerformat | Olingo-Client, Schema-Validierung des CSDL |
 | Sicherheit | Cache-Isolation zwischen Usern, `404` für nicht freigegebene Queries, keine Secrets in Logs, Rate-Limit | Integrationstests + Log-Assertions |
 | Last | 50 parallele Excel-Refreshes auf gecachte Query mit 100 000 Zeilen; Concurrency-Limit greift | Gatling oder k6 |
-| Abnahme (manuell) | UC-01 bis UC-13 in Excel 365 und PowerBI Desktop; Scheduled Refresh über Gateway | Checkliste in `docs/ACCEPTANCE.md` |
+| Abnahme (manuell) | Use Cases in Excel 365 und PowerBI Desktop, Installation, Betrieb und Sicherheit; Scheduled Refresh über Gateway | Checkliste in `docs/ACCEPTANCE.md` |
 | Plattform | Build und Smoke-Test auf Linux und Windows (CI-Matrix), Docker-Image auf amd64/arm64 | GitHub Actions oder GitLab CI |
 
 ## 11. Umsetzungsphasen

@@ -3,7 +3,7 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/), versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [1.1.0] – unreleased
+## [1.1.0] – 2026-11-04
 
 ### Added
 
@@ -32,6 +32,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   is temporary too; a password from `jdbcodata.admin.password` is not. All local accounts can change their own password
 - API keys for machine clients: stored as a hash, with an expiry, and revocable at once. A key reads feeds as a service
   user or calls the REST API with a role. Excel uses it as password of the user `apikey`
+- `jdbcodata.security.require-datasource-tls` only allows datasource connections that verify the server certificate
+  (PostgreSQL and MariaDB/MySQL `verify-full` or `verify-ca`, Oracle `tcps`). It is checked on save, on the connection
+  test and when a pool opens, so datasources saved before it was turned on are covered too
+- Circuit breaker per datasource: after 5 failed connection attempts within 120 seconds a datasource answers 503 with
+  `Retry-After` for 30 seconds instead of blocking every request for the connection timeout. Wrong passwords, SQL
+  errors and full pools do not count. Shown as "unreachable" in the admin UI, with metric and alert rule
+- `jdbcodata.odata.max-response-mb` (default 256) limits the size of a response, larger ones get 413
+- OpenTelemetry tracing, off unless `management.tracing.export.enabled=true`: one trace per request with a span per
+  database access, sent over OTLP. Spans carry no SQL, parameter values, user names or database error texts
+- Executions record the bytes sent, shown in the statistics page, the API and the CSV export (new last column `bytes`)
+- A reproducible load test in `loadtest/` with measurements in `docs/OPERATIONS.md`
 
 ### Changed
 
@@ -43,6 +54,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 - With PostgreSQL as metadata database the service refuses to start without `JDBCODATA_MASTER_KEY`: a key file would
   differ per instance, and passwords stored by one could not be read by another. **When upgrading** an installation that
   uses `data/master.key`, set `JDBCODATA_MASTER_KEY` to the content of that file. The Docker Compose setup already does
+- Responses are written to a spool file (in memory up to 1 MB, above that encrypted on disk) instead of a byte array on
+  the heap. `jdbcodata.odata.spool-max-mb` limits the disk space of all responses together, above it clients get 503
+- Reading a whole entity set, as Excel and Power BI do on every refresh, builds entities only for the page that is
+  sent. Cache hits on this path no longer count against `response-rows-budget`
+- Without query cache, paging and `$count`, a whole entity set is read through a database cursor and never held in
+  the heap. **On this path `jdbcodata.odata.max-rows` no longer applies**; the limits are `max_rows` of the datasource
+  (default 500,000), the limit of the query and `max-response-mb`. The query timeout now covers the whole read, not
+  only its start, so a read that took longer than the timeout (default 60 s) now ends with 504
 
 ### Fixed
 
@@ -66,6 +85,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
   request, which cost seconds and could lock accounts. A rejected login is now remembered for 5 minutes
 - With anonymous access on, a request with a Bearer token or a malformed Basic header ran as the anonymous user.
   It now gets 401, so a failed login no longer looks like a working one with other data
+- `jdbcodata.health.interval-ms=0`, documented as "off", stopped the service from starting
+- MariaDB error 1969 (`max_statement_time`) is now treated as a timeout
 
 ## [1.0.0] – 2026-10-31
 
