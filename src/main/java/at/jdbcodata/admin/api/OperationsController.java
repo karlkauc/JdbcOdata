@@ -8,6 +8,7 @@ import at.jdbcodata.audit.AuditService;
 import at.jdbcodata.cache.CacheEntryInfo;
 import at.jdbcodata.cache.ResultCache;
 import at.jdbcodata.stats.StatsService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Cache, statistics, audit log and admin accounts. */
+@Tag(name = "Operations", description = "Cache, statistics, audit log and admin accounts.")
 @RestController
 @RequestMapping("/api/v1")
 public class OperationsController {
@@ -130,9 +132,10 @@ public class OperationsController {
     }
 
     @PostMapping("/admins")
-    public ResponseEntity<AdminUser> createAdmin(@Valid @RequestBody AdminUserRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(admins.create(
-                new AdminUserService.AdminUserSpec(request.username(), request.password(), request.role(), request.enabled())));
+    @ResponseStatus(HttpStatus.CREATED)
+    public AdminUser createAdmin(@Valid @RequestBody AdminUserRequest request) {
+        return admins.create(
+                new AdminUserService.AdminUserSpec(request.username(), request.password(), request.role(), request.enabled()));
     }
 
     @PutMapping("/admins/{id}")

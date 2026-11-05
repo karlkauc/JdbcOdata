@@ -54,6 +54,12 @@ management:
       export:
         enabled: false     # metrics are scraped from /actuator/prometheus; on, it pushes to localhost:4318 every minute
 
+springdoc:                 # OpenAPI description of the admin API, needs an admin login like the API itself
+  api-docs:
+    path: /api/v1/openapi  # JSON; /api/v1/openapi.yaml returns YAML
+  paths-to-match: /api/v1/**
+  writer-with-order-by-keys: true
+
 jdbcodata:
   admin:
     user: admin

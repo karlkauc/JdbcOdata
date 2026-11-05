@@ -3,6 +3,7 @@ package at.jdbcodata.admin.api;
 import at.jdbcodata.admin.account.AdminRole;
 import at.jdbcodata.apikey.ApiKey;
 import at.jdbcodata.apikey.ApiKeyService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** API keys. The secret appears only in the answer to the POST. */
+@Tag(name = "API keys", description = "The secret appears only in the answer to the POST. Not available to API keys.")
 @RestController
 @RequestMapping("/api/v1/api-keys")
 public class ApiKeyController {

@@ -1,7 +1,8 @@
 # Administrationsleitfaden
 
 Alle Schritte laufen in der Admin-UI unter `/admin`; jede Funktion gibt es auch in der REST-API (`/api/v1`,
-Basic Auth mit Admin-Konto). Rollen: `ADMIN` ändert, `VIEWER` liest. Die Oberfläche ist englisch; Beschriftungen
+Basic Auth mit Admin-Konto oder API-Key). Die API beschreibt sich selbst als OpenAPI unter `/api/v1/openapi`, z. B.
+für einen generierten Client oder den Import in Postman. Rollen: `ADMIN` ändert, `VIEWER` liest. Die Oberfläche ist englisch; Beschriftungen
 stehen hier im Original, z. B. „Datasources → New datasource“.
 
 ## 0. Bedienung

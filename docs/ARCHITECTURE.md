@@ -326,15 +326,20 @@ Umgebungs-Badge (`jdbcodata.ui.environment`); die Sidebar zeigt Zähler und Warn
 | Statistiken | siehe Abschnitt 7 |
 | Einstellungen | Retention, Cache-Obergrenzen, Master-Key-Status, Lizenz-/Versionsinfo |
 
-**REST-API** unter `/api/v1` (JSON), genutzt von der UI und für Automatisierung:
+**REST-API** unter `/api/v1` (JSON) für Automatisierung. Die vollständige Beschreibung liefert die API selbst als
+OpenAPI 3.1 unter `GET /api/v1/openapi` (YAML: `/api/v1/openapi.yaml`), mit denselben Rechten wie jeder andere
+`GET`-Aufruf. Fehler kommen als Problem Details (RFC 9457), Validierungsfehler mit `fields`.
 
 | Ressource | Endpunkte |
 |---|---|
 | Datenquellen | `GET/POST /datasources`, `GET/PUT/DELETE /datasources/{id}`, `POST /datasources/{id}/test` |
-| Queries | `GET/POST /queries`, `GET/PUT/DELETE /queries/{id}`, `POST /queries/{id}/test`, `POST /queries/{id}/snapshot`, `GET /queries/{id}/versions` |
-| Service-User | `GET/POST /users`, `GET/PUT/DELETE /users/{id}`, `PUT/DELETE /users/{id}/credentials/{datasourceId}` |
+| Queries | `GET/POST /queries`, `GET/PUT/DELETE /queries/{id}`, `POST /queries/test`, `POST /queries/{id}/test`, `POST /queries/{id}/snapshot`, `GET /queries/{id}/versions`, `POST /queries/{id}/versions/{version}/restore`, `PUT /queries/{id}/columns`, `GET/PUT /queries/{id}/grants` |
+| Technische Accounts | `GET/POST /fixed-credentials`, `GET/PUT/DELETE /fixed-credentials/{id}` |
+| Service-User | `GET/POST /users`, `GET/PUT/DELETE /users/{id}`, `GET /users/{id}/credentials`, `PUT/DELETE /users/{id}/credentials/{datasourceId}`, `GET/POST /groups`, `DELETE /groups/{id}` |
+| API-Keys | `GET/POST /api-keys`, `DELETE /api-keys/{id}` (nicht mit einem API-Key) |
 | Cache | `GET /cache`, `DELETE /cache?queryId=&dbUser=` |
-| Statistiken | `GET /stats/summary`, `GET /stats/executions?from=&to=&queryId=&caller=`, `GET /stats/export.csv` |
+| Statistiken | `GET /stats/summary`, `GET /stats/executions?from=&to=&queryName=&caller=&status=`, `GET /stats/export.csv` |
+| Audit, Admin-Konten | `GET /audit`, `GET/POST /admins`, `PUT/DELETE /admins/{id}` |
 
 **Admin-Authentifizierung.** Drei Security-Chains: `/odata/**` ohne Spring-Security-Prüfung (Basic-Credentials gehen an die DB), `/api/**` mit zustandslosem Basic Auth, alles andere mit Session-Login-Formular (`/login`, CSRF aktiv, htmx sendet den Token im Header). Bis M3 gibt es ein Admin-Konto aus `JDBCODATA_ADMIN_USER` / `JDBCODATA_ADMIN_PASSWORD`; danach Admin-Accounts in `admin_user` (bcrypt), und die Rollen `ADMIN` und `VIEWER`.
 
