@@ -92,7 +92,8 @@ Servlet-Pfad im Hostnamen keine Rolle spielt.
 
 Releases ab 1.1.0 sind ohne langlebigen Schlüssel signiert: cosign belegt, dass der Release-Workflow dieses Repositorys
 sie gebaut hat. Jedes Release enthält außerdem eine SBOM im CycloneDX-Format (`jdbcodata-sbom.json`). Die Befehle zum
-Prüfen stehen auf der Website unter *Operations → Verifying a release*.
+Prüfen stehen auf der Website unter *Operations → Verifying a release*. Für die Signatur des Images braucht es cosign 3
+oder neuer: cosign 2 kennt das Bundle-Format nicht und meldet `no signatures found`. Die Dateien prüft auch cosign 2.
 
 ## Metadaten-DB
 

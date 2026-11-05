@@ -48,7 +48,7 @@ gesehen. Kein Haken bedeutet, dass der Lauf aussteht, nicht dass ein Fehler beka
 | OPS-3 | Datenbank fällt aus | Daten-DB stoppen, wiederholt abrufen | nach 5 Fehlversuchen sofort 503 mit `Retry-After`, Cache-Treffer laufen | ☑ 4 × 500 nach 15 s (der fünfte Fehler kam vom Health-Check), danach 503 in 20 ms, Metrik `unreachable` 1 |
 | OPS-4 | Großer Export | Lasttest `loadtest/run.sh` | Heap bleibt stabil über `max-rows` | ☑ Messwerte in `docs/OPERATIONS.md` (#52) |
 | OPS-5 | Tracing | OTLP-Endpunkt setzen, Feed abrufen | Trace mit DB-Span, keine Probes und Jobs | ☑ gegen Jaeger (#53); Tempo und Collector mit Auth ausstehend |
-| OPS-6 | Release-Signatur | `cosign verify` für Image und `SHA256SUMS` | Signatur des Release-Workflows | ☐ nach dem Release |
+| OPS-6 | Release-Signatur | `cosign verify` für Image und `SHA256SUMS` | Signatur des Release-Workflows | ☑ 1.1.0: `SHA256SUMS` signiert, Prüfsummen stimmen; Image (amd64, arm64) mit cosign 3.1.4 geprüft |
 
 ## Sicherheit
 
