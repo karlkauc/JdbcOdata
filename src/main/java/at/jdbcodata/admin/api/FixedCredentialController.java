@@ -2,6 +2,7 @@ package at.jdbcodata.admin.api;
 
 import at.jdbcodata.identity.FixedCredential;
 import at.jdbcodata.identity.FixedCredentialService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,7 +10,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Technical database accounts for FIXED-mode queries. The password is write-only. */
+@Tag(name = "Fixed credentials", description = "Technical database accounts for FIXED-mode queries. The password is write-only.")
 @RestController
 @RequestMapping("/api/v1/fixed-credentials")
 public class FixedCredentialController {
@@ -49,8 +50,9 @@ public class FixedCredentialController {
     }
 
     @PostMapping
-    public ResponseEntity<FixedCredential> create(@Valid @RequestBody FixedCredentialRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request.toSpec()));
+    @ResponseStatus(HttpStatus.CREATED)
+    public FixedCredential create(@Valid @RequestBody FixedCredentialRequest request) {
+        return service.create(request.toSpec());
     }
 
     @PutMapping("/{id}")

@@ -4,6 +4,7 @@ import at.jdbcodata.identity.ServiceGroup;
 import at.jdbcodata.identity.ServiceUser;
 import at.jdbcodata.identity.ServiceUserService;
 import at.jdbcodata.identity.StoredCredential;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -11,7 +12,6 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Service users, their groups and stored DB credentials. Passwords are write-only. */
+@Tag(name = "Service users", description = "Service users, their groups and stored DB credentials. Passwords are write-only.")
 @RestController
 @RequestMapping("/api/v1")
 public class ServiceUserController {
@@ -57,8 +58,9 @@ public class ServiceUserController {
     }
 
     @PostMapping("/users")
-    public ResponseEntity<ServiceUser> create(@Valid @RequestBody ServiceUserRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.create(request.toSpec()));
+    @ResponseStatus(HttpStatus.CREATED)
+    public ServiceUser create(@Valid @RequestBody ServiceUserRequest request) {
+        return service.create(request.toSpec());
     }
 
     @PutMapping("/users/{id}")
@@ -96,8 +98,9 @@ public class ServiceUserController {
     }
 
     @PostMapping("/groups")
-    public ResponseEntity<ServiceGroup> createGroup(@Valid @RequestBody GroupRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(service.createGroup(request.name(), request.description()));
+    @ResponseStatus(HttpStatus.CREATED)
+    public ServiceGroup createGroup(@Valid @RequestBody GroupRequest request) {
+        return service.createGroup(request.name(), request.description());
     }
 
     @DeleteMapping("/groups/{id}")

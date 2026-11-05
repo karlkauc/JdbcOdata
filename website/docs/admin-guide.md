@@ -1,7 +1,9 @@
 # Admin guide
 
 Everything happens in the admin UI at `/admin`. Most of it is also available through the REST API at `/api/v1`
-(HTTP Basic with an admin account). There are two roles: `ADMIN` changes things, `VIEWER` reads.
+(HTTP Basic with an admin account, or an API key). The API describes itself as OpenAPI 3.1 at `/api/v1/openapi`
+(`/api/v1/openapi.yaml` for YAML), for example to generate a client or to import it into Postman. It needs the same
+login as the API. There are two roles: `ADMIN` changes things, `VIEWER` reads.
 
 ## Finding your way around
 

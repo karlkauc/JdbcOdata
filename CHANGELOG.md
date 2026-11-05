@@ -3,6 +3,13 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/), versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- OpenAPI 3.1 description of the admin API at `/api/v1/openapi` (YAML at `/api/v1/openapi.yaml`), with the same
+  login as the API itself. Error responses are described as problem details
+
 ## [1.1.0] – 2026-11-04
 
 ### Added
