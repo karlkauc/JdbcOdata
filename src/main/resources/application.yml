@@ -122,3 +122,4 @@ logging:
   level:
     at.jdbcodata: INFO
     com.zaxxer.hikari: WARN
+    org.springdoc.core.events.SpringDocAppInitializer: ERROR   # "endpoint enabled by default": intended, needs an admin login
