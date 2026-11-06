@@ -176,6 +176,17 @@ await page.selectOption('form.card select[name=role]', 'VIEWER');
 await page.click('form.card button[type=submit]');
 await expectText('created', 'Admin-Konto anlegen');
 await shot('12-admins');
+await page.click('nav >> text=Export / import');
+await expectText('Download configuration', 'Export/Import-Seite');
+const exported = await page.request.get(`${base}/admin/transfer/export`);
+if (!(await exported.text()).startsWith('format: 1\n')) throw new Error('Export ist kein YAML-Export');
+await page.setInputFiles('input[name=file]', { name: 'config.yaml', mimeType: 'application/yaml',
+  buffer: Buffer.from('format: 1\ngroups:\n- name: pw_group\n  description: from Playwright\n') });
+await page.click('button:has-text("Check file")');
+await expectText('What the import would do', 'Import-Vorschau');
+await shot('14-import-preview');
+await page.click('button:has-text("Apply import")');
+await expectText('Import applied: 1 created', 'Import angewendet');
 await page.click('nav >> text=Settings');
 await expectText('Master key', 'Einstellungen');
 await shot('08-settings');

@@ -267,6 +267,36 @@ public class QueryService {
     }
 
     /**
+     * Replaces the snapshot with columns from a configuration import, settings included. The source had read them
+     * from its database; they are checked the way the column settings are.
+     */
+    @Transactional
+    public QueryDefinition importColumns(UUID id, List<QueryColumn> columns) {
+        java.util.Set<String> names = new java.util.HashSet<>();
+        for (QueryColumn c : columns) {
+            if (c.propertyName() == null || !IDENTIFIER.matcher(c.propertyName()).matches() || !names.add(c.propertyName())) {
+                throw new InvalidRequestException("Column '" + c.propertyName() + "' has no valid or no unique property name");
+            }
+            if (!c.structure().isEmpty()) validateStructure(c.propertyName(), c.structure());
+            if (!allowed(c, c.collection())) {
+                throw new InvalidRequestException("Column '" + c.propertyName() + "' cannot be published as " + c.collection());
+            }
+            if (c.key() && c.collection() != CollectionKind.NONE) {
+                throw new InvalidRequestException("Structured column '" + c.propertyName() + "' cannot be a key");
+            }
+        }
+        QueryDefinitionEntity e = requireEntity(id);
+        e.getColumns().clear();
+        repository.flush();
+        e.replaceColumns(columns);
+        e.setUpdatedAt(Instant.now());
+        QueryDefinition updated = toRecord(repository.save(e));
+        audit.record("SNAPSHOT", "QUERY", updated.id(), updated.name(), Map.of("columns", columns.size(), "source", "import"));
+        events.publishEvent(new QueryDefinitionsChangedEvent());
+        return updated;
+    }
+
+    /**
      * A new snapshot of the same SQL keeps the admin's settings of columns that still exist with the same type: key,
      * visibility, text copy, the published form (if still possible) and the edited structure, to which fields the new
      * samples show are appended.

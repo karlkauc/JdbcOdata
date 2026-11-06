@@ -340,6 +340,7 @@ OpenAPI 3.1 unter `GET /api/v1/openapi` (YAML: `/api/v1/openapi.yaml`), mit dens
 | Cache | `GET /cache`, `DELETE /cache?queryId=&dbUser=` |
 | Statistiken | `GET /stats/summary`, `GET /stats/executions?from=&to=&queryName=&caller=&status=`, `GET /stats/export.csv` |
 | Audit, Admin-Konten | `GET /audit`, `GET/POST /admins`, `PUT/DELETE /admins/{id}` |
+| Konfiguration | `GET /config` (Export als YAML), `POST /config/import?dryRun=&overwriteConnections=&prune=` |
 
 **Admin-Authentifizierung.** Drei Security-Chains: `/odata/**` ohne Spring-Security-Prüfung (Basic-Credentials gehen an die DB), `/api/**` mit zustandslosem Basic Auth, alles andere mit Session-Login-Formular (`/login`, CSRF aktiv, htmx sendet den Token im Header). Bis M3 gibt es ein Admin-Konto aus `JDBCODATA_ADMIN_USER` / `JDBCODATA_ADMIN_PASSWORD`; danach Admin-Accounts in `admin_user` (bcrypt), und die Rollen `ADMIN` und `VIEWER`.
 
