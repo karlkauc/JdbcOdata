@@ -214,6 +214,15 @@ public class ServiceUserService {
     }
 
     @Transactional
+    public ServiceGroup updateGroupDescription(UUID id, String description) {
+        ServiceGroupEntity g = groups.findById(id).orElseThrow(() -> new NotFoundException("Group " + id + " not found"));
+        g.setDescription(description == null || description.isBlank() ? null : description);
+        ServiceGroup updated = groups.save(g).toRecord();
+        audit.record("UPDATE", "SERVICE_GROUP", id, updated.name(), null);
+        return updated;
+    }
+
+    @Transactional
     public void deleteGroup(UUID id) {
         ServiceGroupEntity g = groups.findById(id).orElseThrow(() -> new NotFoundException("Group " + id + " not found"));
         for (ServiceUserEntity u : users.findAll()) {

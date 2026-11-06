@@ -11,8 +11,8 @@ import org.apache.olingo.server.api.ServiceMetadata;
 import org.apache.olingo.server.api.etag.ServiceMetadataETagSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
  * Caches Olingo {@link ServiceMetadata} per set of visible queries. The service document is personalised
@@ -50,7 +50,8 @@ public class EdmRegistry {
         });
     }
 
-    @EventListener
+    /** After the commit: a model built from the old rows in between would otherwise stay cached. */
+    @TransactionalEventListener(fallbackExecution = true)
     public void onQueriesChanged(QueryDefinitionsChangedEvent event) {
         invalidate();
     }

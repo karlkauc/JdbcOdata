@@ -97,6 +97,11 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
+    <!-- configuration export and import -->
+    <dependency>
+      <groupId>tools.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
+    </dependency>
     <!-- OpenAPI description of the admin API (FR-62); spec only, no Swagger UI -->
     <dependency>
       <groupId>org.springdoc</groupId>

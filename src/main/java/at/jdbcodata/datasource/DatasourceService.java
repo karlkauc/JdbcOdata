@@ -1,6 +1,7 @@
 package at.jdbcodata.datasource;
 
 import at.jdbcodata.audit.AuditService;
+import at.jdbcodata.common.AfterCommit;
 import at.jdbcodata.common.ConflictException;
 import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
@@ -91,7 +92,7 @@ public class DatasourceService {
             }
         }
         Datasource updated = repository.save(e).toRecord();
-        pools.closePoolsFor(id);
+        AfterCommit.run(() -> pools.closePoolsFor(id));
         audit.record("UPDATE", "DATASOURCE", updated.id(), updated.name(), Map.of("jdbcUrl", updated.jdbcUrl(), "enabled", updated.enabled(),
                 "poolSize", updated.poolSize(), "sessionSettings", updated.sessionSettings(), "driverProperties", updated.driverProperties()));
         return updated;
@@ -118,7 +119,7 @@ public class DatasourceService {
             throw new ConflictException("Datasource is referenced by " + accounts + " technical account(s)");
         }
         repository.delete(e);
-        pools.closePoolsFor(id);
+        AfterCommit.run(() -> pools.closePoolsFor(id));
         audit.record("DELETE", "DATASOURCE", id, e.getName(), null);
     }
 

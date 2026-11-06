@@ -229,3 +229,47 @@ SQL-Arrays und JSON-Spalten strukturiert (Werte, ComplexType-Collection oder Com
 erkannt hat), `textCopyColumns` zusätzlich als Text. `sessionSettings` (an Datenquelle und Query) und
 `driverProperties` (an der Datenquelle) sind Maps, z. B. `sessionSettings: {NLS_SORT: GERMAN}`; fehlen sie,
 bleiben die gespeicherten Werte erhalten.
+
+## 9. Export und Import
+
+Unter *System → Export / import* (REST: `GET /api/v1/config`, `POST /api/v1/config/import`) wandert die Konfiguration
+von einer Umgebung in die nächste, z. B. von Test nach Produktion. Die Datei ist YAML und enthält Datenquellen,
+technische Accounts, Gruppen und Queries mit Parametern, Beziehungen, Schema-Snapshot, Spalteneinstellungen und Grants.
+Sie enthält **keine Passwörter und keine Service-User**; diese sind pro Umgebung verschieden. Einträge sind nach Namen
+sortiert, die Datei lässt sich also gut in Git ablegen und vergleichen.
+
+Der Import ordnet Einträge über den Namen zu und läuft in zwei Schritten: *Check file* zeigt, was angelegt, geändert
+oder gelöscht würde, und ändert nichts; erst *Apply import* wendet dieselbe Datei an. Beide Schritte durchlaufen
+dieselben Prüfungen wie Änderungen in der Admin-UI. Findet der Import einen Fehler, ändert er nichts.
+
+- **Verbindungsdaten bleiben im Ziel.** Bei einer vorhandenen Datenquelle übernimmt der Import JDBC-URL, Treiber und
+  Treiber-Properties nicht, bei einem vorhandenen technischen Account weder DB-Benutzer noch Passwort. Die Vorschau
+  weist darauf hin, wenn die Datei andere Werte hat. Mit *Overwrite connection data* (`overwriteConnections=true`)
+  werden sie überschrieben.
+- **Neue technische Accounts** brauchen `dbPassword` in der Datei, weil der Export kein Passwort enthält. Einfacher
+  ist es oft, den Account im Ziel einmal von Hand anzulegen; danach lässt ihn der Import in Ruhe.
+- **Grants** auf Gruppen gehen mit; die Gruppe muss in der Datei oder im Ziel existieren. Grants auf einzelne
+  Service-User wendet der Import nur an, wenn es den User im Ziel gibt, sonst meldet er eine Warnung.
+- **Schema-Snapshot** kommt aus der Datei, im Ziel ist also kein DB-Login nötig. Hat die Quelle keinen Snapshot,
+  bleibt der im Ziel erhalten.
+- **Fehlende Felder** behalten den Wert im Ziel, bei neuen Einträgen gilt der Standard. Ein Abschnitt, der fehlt oder
+  leer ist (`groups:` ohne Einträge), bleibt unberührt; nur `groups: []` heißt „keine Gruppen“.
+- **Löschen** passiert nur mit *Delete entries the file does not contain* (`prune=true`) und nur in den Abschnitten,
+  die die Datei enthält. Eine Datei mit nur `queries:` löscht also keine Datenquellen.
+- Ein zweiter Import derselben Datei ändert nichts: Unveränderte Einträge fasst er nicht an, es entstehen weder
+  neue Query-Versionen noch Audit-Einträge. Der Import selbst steht als `IMPORT` im Audit-Log.
+
+Über die REST-API ist der Import ohne Parameter ein Dry-Run; angewendet wird er mit `dryRun=false`. Die Antwort
+listet Änderungen (`changes`), Warnungen und Fehler, bei Fehlern mit Status 400:
+
+```bash
+curl -u admin -o config.yaml https://test.example.org/api/v1/config
+curl -u admin -H 'Content-Type: application/yaml' --data-binary @config.yaml \
+     'https://prod.example.org/api/v1/config/import'               # Vorschau
+curl -u admin -H 'Content-Type: application/yaml' --data-binary @config.yaml \
+     'https://prod.example.org/api/v1/config/import?dryRun=false'  # anwenden
+```
+
+Für Pipelines eignet sich ein API-Key mit Rolle ADMIN (`-H "Authorization: Bearer jdo_…"`). Die Seed-Datei aus
+Abschnitt 8 ist dagegen für den Start einer Instanz gedacht: Sie legt an und aktualisiert, löscht aber nie, und sie
+kennt keine Grants und Gruppen.
