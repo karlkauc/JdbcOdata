@@ -84,8 +84,13 @@ class CursorReadIT {
 
         assertThat(cursor.statusCode()).as(cursor.body()).isEqualTo(200);
         assertThat(table.statusCode()).as(table.body()).isEqualTo(200);
-        assertThat(cursor.body()).isEqualTo(table.body());
+        assertThat(withoutAtomTime(cursor.body())).isEqualTo(withoutAtomTime(table.body()));
         assertThat(cursor.headers().firstValue("ETag")).isEqualTo(table.headers().firstValue("ETag"));
+    }
+
+    /** Atom stamps every entry with the time of the response, so two requests can differ by a second. */
+    private static String withoutAtomTime(String body) {
+        return body.replaceAll("<a:updated>[^<]*</a:updated>", "<a:updated/>");
     }
 
     @Test
