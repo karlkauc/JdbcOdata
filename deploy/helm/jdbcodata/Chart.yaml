@@ -2,8 +2,8 @@ apiVersion: v2
 name: jdbcodata
 description: Publishes SQL queries as OData V4 feeds for Excel and Power BI
 type: application
-version: 0.1.0
-appVersion: "1.1.0"
+version: 0.1.1
+appVersion: "1.2.0"
 kubeVersion: ">=1.27.0-0"
 home: https://github.com/karlkauc/JdbcOdata
 sources:
