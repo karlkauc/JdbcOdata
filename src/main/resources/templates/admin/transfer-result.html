@@ -1,0 +1,44 @@
+<div xmlns:th="http://www.thymeleaf.org" th:with="r=${result}">
+  <div class="flash err" th:if="${error}" th:text="${error}"></div>
+  <th:block th:if="${r != null}">
+    <div class="flash ok" th:if="${r.applied}" th:text="|Import applied: ${creates} created, ${updates} updated, ${deletes} deleted.|"></div>
+    <div class="flash err" th:unless="${r.errors.isEmpty()}">
+      <p>The import cannot be applied, nothing was changed:</p>
+      <ul><li th:each="e : ${r.errors}" th:text="${e}"></li></ul>
+    </div>
+    <div class="flash info" th:unless="${r.warnings.isEmpty()}">
+      <ul><li th:each="w : ${r.warnings}" th:text="${w}"></li></ul>
+    </div>
+    <section class="card">
+      <h2 th:text="${r.dryRun} ? 'What the import would do' : 'What the import did'">Changes</h2>
+      <p class="muted" th:if="${r.dryRun}" th:text="|${creates} to create, ${updates} to update, ${deletes} to delete, ${unchanged} unchanged.|"></p>
+      <p class="muted" th:unless="${r.dryRun}" th:text="|${unchanged} unchanged.|"></p>
+      <table class="list">
+        <thead><tr><th>Type</th><th>Name</th><th>Action</th><th>Changed</th><th>Note</th></tr></thead>
+        <tbody>
+        <tr th:each="c : ${r.changes}" th:unless="${c.action.name() == 'UNCHANGED'}">
+          <td th:text="${c.type == 'fixedCredential'} ? 'Technical account' : ${#strings.capitalize(c.type)}"></td>
+          <td><strong th:text="${c.name}"></strong></td>
+          <td th:switch="${c.action.name()}">
+            <span th:case="'CREATE'" class="badge ok">create</span>
+            <span th:case="'UPDATE'" class="badge warn">update</span>
+            <span th:case="'DELETE'" class="badge err">delete</span>
+            <span th:case="*" class="badge off">not in file</span>
+          </td>
+          <td class="mono" th:text="${#strings.listJoin(c.fields, ', ')}"></td>
+          <td class="muted" th:text="${c.note}"></td>
+        </tr>
+        <tr th:if="${creates + updates + deletes == 0 and r.changes.size() == unchanged}"><td colspan="5" class="muted">Nothing to change.</td></tr>
+        </tbody>
+      </table>
+      <form class="actions" th:if="${r.dryRun and r.errors.isEmpty() and creates + updates + deletes > 0}"
+            th:attr="hx-post=@{/admin/transfer/apply},data-confirm=${deletes > 0} ? |Apply the import and delete ${deletes} entries?| : null"
+            hx-encoding="multipart/form-data" hx-target="#transfer-result" hx-swap="innerHTML">
+        <textarea name="content" hidden th:text="${content}"></textarea>
+        <input type="hidden" name="overwriteConnections" th:value="${overwriteConnections}">
+        <input type="hidden" name="prune" th:value="${prune}">
+        <button type="submit" class="primary">Apply import</button>
+      </form>
+    </section>
+  </th:block>
+</div>

@@ -9,6 +9,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 - OpenAPI 3.1 description of the admin API at `/api/v1/openapi` (YAML at `/api/v1/openapi.yaml`), with the same
   login as the API itself. Error responses are described as problem details
+- Configuration export and import for moving datasources, technical accounts, groups and queries (with snapshot,
+  column settings and grants) between environments: *System → Export / import* in the admin UI and
+  `GET /api/v1/config`, `POST /api/v1/config/import`. The import shows what it would change before it applies the
+  file, keeps the target's connection data unless told otherwise, deletes only with `prune` and changes nothing when
+  an entry fails. Exports contain no passwords and no service users
+
+### Fixed
+
+- The OData metadata and the result cache are dropped after a change is committed, not before. A request in between
+  could rebuild the metadata from the old definition and keep it. Connection pools of a changed datasource are closed
+  after the commit as well
 
 ## [1.1.0] – 2026-11-04
 

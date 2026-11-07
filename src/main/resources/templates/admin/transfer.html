@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org" th:replace="~{layout :: page('Export / import', ~{:: main})}">
+<body>
+<main>
+  <div class="page-head">
+    <div><h1>Export / import</h1><p class="lead">Move datasources, technical accounts, groups and queries from one environment to the next, e.g. from test to production. Exports contain no passwords and no service users.</p></div>
+  </div>
+  <section class="card">
+    <h2>Export</h2>
+    <p class="muted">The current configuration as YAML, including schema snapshots, column settings and grants. Entries are sorted by name, so the file diffs well in Git.</p>
+    <a class="button" th:href="@{/admin/transfer/export}">Download configuration</a>
+  </section>
+  <section class="card">
+    <h2>Import</h2>
+    <p class="muted">Entries are matched by name. Checking the file changes nothing yet: it shows what the import would do, then you apply it.</p>
+    <form th:attr="hx-post=@{/admin/transfer/preview}" hx-encoding="multipart/form-data" hx-target="#transfer-result" hx-swap="innerHTML">
+      <label>Configuration file <input type="file" name="file" accept=".yaml,.yml,.json" required></label>
+      <label class="check"><input type="checkbox" name="overwriteConnections" value="true"> Overwrite connection data of existing datasources (JDBC URL, driver, driver properties) and the logins of existing technical accounts</label>
+      <label class="check"><input type="checkbox" name="prune" value="true"> Delete entries the file does not contain (only in the sections the file has)</label>
+      <button type="submit" class="primary">Check file</button>
+    </form>
+  </section>
+  <div id="transfer-result" aria-live="polite"></div>
+</main>
+</body>
+</html>

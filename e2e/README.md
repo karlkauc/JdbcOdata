@@ -2,8 +2,8 @@
 
 `check.mjs` klickt die Admin-UI im Headless-Chromium durch (Login, Datenquellen-Test, Query-Editor mit
 CodeMirror und Parameterzeilen, htmx-Testlauf und Snapshot, Service-User mit Credentials, technischer Account,
-FIXED-Modus mit Freigaben, OData-Zugriff als Service-User, Cache-, Statistik-, Audit-, Admin- und
-Einstellungsseiten, VIEWER-Rolle) und bricht bei JavaScript-Fehlern, HTTP-5xx oder fehlenden Texten ab.
+FIXED-Modus mit Freigaben, OData-Zugriff als Service-User, Cache-, Statistik-, Audit- und Admin-Seiten,
+Export und Import mit Vorschau, Einstellungen, VIEWER-Rolle) und bricht bei JavaScript-Fehlern, HTTP-5xx oder fehlenden Texten ab.
 
 ```bash
 # App mit leerem Datenverzeichnis starten (Admin-Passwort muss "playwright-pw" sein)

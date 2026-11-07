@@ -19,13 +19,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
@@ -190,7 +190,7 @@ public class ResultCache {
         return n;
     }
 
-    @EventListener
+    @TransactionalEventListener(fallbackExecution = true)
     public void onQueriesChanged(QueryDefinitionsChangedEvent event) {
         // versions are part of the key; drop in-memory entries so that deleted queries free memory immediately
         memory.invalidateAll();

@@ -210,3 +210,45 @@ queries:
 | `relations` | `name`, `target`, `columns` (own column: target column), `toMany`, `partner` |
 | `collectionColumns`, `textCopyColumns` | Publish arrays and JSON as structured data, optionally also as text |
 | `sessionSettings`, `driverProperties` | Maps, as in the UI. Query-level `sessionSettings` override the datasource |
+
+## 10. Export and import
+
+*System → Export / import* (REST: `GET /api/v1/config`, `POST /api/v1/config/import`) moves the configuration from one
+environment to the next, for example from test to production. The file is YAML and holds datasources, technical
+accounts, groups and queries with their parameters, relations, schema snapshot, column settings and grants. It holds
+**no passwords and no service users**, as those differ per environment. Entries are sorted by name, so the file works
+well in Git.
+
+Entries are matched by name, and an import takes two steps. *Check file* shows what would be created, changed or
+deleted and changes nothing. *Apply import* then applies the same file. Both run the same checks as an edit in the admin
+UI, and if any entry fails, nothing changes.
+
+- **Connection data stays in the target.** For an existing datasource the import keeps the JDBC URL, driver and driver
+  properties; for an existing technical account it keeps the database user and password. The preview says so when the
+  file has other values. *Overwrite connection data* (`overwriteConnections=true`) replaces them.
+- **New technical accounts** need `dbPassword` in the file, since exports never contain one. It is often simpler to
+  create the account once by hand in the target; the import then leaves it alone.
+- **Grants** to groups come along; the group must be in the file or in the target. A grant to a single service user is
+  applied only if that user exists in the target, otherwise the import warns.
+- **The schema snapshot** comes from the file, so the target needs no database login. If the source has no snapshot,
+  the target keeps its own.
+- **A missing field** keeps the target's value, or the default for a new entry. A section that is missing or empty
+  (`groups:` with nothing below) is left alone; only `groups: []` means "no groups".
+- **Deleting** happens only with *Delete entries the file does not contain* (`prune=true`), and only in the sections the
+  file has. A file with just `queries:` never deletes a datasource.
+- Importing the same file again changes nothing. Unchanged entries are not touched, so there are no new query versions
+  and no audit entries for them. The import itself is logged as `IMPORT`.
+
+Through the REST API an import is a dry run unless you pass `dryRun=false`. The answer lists `changes`, `warnings` and
+`errors`, with status 400 when there are errors:
+
+```bash
+curl -u admin -o config.yaml https://test.example.org/api/v1/config
+curl -u admin -H 'Content-Type: application/yaml' --data-binary @config.yaml \
+     'https://prod.example.org/api/v1/config/import'               # preview
+curl -u admin -H 'Content-Type: application/yaml' --data-binary @config.yaml \
+     'https://prod.example.org/api/v1/config/import?dryRun=false'  # apply
+```
+
+In a pipeline, use an API key with the ADMIN role (`-H "Authorization: Bearer jdo_…"`). The seed file from section 9 is
+meant for starting an instance: it creates and updates but never deletes, and it knows no groups or grants.

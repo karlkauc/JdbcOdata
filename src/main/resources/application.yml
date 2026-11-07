@@ -17,6 +17,10 @@ spring:
   session:
     jdbc:
       initialize-schema: never  # Flyway creates the tables
+  servlet:
+    multipart:
+      max-file-size: 10MB       # configuration import in the admin UI, see ConfigYaml.MAX_CHARS
+      max-request-size: 11MB
   mvc:
     problemdetails:
       enabled: true
