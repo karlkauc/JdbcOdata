@@ -7,6 +7,7 @@ import at.jdbcodata.datasource.DatasourceSpec;
 import at.jdbcodata.identity.ExecutionIdentity;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
+import at.jdbcodata.query.PassCaller;
 import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.ColumnSetting;
@@ -123,7 +124,8 @@ public class SeedLoader implements ApplicationRunner {
                 bool(q, "cacheEnabled", false), integer(q, "cacheTtlSec"), integer(q, "timeoutSec"),
                 integer(q, "maxRows"), KeyMode.valueOf(str(q, "keyMode", "ROWID").toUpperCase()),
                 bool(q, "enabled", true), params, q.containsKey("relations") ? relations : null,
-                q.containsKey("pushDown") ? bool(q, "pushDown", false) : null, stringMap(q, "sessionSettings"));
+                q.containsKey("pushDown") ? bool(q, "pushDown", false) : null, stringMap(q, "sessionSettings"),
+                q.containsKey("passCaller") ? PassCaller.valueOf(str(q, "passCaller").toUpperCase()) : null);
         QueryDefinition saved = queryService.upsertByName(spec);
 
         Map<String, Object> creds = map(q, "snapshotCredentials");
@@ -169,7 +171,8 @@ public class SeedLoader implements ApplicationRunner {
         return new DatasourceSpec(str(ds, "name"), str(ds, "description"), str(ds, "jdbcUrl"), str(ds, "driverClass"),
                 str(ds, "timezone"), integer(ds, "defaultTimeoutSec"), integer(ds, "maxRows"),
                 integer(ds, "maxConcurrent"), bool(ds, "enabled", true), stringMap(ds, "sessionSettings"),
-                stringMap(ds, "driverProperties"), integer(ds, "poolSize"));
+                stringMap(ds, "driverProperties"), integer(ds, "poolSize"),
+                ds.containsKey("passCaller") ? bool(ds, "passCaller", false) : null);
     }
 
     /** {@code sessionSettings: {NLS_SORT: GERMAN}}; {@code null} when the key is missing (keeps the current values). */

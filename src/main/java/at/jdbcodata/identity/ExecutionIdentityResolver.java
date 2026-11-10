@@ -1,6 +1,7 @@
 package at.jdbcodata.identity;
 
 import at.jdbcodata.apikey.ApiKeyService;
+import at.jdbcodata.datasource.CallerContext;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DatasourceService;
 import at.jdbcodata.datasource.DbAuthenticationException;
@@ -126,14 +127,14 @@ public class ExecutionIdentityResolver {
                 verifyPassThroughLogin(query, creds);
             }
             ServiceUserService.DbLogin login = fixedCredentials.resolveLogin(query.fixedCredentialId());
-            return new ExecutionIdentity(caller, login.username(), login.password(), ExecutionMode.FIXED);
+            return new ExecutionIdentity(caller, login.username(), login.password(), ExecutionMode.FIXED, callerContext(context));
         }
         ServiceUser user = context.serviceUser();
         if (user != null && !user.forcePassthrough()) {
             Optional<ServiceUserService.DbLogin> stored = serviceUsers.resolveStoredLogin(user.id(), query.datasourceId());
             if (stored.isPresent()) {
                 return new ExecutionIdentity(caller, stored.get().username(), stored.get().password(),
-                        ExecutionMode.CALLER);
+                        ExecutionMode.CALLER, callerContext(context));
             }
         }
         if (context.isAnonymous()) {
@@ -141,7 +142,17 @@ public class ExecutionIdentityResolver {
             // run this query. Surfaces as 401 so clients know that credentials would help.
             throw new ServiceAuthenticationException(IdentityContext.ANONYMOUS);
         }
-        return new ExecutionIdentity(caller, creds.username(), creds.password(), ExecutionMode.CALLER);
+        return new ExecutionIdentity(caller, creds.username(), creds.password(), ExecutionMode.CALLER, callerContext(context));
+    }
+
+    /**
+     * The caller as the database may learn it: the service user with its groups (also behind an API key or the
+     * anonymous access), otherwise the pass-through login.
+     */
+    static CallerContext callerContext(IdentityContext context) {
+        ServiceUser user = context.serviceUser();
+        if (user == null) return new CallerContext(context.caller(), List.of());
+        return new CallerContext(user.username(), user.groups().stream().map(ServiceGroup::name).sorted().toList());
     }
 
     /** Pass-through callers of FIXED queries are authenticated by opening a connection with their own login. */

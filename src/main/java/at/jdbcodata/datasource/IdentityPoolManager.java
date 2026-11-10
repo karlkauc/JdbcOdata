@@ -32,7 +32,8 @@ import org.springframework.stereotype.Component;
  * are applied once per connection by {@code connectionInitSql}, so a query with overrides gets its own pool instead
  * of resetting the session after each execution. Repeated Excel refreshes by the same user reuse a warm
  * connection; pools idle for {@link #IDLE_EVICTION} are closed. Pass-through passwords are kept only inside the pool
- * configuration, never persisted.
+ * configuration, never persisted. Connections that carry a {@link CallerContext} come from pools of their own, because
+ * some databases keep it for the session.
  */
 @Component
 public class IdentityPoolManager {
@@ -43,7 +44,7 @@ public class IdentityPoolManager {
 
     /** With the datasource's change time: other instances move to a new pool at once, the old one is evicted when idle. */
     private record PoolKey(UUID datasourceId, Instant datasourceUpdatedAt, String username, String passwordHash,
-                           Map<String, String> settings) {
+                           Map<String, String> settings, boolean withCaller) {
     }
 
     private record Login(UUID datasourceId, String username, String passwordHash) {
@@ -96,20 +97,38 @@ public class IdentityPoolManager {
      */
     public Connection connect(Datasource ds, Map<String, String> sessionSettings, String username, String password)
             throws SQLException {
+        return connect(ds, sessionSettings, username, password, null);
+    }
+
+    /**
+     * Like {@link #connect(Datasource, Map, String, String)}, with the caller handed to the database session.
+     *
+     * @param caller {@code null} for a connection without caller
+     */
+    public Connection connect(Datasource ds, Map<String, String> sessionSettings, String username, String password,
+                              CallerContext caller) throws SQLException {
         breaker.check(ds);
-        return connectAndRecord(ds, sessionSettings, username, password);
+        Connection connection = connectAndRecord(ds, sessionSettings, username, password, caller != null);
+        if (caller == null) return connection;
+        try {
+            caller.apply(connection, ds.jdbcUrl());
+            return connection;
+        } catch (SQLException | RuntimeException e) {
+            connection.close();
+            throw e;
+        }
     }
 
     /** For the health check: tries even while the breaker is open, and a success closes it. */
     public Connection connectDespiteBreaker(Datasource ds, String username, String password) throws SQLException {
-        return connectAndRecord(ds, ds.sessionSettings(), username, password);
+        return connectAndRecord(ds, ds.sessionSettings(), username, password, false);
     }
 
-    private Connection connectAndRecord(Datasource ds, Map<String, String> sessionSettings, String username, String password)
-            throws SQLException {
+    private Connection connectAndRecord(Datasource ds, Map<String, String> sessionSettings, String username, String password,
+                                        boolean withCaller) throws SQLException {
         Throwable failure = new IllegalStateException("Connection attempt did not finish");
         try {
-            Connection connection = open(ds, sessionSettings, username, password);
+            Connection connection = open(ds, sessionSettings, username, password, withCaller);
             failure = null;
             return connection;
         } catch (SQLException | RuntimeException e) {
@@ -120,13 +139,13 @@ public class IdentityPoolManager {
         }
     }
 
-    private Connection open(Datasource ds, Map<String, String> sessionSettings, String username, String password)
-            throws SQLException {
+    private Connection open(Datasource ds, Map<String, String> sessionSettings, String username, String password,
+                            boolean withCaller) throws SQLException {
         Map<String, String> settings = new TreeMap<>(sessionSettings == null ? Map.of() : sessionSettings);
-        PoolKey key = new PoolKey(ds.id(), ds.updatedAt(), username, sha256(password), Map.copyOf(settings));
+        PoolKey key = new PoolKey(ds.id(), ds.updatedAt(), username, sha256(password), Map.copyOf(settings), withCaller);
         Pool pool = pools.get(key);
         if (pool == null) {
-            pool = pools.computeIfAbsent(key, k -> new Pool(createPool(ds, settings, username, password)));
+            pool = pools.computeIfAbsent(key, k -> new Pool(createPool(ds, settings, username, password, withCaller)));
         }
         pool.lastUsed = Instant.now();
         Connection connection = pool.dataSource.getConnection();
@@ -147,7 +166,8 @@ public class IdentityPoolManager {
         }
     }
 
-    private HikariDataSource createPool(Datasource ds, Map<String, String> settings, String username, String password) {
+    private HikariDataSource createPool(Datasource ds, Map<String, String> settings, String username, String password,
+                                        boolean withCaller) {
         try {
             urlPolicy.checkTls(ds.jdbcUrl(), ds.driverProperties()); // also covers datasources stored before the option was set
         } catch (InvalidRequestException e) {
@@ -167,7 +187,8 @@ public class IdentityPoolManager {
             // commits the init statement: with auto-commit off, PostgreSQL would undo set_config on the first rollback
             cfg.setIsolateInternalQueries(true);
         }
-        cfg.setPoolName("jdbcodata-" + ds.name() + "-" + username + (settings.isEmpty() ? "" : "-" + sha256(settings.toString()).substring(0, 8)));
+        cfg.setPoolName("jdbcodata-" + ds.name() + "-" + username + (settings.isEmpty() ? "" : "-" + sha256(settings.toString()).substring(0, 8))
+                + (withCaller ? "-caller" : ""));
         cfg.setMaximumPoolSize(ds.poolSize());
         cfg.setMinimumIdle(0);
         cfg.setIdleTimeout(Duration.ofMinutes(1).toMillis());

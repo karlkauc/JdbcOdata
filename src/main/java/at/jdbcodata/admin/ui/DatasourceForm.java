@@ -30,6 +30,7 @@ public class DatasourceForm {
     @Min(1) @Max(100)
     private Integer poolSize = Datasource.DEFAULT_POOL_SIZE;
     private boolean enabled = true;
+    private boolean passCaller;
     @Size(max = 10_000)
     private String sessionSettings = "";
     @Size(max = 10_000)
@@ -47,6 +48,7 @@ public class DatasourceForm {
         f.maxConcurrent = d.maxConcurrent();
         f.poolSize = d.poolSize();
         f.enabled = d.enabled();
+        f.passCaller = d.passCaller();
         f.sessionSettings = SessionSettings.toLines(d.sessionSettings());
         f.driverProperties = SessionSettings.toLines(d.driverProperties());
         return f;
@@ -55,7 +57,7 @@ public class DatasourceForm {
     public DatasourceSpec toSpec() {
         return new DatasourceSpec(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
                 maxConcurrent, enabled, SessionSettings.fromLines(sessionSettings), SessionSettings.fromLines(driverProperties),
-                poolSize);
+                poolSize, passCaller);
     }
 
     /** Session setting keys for the database of the current JDBC URL, for the hint below the field. */
@@ -83,6 +85,8 @@ public class DatasourceForm {
     public void setPoolSize(Integer poolSize) { this.poolSize = poolSize; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public boolean isPassCaller() { return passCaller; }
+    public void setPassCaller(boolean passCaller) { this.passCaller = passCaller; }
     public String getSessionSettings() { return sessionSettings; }
     public void setSessionSettings(String sessionSettings) { this.sessionSettings = sessionSettings; }
     public String getDriverProperties() { return driverProperties; }

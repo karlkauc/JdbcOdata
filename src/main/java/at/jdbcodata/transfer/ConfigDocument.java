@@ -3,6 +3,7 @@ package at.jdbcodata.transfer;
 import at.jdbcodata.query.CollectionKind;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
+import at.jdbcodata.query.PassCaller;
 import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.PrincipalType;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -32,7 +33,7 @@ public record ConfigDocument(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record DatasourceEntry(String name, String description, String jdbcUrl, String driverClass, String timezone,
                                   Integer defaultTimeoutSec, Integer maxRows, Integer maxConcurrent, Integer poolSize,
-                                  Boolean enabled, Map<String, String> sessionSettings,
+                                  Boolean enabled, Boolean passCaller, Map<String, String> sessionSettings,
                                   Map<String, String> driverProperties) {
     }
 
@@ -50,7 +51,7 @@ public record ConfigDocument(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record QueryEntry(String name, String description, String datasource, String sql,
                              ExecutionMode executionMode, String fixedCredential, Boolean enabled, KeyMode keyMode,
-                             Boolean pushDown, Boolean cacheEnabled, Integer cacheTtlSec, Integer timeoutSec,
+                             Boolean pushDown, PassCaller passCaller, Boolean cacheEnabled, Integer cacheTtlSec, Integer timeoutSec,
                              Integer maxRows, Map<String, String> sessionSettings, List<ParameterEntry> parameters,
                              List<RelationEntry> relations, List<ColumnEntry> columns, List<GrantEntry> grants) {
     }

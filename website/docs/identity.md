@@ -71,6 +71,44 @@ calls it.
 Under **Grants** in the query editor you choose who may use a FIXED query: single service users, groups or all authenticated
 callers. Others do not see the query and get 404, which does not reveal that it exists.
 
+## Passing the caller to the database
+
+When many people share one technical account, the database only sees that account. Switch on **Pass the caller to
+the database** on the datasource and it also learns who is asking: the service user and its groups, the login of a
+pass-through caller (without groups), or the service user behind an API key. The database can then filter by itself,
+for example with row-level security, and every report keeps using one technical account.
+
+| Database | Caller | Groups (comma-separated) |
+|---|---|---|
+| PostgreSQL | `current_setting('jdbcodata.caller', true)` | `current_setting('jdbcodata.groups', true)` |
+| Oracle | `SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER')` | `SYS_CONTEXT('USERENV', 'CLIENT_INFO')` |
+| MySQL, MariaDB, H2 | `@jdbcodata_caller` | `@jdbcodata_groups` |
+
+A PostgreSQL policy that shows everybody their own rows and those of their regions:
+
+```sql
+ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_rows ON sales USING (
+  account_manager = current_setting('jdbcodata.caller', true)
+  OR region = ANY (string_to_array(current_setting('jdbcodata.groups', true), ',')));
+```
+
+The query's own SQL can read the values too, e.g. `WHERE account_manager = @jdbcodata_caller` on MySQL, where views
+cannot use variables but functions can.
+
+- A query can override the datasource: **Pass caller to database** is "As the datasource says", "Yes" or "No".
+- The result cache is then kept per caller and groups, also for technical accounts. That lowers the hit rate, so set
+  queries that do not filter by caller to "No".
+- Test runs and schema snapshots in the admin UI pass no caller. A policy like the one above returns no rows then,
+  which is enough for a snapshot.
+- The service sets the values before every query, and queries cannot change them because only `SELECT` is allowed.
+  Anyone who logs in to the database with the technical account directly can set them, though, so only the service
+  should know its password.
+- Oracle accepts at most 64 bytes per value. A longer group list stops the request with an error instead of passing
+  a shortened list.
+- These connections live in pools of their own, so a query without caller never sees a value left by an earlier one.
+  In the seed file: `passCaller: true` on the datasource, `passCaller: OFF` on a query.
+
 ## Anonymous access
 
 Set `jdbcodata.odata.anonymous-user` to a service user's name, and requests **without** an `Authorization` header run as that user.

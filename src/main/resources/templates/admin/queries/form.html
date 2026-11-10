@@ -108,12 +108,19 @@
                 <option value="ROWID">RowId (synthetic)</option>
                 <option value="COLUMNS">Columns (mark them in the Columns tab)</option>
               </select></label>
+            <label>Pass caller to database
+              <select th:field="*{passCaller}" data-label="Pass caller">
+                <option value="INHERIT">As the datasource says</option>
+                <option value="ON">Yes</option>
+                <option value="OFF">No</option>
+              </select>
+              <small>For row-level security: the database learns the service user and its groups. Results are cached per caller.</small></label>
             <label class="switch-row"><input type="checkbox" class="switch" th:field="*{enabled}" data-label="Status"><span>Query enabled<small>Only enabled queries appear in the feed.</small></span></label>
           </div>
 
           <div class="card side-card">
             <h2>Cache &amp; Limits</h2>
-            <label class="switch-row"><input type="checkbox" class="switch" th:field="*{cacheEnabled}" data-label="Result cache"><span>Result cache<small>per DB user and parameter values</small></span></label>
+            <label class="switch-row"><input type="checkbox" class="switch" th:field="*{cacheEnabled}" data-label="Result cache"><span>Result cache<small>per DB user and parameter values, and per caller when it is passed</small></span></label>
             <div class="grid2 tight">
               <label>Cache TTL (s) <input type="number" th:field="*{cacheTtlSec}" min="0" data-label="Cache TTL"></label>
               <label>Timeout (s) <input type="number" th:field="*{timeoutSec}" min="1" max="3600" placeholder="Default" data-label="Timeout"></label>

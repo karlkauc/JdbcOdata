@@ -4,12 +4,14 @@ import static at.jdbcodata.testutil.TestData.query;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 
+import at.jdbcodata.datasource.CallerContext;
 import at.jdbcodata.datasource.ConcurrencyLimiter;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.IdentityPoolManager;
 import at.jdbcodata.identity.ExecutionIdentity;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
+import at.jdbcodata.query.PassCaller;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryExecutor;
 import at.jdbcodata.testutil.DemoProfileTest;
@@ -339,6 +341,29 @@ class OracleIT extends DemoProfileTest {
             for (int i = 0; i < 3; i++) { // same pooled connection after the rollback of the previous run
                 assertThat(executor.execute(q, ds, identity, Map.of(), 10, 10).rows().get(0)[0]).isEqualTo("GERMAN");
             }
+        } finally {
+            pools.closeAll();
+        }
+    }
+
+    @Test
+    void theCallerReachesTheSession() throws Exception {
+        IdentityPoolManager pools = new IdentityPoolManager();
+        try {
+            QueryExecutor executor = new QueryExecutor(pools, new ConcurrencyLimiter(), TestData.props(100, 20, ""));
+            // one connection: client identifier and client info live for the session, a leftover would show at once
+            Datasource ds = new Datasource(UUID.randomUUID(), "caller", null, jdbcUrl(), null, null, 30, 1000, 10, true,
+                    Instant.now(), Instant.now(), Map.of(), Map.of(), 1, true);
+            String sql = "SELECT SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER') AS who, SYS_CONTEXT('USERENV', 'CLIENT_INFO') AS grps FROM dual";
+            QueryDefinition on = TestData.query("On", sql, PassCaller.INHERIT);
+            QueryDefinition off = TestData.query("Off", sql, PassCaller.OFF);
+            ExecutionIdentity anna = new ExecutionIdentity("anna", USER, PASSWORD, ExecutionMode.FIXED,
+                    new CallerContext("anna", List.of("nord", "sued")));
+            ExecutionIdentity bernd = new ExecutionIdentity("bernd", USER, PASSWORD, ExecutionMode.FIXED,
+                    new CallerContext("bernd", List.of()));
+            assertThat(executor.execute(on, ds, anna, Map.of(), 10, 10).rows().get(0)).containsExactly("anna", "nord,sued");
+            assertThat(executor.execute(off, ds, anna, Map.of(), 10, 10).rows().get(0)).containsExactly(null, null);
+            assertThat(executor.execute(on, ds, bernd, Map.of(), 10, 10).rows().get(0)).containsExactly("bernd", null);
         } finally {
             pools.closeAll();
         }

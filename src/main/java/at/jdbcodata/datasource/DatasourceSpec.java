@@ -18,12 +18,21 @@ public record DatasourceSpec(
         Boolean enabled,
         Map<String, String> sessionSettings,
         Map<String, String> driverProperties,
-        Integer poolSize) {
+        Integer poolSize,
+        Boolean passCaller) {
+
+    /** Without passing the caller: keeps the current value on update, off on create. */
+    public DatasourceSpec(String name, String description, String jdbcUrl, String driverClass, String timezone,
+                          Integer defaultTimeoutSec, Integer maxRows, Integer maxConcurrent, Boolean enabled,
+                          Map<String, String> sessionSettings, Map<String, String> driverProperties, Integer poolSize) {
+        this(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows, maxConcurrent, enabled,
+                sessionSettings, driverProperties, poolSize, null);
+    }
 
     /** Without session settings and driver properties: keeps the current ones on update, none on create. */
     public DatasourceSpec(String name, String description, String jdbcUrl, String driverClass, String timezone,
                           Integer defaultTimeoutSec, Integer maxRows, Integer maxConcurrent, Boolean enabled) {
         this(name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows, maxConcurrent, enabled,
-                null, null, null);
+                null, null, null, null);
     }
 }

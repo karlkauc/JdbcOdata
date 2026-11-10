@@ -46,6 +46,9 @@ public class DatasourceEntity {
     @Column(name = "pool_size", nullable = false)
     private int poolSize = Datasource.DEFAULT_POOL_SIZE;
 
+    @Column(name = "pass_caller", nullable = false)
+    private boolean passCaller;
+
     @Column(nullable = false)
     private boolean enabled = true;
 
@@ -63,7 +66,7 @@ public class DatasourceEntity {
 
     public Datasource toRecord() {
         return new Datasource(id, name, description, jdbcUrl, driverClass, timezone, defaultTimeoutSec, maxRows,
-                maxConcurrent, enabled, createdAt, updatedAt, getSessionSettings(), getDriverProperties(), poolSize);
+                maxConcurrent, enabled, createdAt, updatedAt, getSessionSettings(), getDriverProperties(), poolSize, passCaller);
     }
 
     public UUID getId() { return id; }
@@ -85,6 +88,8 @@ public class DatasourceEntity {
     public void setMaxConcurrent(int maxConcurrent) { this.maxConcurrent = maxConcurrent; }
     public int getPoolSize() { return poolSize; }
     public void setPoolSize(int poolSize) { this.poolSize = poolSize; }
+    public boolean isPassCaller() { return passCaller; }
+    public void setPassCaller(boolean passCaller) { this.passCaller = passCaller; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public Map<String, String> getSessionSettings() { return StringMapJson.read(sessionSettings); }

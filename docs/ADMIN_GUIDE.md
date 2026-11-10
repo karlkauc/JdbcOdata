@@ -157,6 +157,44 @@ wiederherstellen.
   Nicht freigegebene Aufrufer sehen die Query nicht.
 - PowerBI Service über Gateway: nur Service-User mit hinterlegten Zugangsdaten verwenden (PRD FR-32a).
 
+### Aufrufer an die Datenbank weitergeben
+
+Laufen viele Nutzer über einen technischen Account, sieht die Datenbank nur diesen Account. Mit **Pass the caller
+to the database** (Datenquelle) erfährt sie zusätzlich, wer fragt: den Service-User und seine Gruppen, bei
+Pass-Through-Aufrufern den Login (ohne Gruppen), bei API-Keys den Service-User des Keys. Damit kann die Datenbank
+selbst filtern, etwa mit Row-Level-Security, und alle Berichte bleiben auf einem technischen Account.
+
+| Datenbank | Aufrufer | Gruppen (kommagetrennt) |
+|---|---|---|
+| PostgreSQL | `current_setting('jdbcodata.caller', true)` | `current_setting('jdbcodata.groups', true)` |
+| Oracle | `SYS_CONTEXT('USERENV', 'CLIENT_IDENTIFIER')` | `SYS_CONTEXT('USERENV', 'CLIENT_INFO')` |
+| MySQL/MariaDB, H2 | `@jdbcodata_caller` | `@jdbcodata_groups` |
+
+Beispiel PostgreSQL, jeder sieht seine eigenen Zeilen und die seiner Regionen:
+
+```sql
+ALTER TABLE umsatz ENABLE ROW LEVEL SECURITY;
+CREATE POLICY eigene_zeilen ON umsatz USING (
+  betreuer = current_setting('jdbcodata.caller', true)
+  OR region = ANY (string_to_array(current_setting('jdbcodata.groups', true), ',')));
+```
+
+Statt einer Policy kann auch das SQL der Query den Wert lesen, z. B. `WHERE betreuer = @jdbcodata_caller` bei
+MySQL; dort lassen sich Variablen nicht in Views verwenden, wohl aber in Funktionen.
+
+- **Pro Query** lässt sich die Einstellung übersteuern („Pass caller to database“: wie die Datenquelle, Yes, No).
+- **Cache:** Wird der Aufrufer weitergegeben, gilt der Ergebnis-Cache pro Aufrufer und Gruppen, auch beim
+  technischen Account. Das kostet Trefferquote; Queries ohne Filter auf den Aufrufer schaltet man deshalb auf „No“.
+- **Ohne Aufrufer:** Testläufe und Schema-Snapshots aus der Admin-UI geben keinen Aufrufer weiter. Eine Policy wie
+  oben liefert dann keine Zeilen; für den Snapshot reicht das, weil er nur die Spalten braucht.
+- **Vertrauen:** Die Werte setzt der Service vor jeder Abfrage, Queries können sie nicht ändern, weil nur `SELECT`
+  erlaubt ist. Wer sich aber direkt mit dem technischen Account an der Datenbank anmeldet, kann sie selbst setzen.
+  Den Account darf deshalb nur der Service kennen.
+- **Oracle** erlaubt je Wert höchstens 64 Bytes. Ist die Gruppenliste länger, bricht die Abfrage mit einer
+  Fehlermeldung ab, statt eine gekürzte Liste weiterzugeben.
+- Die Verbindungen dafür liegen in eigenen Pools, damit eine Query ohne Aufrufer nie den Wert einer früheren
+  Abfrage sieht. In `seed.yml`: `passCaller: true` an der Datenquelle, `passCaller: OFF` an der Query.
+
 ### Push-Down
 
 Im Query-Editor „Push-down“ einschalten. Dann laufen `$filter`, `$search`,
@@ -178,8 +216,8 @@ umgehen den Ergebnis-Cache.
 
 ## 4. Cache
 
-Im Query-Editor „Result cache“ und TTL setzen. Der Cache gilt pro DB-User und Parameterwerten, Nutzer sehen
-nie fremde Ergebnisse. Cache → Einträge ansehen, einzeln oder gesamt invalidieren; Clients können mit
+Im Query-Editor „Result cache“ und TTL setzen. Der Cache gilt pro DB-User und Parameterwerten, bei
+weitergegebenem Aufrufer zusätzlich pro Aufrufer; Nutzer sehen nie fremde Ergebnisse. Cache → Einträge ansehen, einzeln oder gesamt invalidieren; Clients können mit
 `?refresh=true` erzwingen. Eine SQL-Änderung macht alte Einträge automatisch ungültig.
 
 ## 5. Statistik und Audit

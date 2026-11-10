@@ -36,6 +36,10 @@
         <textarea th:field="*{driverProperties}" rows="4" class="mono" placeholder="oracle.jdbc.defaultNChar=true"></textarea>
         <small>One KEY=VALUE per line, passed to the driver like URL options. No credentials.</small></label>
     </div>
+    <label class="switch-row"><input type="checkbox" class="switch" th:field="*{passCaller}"><span>Pass the caller to the database
+      <small>For row-level security behind a technical account: the database learns the service user and its groups
+        (PostgreSQL <span class="mono">current_setting('jdbcodata.caller', true)</span>, Oracle client identifier,
+        MySQL <span class="mono">@jdbcodata_caller</span>). Results are then cached per caller. Queries can switch it off.</small></span></label>
     <h2>Limits</h2>
     <div class="grid3">
       <label>Default timeout (s) <input type="number" th:field="*{defaultTimeoutSec}" min="1" max="3600">

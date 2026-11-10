@@ -138,8 +138,9 @@ Results match the in-memory evaluation with one known exception: `toupper` uses 
 
 ## 5. Cache
 
-Enable **Result cache** and set a TTL in the query editor. Entries are kept per database user and parameter values, so nobody
-receives a result created for someone else. **Cache** lists entries and invalidates them. Clients can force a refresh with
+Enable **Result cache** and set a TTL in the query editor. Entries are kept per database user and parameter values, and per caller when the
+query [passes it to the database](identity.md#passing-the-caller-to-the-database), so nobody receives a result created for
+someone else. **Cache** lists entries and invalidates them. Clients can force a refresh with
 `?refresh=true`. Changing the SQL invalidates old entries automatically.
 
 ## 6. Statistics and audit

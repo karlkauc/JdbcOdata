@@ -4,6 +4,7 @@ import at.jdbcodata.cache.CacheKey;
 import at.jdbcodata.cache.CacheStatus;
 import at.jdbcodata.cache.ResultCache;
 import at.jdbcodata.common.InvalidRequestException;
+import at.jdbcodata.datasource.CallerContext;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbAuthenticationException;
 import at.jdbcodata.identity.ServiceAuthenticationException;
@@ -18,6 +19,7 @@ import at.jdbcodata.identity.QueryNotVisibleException;
 import at.jdbcodata.query.ParameterBinder;
 import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.QueryColumn;
+import at.jdbcodata.query.QueryExecutor;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
 import at.jdbcodata.query.QueryRelation;
@@ -2540,8 +2542,9 @@ public class QueryEntityCollectionProcessor implements CountEntityCollectionProc
             } else if (!query.cacheEnabled()) {
                 exec = new Execution(query, run.get(), CacheStatus.DISABLED, null, null);
             } else {
+                CallerContext caller = QueryExecutor.callerFor(query, ds, identity);
                 CacheKey key = CacheKey.of(query.id(), query.version(), identity.dbUsername(), params,
-                        SessionSettings.effective(ds, query));
+                        SessionSettings.effective(ds, query), caller == null ? null : caller.cacheInput());
                 Duration ttl = Duration.ofSeconds(Math.max(1, query.cacheTtlSec()));
                 if (refresh) {
                     ResultTable table = run.get();

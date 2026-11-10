@@ -8,7 +8,10 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 
-/** Identifies a cached result: query, version, effective DB user, the parameter values and the session settings. */
+/**
+ * Identifies a cached result: query, version, effective DB user, the parameter values, the session settings and,
+ * when the query passes it to the database, the caller.
+ */
 public record CacheKey(UUID queryId, int queryVersion, String dbUser, String paramsHash) {
 
     public static CacheKey of(UUID queryId, int version, String dbUser, Map<String, Object> params) {
@@ -21,9 +24,23 @@ public record CacheKey(UUID queryId, int queryVersion, String dbUser, String par
      */
     public static CacheKey of(UUID queryId, int version, String dbUser, Map<String, Object> params,
                               Map<String, String> sessionSettings) {
+        return of(queryId, version, dbUser, params, sessionSettings, null);
+    }
+
+    /**
+     * With the caller the database learns: row-level security makes the result depend on it, although the DB user
+     * is the same technical account for everybody.
+     *
+     * @param caller {@link at.jdbcodata.datasource.CallerContext#cacheInput()}, or {@code null} when not passed
+     */
+    public static CacheKey of(UUID queryId, int version, String dbUser, Map<String, Object> params,
+                              Map<String, String> sessionSettings, String caller) {
         String input = unambiguous(params);
         if (sessionSettings != null && !sessionSettings.isEmpty()) {
             input += "S" + unambiguous(new TreeMap<String, Object>(sessionSettings));
+        }
+        if (caller != null) {
+            input += "C" + caller.length() + ":" + caller;
         }
         return new CacheKey(queryId, version, dbUser == null ? "" : dbUser.toLowerCase(), hash(input));
     }

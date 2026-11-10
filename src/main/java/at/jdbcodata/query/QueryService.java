@@ -5,6 +5,7 @@ import at.jdbcodata.common.ConflictException;
 import at.jdbcodata.common.CurrentUser;
 import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
+import at.jdbcodata.datasource.CallerContext;
 import at.jdbcodata.datasource.DatasourceEntity;
 import at.jdbcodata.datasource.DatasourceRepository;
 import at.jdbcodata.datasource.SessionSettings;
@@ -228,7 +229,7 @@ public class QueryService {
         QueryDefinition updated = toRecord(e);
         audit.record("UPDATE", "QUERY", updated.id(), updated.name(), Map.of("version", updated.version(),
                 "newVersion", newVersion, "mode", updated.executionMode().name(), "enabled", updated.enabled(),
-                "sessionSettings", updated.sessionSettings()));
+                "sessionSettings", updated.sessionSettings(), "passCaller", updated.passCaller().name()));
         events.publishEvent(new QueryDefinitionsChangedEvent());
         return updated;
     }
@@ -436,7 +437,8 @@ public class QueryService {
                 spec.timeoutSec(), spec.maxRows(), spec.keyMode() == null ? KeyMode.ROWID : spec.keyMode(), 0,
                 spec.enabled() == null || spec.enabled(), spec.parameters() == null ? List.of() : spec.parameters(),
                 List.of(), null, null, spec.relations() == null ? List.of() : spec.relations(),
-                Boolean.TRUE.equals(spec.pushDown()), SessionSettings.validate(ds.getJdbcUrl(), spec.sessionSettings()));
+                Boolean.TRUE.equals(spec.pushDown()), SessionSettings.validate(ds.getJdbcUrl(), spec.sessionSettings()),
+                spec.passCaller());
     }
 
     public void validate(QuerySpec spec) {
@@ -557,6 +559,8 @@ public class QueryService {
         if (s.keyMode() != null) e.setKeyMode(s.keyMode());
         if (s.enabled() != null) e.setEnabled(s.enabled());
         if (s.pushDown() != null) e.setPushDown(s.pushDown());
+        if (s.passCaller() != null) e.setPassCaller(s.passCaller());
+        if (e.getPassCaller() == PassCaller.ON) CallerContext.checkSupported(ds.getJdbcUrl());
         // checked again when kept: the datasource may have changed to another database
         e.setSessionSettings(SessionSettings.validate(ds.getJdbcUrl(),
                 s.sessionSettings() != null ? s.sessionSettings() : e.getSessionSettings()));

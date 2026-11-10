@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), versions fol
 
 ## [Unreleased]
 
+### Added
+
+- The caller can be passed to the database for row-level security behind a technical account: the service user and
+  its groups (or the pass-through login) arrive as `current_setting('jdbcodata.caller')` and `jdbcodata.groups` on
+  PostgreSQL, as client identifier and client info on Oracle, and as `@jdbcodata_caller` and `@jdbcodata_groups` on
+  MySQL, MariaDB and H2. Switched on per datasource, a query can override it. Results of such queries are cached per
+  caller. Test runs and snapshots from the admin UI pass no caller
+
 ## [1.2.0] – 2026-11-07
 
 ### Added
