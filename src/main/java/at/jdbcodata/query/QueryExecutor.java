@@ -1,6 +1,7 @@
 package at.jdbcodata.query;
 
 import at.jdbcodata.config.JdbcOdataProperties;
+import at.jdbcodata.datasource.CallerContext;
 import at.jdbcodata.datasource.ConcurrencyLimiter;
 import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.datasource.DbErrorClassifier;
@@ -46,6 +47,14 @@ public class QueryExecutor {
         this.limiter = limiter;
         this.props = props;
         this.tracing = tracing;
+    }
+
+    /**
+     * The caller the database learns for this run, or {@code null}: the query does not pass it, or the run has no
+     * caller (test runs and snapshots from the admin UI).
+     */
+    public static CallerContext callerFor(QueryDefinition query, Datasource ds, ExecutionIdentity identity) {
+        return CallerContext.enabled(ds, query) ? identity.callerContext() : null;
     }
 
     public int effectiveMaxRows(QueryDefinition q, Datasource ds) {
@@ -103,7 +112,8 @@ public class QueryExecutor {
         }
         ResultCursor cursor = new ResultCursor(query, ds, permit, maxRows, timeoutSec, span);
         try {
-            Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(), identity.dbPassword());
+            Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(), identity.dbPassword(),
+                    callerFor(query, ds, identity));
             span.event("connected");
             cursor.connection = c;
             try {
@@ -173,7 +183,7 @@ public class QueryExecutor {
         long start = System.nanoTime();
         try (ConcurrencyLimiter.Permit permit = limiter.acquire(ds, Duration.ofMillis(props.odata().concurrencyWaitMs()));
              Connection c = pools.connect(ds, SessionSettings.effective(ds, query), identity.dbUsername(),
-                     identity.dbPassword())) {
+                     identity.dbPassword(), callerFor(query, ds, identity))) {
             span.event("connected");
             try {
                 c.setReadOnly(true);

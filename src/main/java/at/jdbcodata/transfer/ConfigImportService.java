@@ -189,7 +189,7 @@ public class ConfigImportService {
                     DatasourceEntry kept = new DatasourceEntry(effective.name(), effective.description(), was.jdbcUrl(),
                             was.driverClass(), effective.timezone(), effective.defaultTimeoutSec(), effective.maxRows(),
                             effective.maxConcurrent(), effective.poolSize(), effective.enabled(),
-                            effective.sessionSettings(), was.driverProperties());
+                            effective.passCaller(), effective.sessionSettings(), was.driverProperties());
                     if (changed(was, effective).stream().anyMatch(CONNECTION_FIELDS::contains)) {
                         note = "Connection kept; the file has other connection data";
                     }
@@ -431,7 +431,8 @@ public class ConfigImportService {
                     }).toList();
             return new QuerySpec(q.name(), q.description(), datasourceId(q.datasource()), q.sql(), q.executionMode(),
                     fixedCredentialId(q.fixedCredential()), q.cacheEnabled(), q.cacheTtlSec(), q.timeoutSec(),
-                    q.maxRows(), q.keyMode(), q.enabled(), parameters, relations, q.pushDown(), q.sessionSettings());
+                    q.maxRows(), q.keyMode(), q.enabled(), parameters, relations, q.pushDown(), q.sessionSettings(),
+                    q.passCaller());
         }
     }
 
@@ -440,7 +441,7 @@ public class ConfigImportService {
     private static DatasourceSpec datasourceSpec(DatasourceEntry d) {
         return new DatasourceSpec(d.name(), d.description(), d.jdbcUrl(), d.driverClass(), d.timezone(),
                 d.defaultTimeoutSec(), d.maxRows(), d.maxConcurrent(), d.enabled(), d.sessionSettings(),
-                d.driverProperties(), d.poolSize());
+                d.driverProperties(), d.poolSize(), d.passCaller());
     }
 
     /**
@@ -465,8 +466,8 @@ public class ConfigImportService {
         List<GrantEntry> grants = q.grants() == null ? null : ConfigExportService.grants(q.grants().stream()
                 .map(g -> g.type() == PrincipalType.ALL_AUTHENTICATED ? new GrantEntry(g.type(), null) : g).toList());
         return new QueryEntry(q.name(), q.description(), q.datasource(), q.sql(), q.executionMode(),
-                q.fixedCredential(), q.enabled(), q.keyMode(), q.pushDown(), q.cacheEnabled(), q.cacheTtlSec(),
-                q.timeoutSec(), q.maxRows(), q.sessionSettings(), parameters, relations, columns, grants);
+                q.fixedCredential(), q.enabled(), q.keyMode(), q.pushDown(), q.passCaller(), q.cacheEnabled(),
+                q.cacheTtlSec(), q.timeoutSec(), q.maxRows(), q.sessionSettings(), parameters, relations, columns, grants);
     }
 
     /** Every component the file leaves out ({@code null}) is taken from {@code current}. */

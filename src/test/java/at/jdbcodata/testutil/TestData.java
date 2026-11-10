@@ -5,12 +5,14 @@ import at.jdbcodata.datasource.Datasource;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
 import at.jdbcodata.query.ParameterType;
+import at.jdbcodata.query.PassCaller;
 import at.jdbcodata.query.QueryColumn;
 import at.jdbcodata.query.QueryDefinition;
 import at.jdbcodata.query.QueryParameter;
 import java.sql.Types;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Builders for domain records used across unit tests. */
@@ -32,6 +34,19 @@ public final class TestData {
                                         KeyMode keyMode) {
         return new QueryDefinition(UUID.randomUUID(), name, null, UUID.randomUUID(), "ds", sql, ExecutionMode.CALLER,
                 null, null, false, 3600, null, null, keyMode, 1, true, params, columns, Instant.now(), Instant.now());
+    }
+
+    /** A query that passes the caller as {@code passCaller} says. */
+    public static QueryDefinition query(String name, String sql, PassCaller passCaller) {
+        return new QueryDefinition(UUID.randomUUID(), name, null, UUID.randomUUID(), "ds", sql, ExecutionMode.FIXED,
+                null, null, false, 3600, null, null, KeyMode.ROWID, 1, true, List.of(), List.of(), Instant.now(),
+                Instant.now(), List.of(), false, Map.of(), passCaller);
+    }
+
+    /** A datasource that passes the caller (unless a query switches it off). */
+    public static Datasource passingCaller(String name, String jdbcUrl) {
+        return new Datasource(UUID.randomUUID(), name, null, jdbcUrl, null, null, 30, 1000, 10, true,
+                Instant.now(), Instant.now(), Map.of(), Map.of(), 2, true);
     }
 
     public static JdbcOdataProperties props(int maxRows, int defaultTimeoutSec, String seedFile) {

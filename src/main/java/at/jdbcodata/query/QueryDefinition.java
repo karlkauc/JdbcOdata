@@ -29,11 +29,25 @@ public record QueryDefinition(
         Instant updatedAt,
         List<QueryRelation> relations,
         boolean pushDown,
-        Map<String, String> sessionSettings) {
+        Map<String, String> sessionSettings,
+        PassCaller passCaller) {
 
     public QueryDefinition {
         relations = relations == null ? List.of() : List.copyOf(relations);
         sessionSettings = sessionSettings == null ? Map.of() : Map.copyOf(sessionSettings);
+        passCaller = passCaller == null ? PassCaller.INHERIT : passCaller;
+    }
+
+    /** Passing the caller as the datasource says. */
+    public QueryDefinition(UUID id, String name, String description, UUID datasourceId, String datasourceName,
+                           String sqlText, ExecutionMode executionMode, UUID fixedCredentialId, String fixedCredentialName,
+                           boolean cacheEnabled, int cacheTtlSec, Integer timeoutSec, Integer maxRows, KeyMode keyMode,
+                           int version, boolean enabled, List<QueryParameter> parameters, List<QueryColumn> columns,
+                           Instant createdAt, Instant updatedAt, List<QueryRelation> relations, boolean pushDown,
+                           Map<String, String> sessionSettings) {
+        this(id, name, description, datasourceId, datasourceName, sqlText, executionMode, fixedCredentialId,
+                fixedCredentialName, cacheEnabled, cacheTtlSec, timeoutSec, maxRows, keyMode, version, enabled, parameters,
+                columns, createdAt, updatedAt, relations, pushDown, sessionSettings, PassCaller.INHERIT);
     }
 
     /** Without session setting overrides. */

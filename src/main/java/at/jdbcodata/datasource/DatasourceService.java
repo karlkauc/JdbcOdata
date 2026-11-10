@@ -6,6 +6,7 @@ import at.jdbcodata.common.ConflictException;
 import at.jdbcodata.common.InvalidRequestException;
 import at.jdbcodata.common.NotFoundException;
 import at.jdbcodata.identity.FixedCredentialRepository;
+import at.jdbcodata.query.PassCaller;
 import at.jdbcodata.query.QueryDefinitionRepository;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -71,7 +72,7 @@ public class DatasourceService {
         apply(e, spec);
         Datasource created = repository.save(e).toRecord();
         audit.record("CREATE", "DATASOURCE", created.id(), created.name(), Map.of("jdbcUrl", created.jdbcUrl(),
-                "poolSize", created.poolSize(), "sessionSettings", created.sessionSettings(), "driverProperties", created.driverProperties()));
+                "poolSize", created.poolSize(), "passCaller", created.passCaller(), "sessionSettings", created.sessionSettings(), "driverProperties", created.driverProperties()));
         return created;
     }
 
@@ -87,6 +88,7 @@ public class DatasourceService {
         for (var q : queryRepository.findAllByDatasourceId(id)) {
             try {
                 SessionSettings.validate(e.getJdbcUrl(), q.getSessionSettings());
+                if (q.getPassCaller() == PassCaller.ON) CallerContext.checkSupported(e.getJdbcUrl());
             } catch (InvalidRequestException ex) {
                 throw new InvalidRequestException("Query '" + q.getName() + "': " + ex.getMessage());
             }
@@ -94,7 +96,7 @@ public class DatasourceService {
         Datasource updated = repository.save(e).toRecord();
         AfterCommit.run(() -> pools.closePoolsFor(id));
         audit.record("UPDATE", "DATASOURCE", updated.id(), updated.name(), Map.of("jdbcUrl", updated.jdbcUrl(), "enabled", updated.enabled(),
-                "poolSize", updated.poolSize(), "sessionSettings", updated.sessionSettings(), "driverProperties", updated.driverProperties()));
+                "poolSize", updated.poolSize(), "passCaller", updated.passCaller(), "sessionSettings", updated.sessionSettings(), "driverProperties", updated.driverProperties()));
         return updated;
     }
 
@@ -182,6 +184,8 @@ public class DatasourceService {
         if (s.maxConcurrent() != null) e.setMaxConcurrent(s.maxConcurrent());
         if (s.poolSize() != null) e.setPoolSize(s.poolSize());
         if (s.enabled() != null) e.setEnabled(s.enabled());
+        if (s.passCaller() != null) e.setPassCaller(s.passCaller());
+        if (e.isPassCaller()) CallerContext.checkSupported(s.jdbcUrl());
         // checked again when kept: the JDBC URL may now point to another database
         e.setSessionSettings(SessionSettings.validate(s.jdbcUrl(),
                 s.sessionSettings() != null ? s.sessionSettings() : e.getSessionSettings()));

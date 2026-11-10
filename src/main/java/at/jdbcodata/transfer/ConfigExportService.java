@@ -71,7 +71,7 @@ public class ConfigExportService {
 
     static DatasourceEntry entry(Datasource d) {
         return new DatasourceEntry(d.name(), d.description(), d.jdbcUrl(), d.driverClass(), d.timezone(),
-                d.defaultTimeoutSec(), d.maxRows(), d.maxConcurrent(), d.poolSize(), d.enabled(),
+                d.defaultTimeoutSec(), d.maxRows(), d.maxConcurrent(), d.poolSize(), d.enabled(), d.passCaller(),
                 sorted(d.sessionSettings()), sorted(d.driverProperties()));
     }
 
@@ -86,8 +86,8 @@ public class ConfigExportService {
     /** Grants of deleted users or groups are left out; {@code principals} maps their IDs to names. */
     static QueryEntry entry(QueryDefinition q, List<QueryGrant> grants, Map<UUID, String> principals) {
         return new QueryEntry(q.name(), q.description(), q.datasourceName(), q.sqlText(), q.executionMode(),
-                q.fixedCredentialName(), q.enabled(), q.keyMode(), q.pushDown(), q.cacheEnabled(), q.cacheTtlSec(),
-                q.timeoutSec(), q.maxRows(), sorted(q.sessionSettings()),
+                q.fixedCredentialName(), q.enabled(), q.keyMode(), q.pushDown(), q.passCaller(), q.cacheEnabled(),
+                q.cacheTtlSec(), q.timeoutSec(), q.maxRows(), sorted(q.sessionSettings()),
                 q.parameters().stream().map(ConfigExportService::entry).toList(),
                 q.relations().stream().map(ConfigExportService::entry).toList(),
                 q.columns().stream().sorted(Comparator.comparingInt(QueryColumn::ordinal)).map(ConfigExportService::entry).toList(),

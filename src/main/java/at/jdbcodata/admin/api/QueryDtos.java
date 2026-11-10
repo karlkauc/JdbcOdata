@@ -4,6 +4,7 @@ import at.jdbcodata.odata.ODataConfig;
 import at.jdbcodata.query.ColumnSetting;
 import at.jdbcodata.query.ExecutionMode;
 import at.jdbcodata.query.KeyMode;
+import at.jdbcodata.query.PassCaller;
 import at.jdbcodata.query.ParameterType;
 import at.jdbcodata.query.PrincipalType;
 import at.jdbcodata.query.QueryService;
@@ -77,7 +78,8 @@ final class QueryDtos {
             KeyMode keyMode,
             Boolean enabled,
             Boolean pushDown,
-            Map<String, String> sessionSettings) {
+            Map<String, String> sessionSettings,
+            PassCaller passCaller) {
 
         QuerySpec toSpec() {
             List<QueryParameter> params = parameters == null ? List.of()
@@ -85,7 +87,7 @@ final class QueryDtos {
             // relations / sessionSettings == null keep the stored values (PUT without the field), empty removes them.
             List<QueryRelation> rels = relations == null ? null : relations.stream().map(RelationRequest::toRecord).toList();
             return new QuerySpec(name, description, datasourceId, sql, executionMode, fixedCredentialId, cacheEnabled, cacheTtlSec,
-                    timeoutSec, maxRows, keyMode, enabled, params, rels, pushDown, sessionSettings);
+                    timeoutSec, maxRows, keyMode, enabled, params, rels, pushDown, sessionSettings, passCaller);
         }
     }
 
@@ -108,6 +110,7 @@ final class QueryDtos {
             boolean enabled,
             boolean pushDown,
             Map<String, String> sessionSettings,
+            PassCaller passCaller,
             boolean hasSnapshot,
             List<QueryParameter> parameters,
             List<QueryColumn> columns,
@@ -119,7 +122,7 @@ final class QueryDtos {
         static QueryResponse from(QueryDefinition q) {
             return new QueryResponse(q.id(), q.name(), q.description(), q.datasourceId(), q.datasourceName(),
                     q.sqlText(), q.executionMode(), q.fixedCredentialId(), q.fixedCredentialName(), q.cacheEnabled(), q.cacheTtlSec(), q.timeoutSec(), q.maxRows(),
-                    q.keyMode(), q.version(), q.enabled(), q.pushDown(), q.sessionSettings(), q.hasSnapshot(), q.parameters(), q.columns(), q.relations(),
+                    q.keyMode(), q.version(), q.enabled(), q.pushDown(), q.sessionSettings(), q.passCaller(), q.hasSnapshot(), q.parameters(), q.columns(), q.relations(),
                     ODataConfig.BASE_PATH + "/" + q.name(), q.createdAt(), q.updatedAt());
         }
     }

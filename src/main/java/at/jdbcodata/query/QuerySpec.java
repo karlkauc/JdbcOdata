@@ -24,7 +24,17 @@ public record QuerySpec(
         List<QueryParameter> parameters,
         List<QueryRelation> relations,
         Boolean pushDown,
-        Map<String, String> sessionSettings) {
+        Map<String, String> sessionSettings,
+        PassCaller passCaller) {
+
+    /** Without passing the caller: keeps the current value on update, inherits on create. */
+    public QuerySpec(String name, String description, UUID datasourceId, String sqlText, ExecutionMode executionMode,
+                     UUID fixedCredentialId, Boolean cacheEnabled, Integer cacheTtlSec, Integer timeoutSec, Integer maxRows,
+                     KeyMode keyMode, Boolean enabled, List<QueryParameter> parameters, List<QueryRelation> relations,
+                     Boolean pushDown, Map<String, String> sessionSettings) {
+        this(name, description, datasourceId, sqlText, executionMode, fixedCredentialId, cacheEnabled, cacheTtlSec,
+                timeoutSec, maxRows, keyMode, enabled, parameters, relations, pushDown, sessionSettings, null);
+    }
 
     /** Without session settings: keeps the current overrides on update, none on create. */
     public QuerySpec(String name, String description, UUID datasourceId, String sqlText, ExecutionMode executionMode,
@@ -32,7 +42,7 @@ public record QuerySpec(
                      KeyMode keyMode, Boolean enabled, List<QueryParameter> parameters, List<QueryRelation> relations,
                      Boolean pushDown) {
         this(name, description, datasourceId, sqlText, executionMode, fixedCredentialId, cacheEnabled, cacheTtlSec,
-                timeoutSec, maxRows, keyMode, enabled, parameters, relations, pushDown, null);
+                timeoutSec, maxRows, keyMode, enabled, parameters, relations, pushDown, null, null);
     }
 
     /** Without the push-down flag: keeps the current value on update, off on create. */

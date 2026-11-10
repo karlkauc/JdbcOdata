@@ -348,7 +348,7 @@ Payload-Skizze Query (POST/PUT):
 3. Zusätzliche JDBC-Treiber über Volume `./lib:/app/lib`.
 4. Update: neue Version in `.env`, `docker compose up -d --build`; Flyway migriert automatisch.
 
-**PowerBI Service / Gateway.** Datasets, die im PowerBI Service über das On-Premises Data Gateway aktualisiert werden, verwenden im Gateway einen Service-User (`svc_…`) mit hinterlegten DB-Credentials. Persönliche DB-Konten werden nicht im Gateway hinterlegt. Für Reports, die Row-Level-Security der DB brauchen, bleibt PowerBI Desktop mit persönlichem Login der Weg.
+**PowerBI Service / Gateway.** Datasets, die im PowerBI Service über das On-Premises Data Gateway aktualisiert werden, verwenden im Gateway einen Service-User (`svc_…`) mit hinterlegten DB-Credentials. Persönliche DB-Konten werden nicht im Gateway hinterlegt. Für Reports, die Row-Level-Security der DB brauchen, gibt der Service den Aufrufer an die Datenbank weiter (Datenquelle „Pass the caller“, ADMIN_GUIDE §3): Die Policy filtert nach Service-User und Gruppen, auch wenn alle über einen technischen Account laufen.
 
 **Backup.** Metadaten-DB (H2-Datei bei gestopptem Service oder `pg_dump`) plus `config/` und `certs/`. Der Cache muss nicht gesichert werden.
 

@@ -78,6 +78,10 @@ public class QueryDefinitionEntity {
     @Column(name = "session_settings", columnDefinition = "TEXT")
     private String sessionSettings;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pass_caller", nullable = false, length = 10)
+    private PassCaller passCaller = PassCaller.INHERIT;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -106,7 +110,7 @@ public class QueryDefinitionEntity {
                 parameters.stream().map(QueryParameterEntity::toRecord).toList(),
                 columns.stream().map(QueryColumnEntity::toRecord).toList(),
                 createdAt, updatedAt,
-                relations.stream().map(QueryRelationEntity::toRecord).toList(), pushDown, getSessionSettings());
+                relations.stream().map(QueryRelationEntity::toRecord).toList(), pushDown, getSessionSettings(), passCaller);
     }
 
     public void replaceRelations(List<QueryRelation> rels) {
@@ -162,6 +166,8 @@ public class QueryDefinitionEntity {
     public void setSessionSettings(Map<String, String> settings) { this.sessionSettings = StringMapJson.write(settings); }
     public boolean isPushDown() { return pushDown; }
     public void setPushDown(boolean pushDown) { this.pushDown = pushDown; }
+    public PassCaller getPassCaller() { return passCaller; }
+    public void setPassCaller(PassCaller passCaller) { this.passCaller = passCaller; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
